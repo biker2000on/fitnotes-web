@@ -1,12 +1,22 @@
 import { Header } from '@/components/layout/header';
 import Link from 'next/link';
-import { Upload, Calculator, Database, Target } from 'lucide-react';
+import { Upload, Calculator, Database, Target, Settings } from 'lucide-react';
 
 export default function MorePage() {
   return (
     <div>
       <Header title="More" />
       <div className="p-4 space-y-2">
+        <Link
+          href="/settings"
+          className="flex items-center gap-3 p-4 rounded-lg border hover:bg-accent transition-colors"
+        >
+          <Settings className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <p className="font-medium">Settings</p>
+            <p className="text-sm text-muted-foreground">Configure app preferences and account settings</p>
+          </div>
+        </Link>
         <Link
           href="/goals"
           className="flex items-center gap-3 p-4 rounded-lg border hover:bg-accent transition-colors"

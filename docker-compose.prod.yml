@@ -1,0 +1,56 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql://fitnotes:${DB_PASSWORD}@db:5432/fitnotes
+      - AUTH_SECRET=${AUTH_SECRET}
+      - AUTH_URL=https://${DOMAIN}
+      - NEXTAUTH_URL=https://${DOMAIN}
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fitnotes.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.fitnotes.tls=true"
+      - "traefik.http.routers.fitnotes.tls.certresolver=letsencrypt"
+      - "traefik.http.services.fitnotes.loadbalancer.server.port=3000"
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=fitnotes
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=fitnotes
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fitnotes"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+
+volumes:
+  postgres_data:
+  letsencrypt:
