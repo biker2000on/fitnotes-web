@@ -9,11 +9,33 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
+const DISMISS_KEY = 'pwa-install-dismissed';
+const DISMISS_DURATION_DAYS = 7; // Don't show again for 7 days after dismissal
+
+function isDismissed(): boolean {
+  if (typeof window === 'undefined') return true;
+  const dismissed = localStorage.getItem(DISMISS_KEY);
+  if (!dismissed) return false;
+
+  const dismissedAt = parseInt(dismissed, 10);
+  const now = Date.now();
+  const daysSinceDismissed = (now - dismissedAt) / (1000 * 60 * 60 * 24);
+
+  return daysSinceDismissed < DISMISS_DURATION_DAYS;
+}
+
+function setDismissed(): void {
+  localStorage.setItem(DISMISS_KEY, Date.now().toString());
+}
+
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
 
   useEffect(() => {
+    // Don't show if user recently dismissed
+    if (isDismissed()) return;
+
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -34,12 +56,15 @@ export function PWAInstallPrompt() {
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === 'accepted') {
+      // User installed - never show again
+      localStorage.setItem(DISMISS_KEY, 'installed');
       setDeferredPrompt(null);
       setShowPrompt(false);
     }
   };
 
   const handleDismiss = () => {
+    setDismissed();
     setShowPrompt(false);
     setDeferredPrompt(null);
   };
