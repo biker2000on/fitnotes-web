@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 
@@ -10,44 +10,59 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 const DISMISS_KEY = 'pwa-install-dismissed';
-const DISMISS_DURATION_DAYS = 7; // Don't show again for 7 days after dismissal
+const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
-function isDismissed(): boolean {
-  if (typeof window === 'undefined') return true;
-  const dismissed = localStorage.getItem(DISMISS_KEY);
-  if (!dismissed) return false;
+function shouldShowPrompt(): boolean {
+  if (typeof window === 'undefined') return false;
 
-  const dismissedAt = parseInt(dismissed, 10);
+  const stored = localStorage.getItem(DISMISS_KEY);
+
+  // Never dismissed - show prompt
+  if (!stored) return true;
+
+  // Permanently dismissed (installed or explicitly never)
+  if (stored === 'never') return false;
+
+  // Check if temporary dismissal has expired
+  const dismissedAt = parseInt(stored, 10);
+  if (isNaN(dismissedAt)) return false; // Invalid value, don't show
+
   const now = Date.now();
-  const daysSinceDismissed = (now - dismissedAt) / (1000 * 60 * 60 * 24);
-
-  return daysSinceDismissed < DISMISS_DURATION_DAYS;
+  return (now - dismissedAt) > DISMISS_DURATION_MS;
 }
 
-function setDismissed(): void {
+function dismissTemporarily(): void {
   localStorage.setItem(DISMISS_KEY, Date.now().toString());
+}
+
+function dismissPermanently(): void {
+  localStorage.setItem(DISMISS_KEY, 'never');
 }
 
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
 
+  const handleBeforeInstallPrompt = useCallback((e: Event) => {
+    e.preventDefault();
+
+    // Double-check dismissal status in the handler too
+    if (!shouldShowPrompt()) return;
+
+    setDeferredPrompt(e as BeforeInstallPromptEvent);
+    setShowPrompt(true);
+  }, []);
+
   useEffect(() => {
-    // Don't show if user recently dismissed
-    if (isDismissed()) return;
+    // Check if we should show on mount
+    if (!shouldShowPrompt()) return;
 
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
-      setShowPrompt(true);
-    };
-
-    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
-  }, []);
+  }, [handleBeforeInstallPrompt]);
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
@@ -56,15 +71,15 @@ export function PWAInstallPrompt() {
     const { outcome } = await deferredPrompt.userChoice;
 
     if (outcome === 'accepted') {
-      // User installed - never show again
-      localStorage.setItem(DISMISS_KEY, 'installed');
-      setDeferredPrompt(null);
-      setShowPrompt(false);
+      dismissPermanently();
     }
+
+    setDeferredPrompt(null);
+    setShowPrompt(false);
   };
 
   const handleDismiss = () => {
-    setDismissed();
+    dismissTemporarily();
     setShowPrompt(false);
     setDeferredPrompt(null);
   };
@@ -77,7 +92,7 @@ export function PWAInstallPrompt() {
         <div className="flex-1">
           <h3 className="font-semibold text-sm mb-1">Install FitNotes</h3>
           <p className="text-xs text-muted-foreground mb-3">
-            Install this app on your device for quick access and a better experience.
+            Install this app on your device for quick access and offline use.
           </p>
           <div className="flex gap-2">
             <Button onClick={handleInstall} size="sm" className="flex-1">
