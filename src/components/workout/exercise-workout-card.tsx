@@ -18,6 +18,8 @@ interface Set {
   id: number;
   metricWeight: number;
   reps: number;
+  distance: number;
+  durationSeconds: number;
   isComplete: boolean;
   isPersonalRecord: boolean;
 }
@@ -25,6 +27,8 @@ interface Set {
 interface SetUpdate {
   metricWeight?: number;
   reps?: number;
+  distance?: number;
+  durationSeconds?: number;
   isComplete?: boolean;
 }
 
@@ -32,6 +36,7 @@ interface ExerciseWorkoutCardProps {
   exercise: {
     id: number;
     name: string;
+    exerciseTypeId: number;
     category: { name: string; color: string } | null;
   };
   sets: Set[];
@@ -88,6 +93,7 @@ export function ExerciseWorkoutCard({
             key={set.id}
             set={set}
             setNumber={index + 1}
+            exerciseTypeId={exercise.exerciseTypeId ?? 0}
             isMetric={isMetric}
             workoutDate={workoutDate}
             onUpdate={onUpdateSet}

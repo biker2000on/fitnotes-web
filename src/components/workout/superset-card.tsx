@@ -18,6 +18,8 @@ interface Set {
   exerciseId: number;
   metricWeight: number;
   reps: number;
+  distance: number;
+  durationSeconds: number;
   isComplete: boolean;
   isPersonalRecord: boolean;
 }
@@ -25,12 +27,15 @@ interface Set {
 interface SetUpdate {
   metricWeight?: number;
   reps?: number;
+  distance?: number;
+  durationSeconds?: number;
   isComplete?: boolean;
 }
 
 interface Exercise {
   id: number;
   name: string;
+  exerciseTypeId: number;
   category: { name: string; color: string } | null;
   sets: Set[];
   previousSets?: Set[];
@@ -135,6 +140,7 @@ export function SupersetCard({
                 key={set.id}
                 set={set}
                 setNumber={index + 1}
+                exerciseTypeId={exercise.exerciseTypeId ?? 0}
                 isMetric={isMetric}
                 workoutDate={workoutDate}
                 onUpdate={onUpdateSet}

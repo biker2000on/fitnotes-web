@@ -23,11 +23,14 @@ interface TrainingLog {
   exerciseId: number;
   metricWeight: number;
   reps: number;
+  distance: number;
+  durationSeconds: number;
   isComplete: boolean;
   isPersonalRecord: boolean;
   exercise: {
     id: number;
     name: string;
+    exerciseTypeId: number;
     category: { name: string; color: string } | null;
   };
 }
@@ -36,6 +39,8 @@ interface PreviousSet {
   id: number;
   metricWeight: number;
   reps: number;
+  distance: number;
+  durationSeconds: number;
 }
 
 interface GroupedLogs {
@@ -179,7 +184,16 @@ function WorkoutContent() {
     });
   };
 
-  const handleUpdateSet = async (id: number, data: { metricWeight?: number; reps?: number; isComplete?: boolean }) => {
+  const handleUpdateSet = async (
+    id: number,
+    data: {
+      metricWeight?: number;
+      reps?: number;
+      distance?: number;
+      durationSeconds?: number;
+      isComplete?: boolean;
+    }
+  ) => {
     startTransition(async () => {
       await updateTrainingLog(id, data);
 
