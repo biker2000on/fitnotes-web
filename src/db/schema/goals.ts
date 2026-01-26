@@ -1,5 +1,4 @@
 import { pgTable, serial, uuid, integer, real, timestamp, boolean } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { exercises } from './exercises';
 
@@ -19,8 +18,3 @@ export const goals = pgTable('goals', {
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
-
-export const goalsRelations = relations(goals, ({ one }) => ({
-  user: one(users, { fields: [goals.userId], references: [users.id] }),
-  exercise: one(exercises, { fields: [goals.exerciseId], references: [exercises.id] }),
-}));

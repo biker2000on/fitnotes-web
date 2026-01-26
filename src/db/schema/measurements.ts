@@ -1,5 +1,4 @@
 import { pgTable, serial, uuid, varchar, text, integer, real, timestamp, boolean } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
 import { users } from './users';
 
 export const measurements = pgTable('measurements', {
@@ -27,19 +26,3 @@ export const measurementRecords = pgTable('measurement_records', {
   comment: text('comment'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
-
-// Relations
-export const measurementsRelations = relations(measurements, ({ one, many }) => ({
-  user: one(users, {
-    fields: [measurements.userId],
-    references: [users.id],
-  }),
-  records: many(measurementRecords),
-}));
-
-export const measurementRecordsRelations = relations(measurementRecords, ({ one }) => ({
-  measurement: one(measurements, {
-    fields: [measurementRecords.measurementId],
-    references: [measurements.id],
-  }),
-}));

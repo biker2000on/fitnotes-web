@@ -1,5 +1,4 @@
 import { pgTable, serial, uuid, text, timestamp, integer } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
 import { users } from './users';
 
 export const routines = pgTable('routines', {
@@ -45,26 +44,3 @@ export const routineSectionExerciseSets = pgTable('routine_section_exercise_sets
   durationSeconds: integer('duration_seconds'),
   sortOrder: integer('sort_order').default(0),
 });
-
-// Add relations
-export const routinesRelations = relations(routines, ({ one, many }) => ({
-  user: one(users, { fields: [routines.userId], references: [users.id] }),
-  sections: many(routineSections),
-}));
-
-export const routineSectionsRelations = relations(routineSections, ({ one, many }) => ({
-  routine: one(routines, { fields: [routineSections.routineId], references: [routines.id] }),
-  exercises: many(routineSectionExercises),
-}));
-
-export const routineSectionExercisesRelations = relations(routineSectionExercises, ({ one, many }) => ({
-  section: one(routineSections, { fields: [routineSectionExercises.sectionId], references: [routineSections.id] }),
-  sets: many(routineSectionExerciseSets),
-}));
-
-export const routineSectionExerciseSetsRelations = relations(routineSectionExerciseSets, ({ one }) => ({
-  sectionExercise: one(routineSectionExercises, {
-    fields: [routineSectionExerciseSets.sectionExerciseId],
-    references: [routineSectionExercises.id],
-  }),
-}));

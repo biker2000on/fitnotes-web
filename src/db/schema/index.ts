@@ -12,3 +12,4 @@ export * from './userSettings';
 export * from './routines';
 export * from './measurements';
 export * from './goals';
+export * from './relations';
