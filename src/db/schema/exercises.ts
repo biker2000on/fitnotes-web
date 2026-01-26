@@ -1,4 +1,5 @@
 import { pgTable, serial, uuid, text, integer, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { categories } from './categories';
 
@@ -21,3 +22,14 @@ export const exercises = pgTable('exercises', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const exercisesRelations = relations(exercises, ({ one }) => ({
+  user: one(users, {
+    fields: [exercises.userId],
+    references: [users.id],
+  }),
+  category: one(categories, {
+    fields: [exercises.categoryId],
+    references: [categories.id],
+  }),
+}));
