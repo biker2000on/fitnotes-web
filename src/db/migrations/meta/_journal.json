@@ -15,6 +15,13 @@
       "when": 1769448717410,
       "tag": "0001_outgoing_iron_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769449324223,
+      "tag": "0002_watery_juggernaut",
+      "breakpoints": true
     }
   ]
 }
