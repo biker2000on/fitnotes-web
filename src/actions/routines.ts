@@ -429,7 +429,8 @@ export async function savePredefinedSets(sectionExerciseId: number, sets: Predef
 export async function applyRoutineToWorkout(
   routineId: number,
   workoutDate: string,
-  option: 'blank' | 'template' | 'last'
+  option: 'blank' | 'template' | 'last',
+  sectionIds?: number[]
 ): Promise<{ exerciseCount: number; setCount: number } | null> {
   const user = await requireAuth();
 
@@ -455,6 +456,11 @@ export async function applyRoutineToWorkout(
 
   if (!routine) return null;
 
+  // Filter sections if sectionIds is provided
+  const sectionsToApply = sectionIds && sectionIds.length > 0
+    ? routine.sections.filter(section => sectionIds.includes(section.id))
+    : routine.sections;
+
   let totalExercises = 0;
   let totalSets = 0;
 
@@ -463,7 +469,7 @@ export async function applyRoutineToWorkout(
   const supersetGroupMap = new Map<string, number>();
 
   // Iterate through all sections and exercises
-  for (const section of routine.sections) {
+  for (const section of sectionsToApply) {
     for (const routineExercise of section.exercises) {
       // Verify user owns this exercise
       const exercise = await db.query.exercises.findFirst({
@@ -502,9 +508,21 @@ export async function applyRoutineToWorkout(
       }
 
       if (option === 'blank') {
-        // Create exercise with no sets
-        // Don't create any training logs
-        continue;
+        // Create exercise with one empty set
+        await db.insert(trainingLogs).values({
+          exerciseId: routineExercise.exerciseId,
+          workoutDate,
+          metricWeight: 0,
+          reps: 0,
+          unit: 0,
+          distance: 0,
+          durationSeconds: 0,
+          sortOrder: 0,
+          isComplete: false,
+          isPersonalRecord: false,
+          workoutGroupId,
+        });
+        totalSets++;
       } else if (option === 'template') {
         // Use predefined sets from routine
         if (routineExercise.sets.length > 0) {
@@ -524,6 +542,22 @@ export async function applyRoutineToWorkout(
             });
             totalSets++;
           }
+        } else {
+          // No predefined sets, create one default empty set
+          await db.insert(trainingLogs).values({
+            exerciseId: routineExercise.exerciseId,
+            workoutDate,
+            metricWeight: 0,
+            reps: 0,
+            unit: 0,
+            distance: 0,
+            durationSeconds: 0,
+            sortOrder: 0,
+            isComplete: false,
+            isPersonalRecord: false,
+            workoutGroupId,
+          });
+          totalSets++;
         }
       } else if (option === 'last') {
         // Copy from last workout
@@ -562,6 +596,22 @@ export async function applyRoutineToWorkout(
             });
             totalSets++;
           }
+        } else {
+          // No previous workout found, create one default empty set
+          await db.insert(trainingLogs).values({
+            exerciseId: routineExercise.exerciseId,
+            workoutDate,
+            metricWeight: 0,
+            reps: 0,
+            unit: 0,
+            distance: 0,
+            durationSeconds: 0,
+            sortOrder: 0,
+            isComplete: false,
+            isPersonalRecord: false,
+            workoutGroupId,
+          });
+          totalSets++;
         }
       }
     }
