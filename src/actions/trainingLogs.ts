@@ -6,6 +6,7 @@ import { eq, and, asc, desc, lt, gte, lte } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth-utils';
 import { createTrainingLogSchema, updateTrainingLogSchema } from '@/lib/validations/trainingLog';
 import { revalidatePath } from 'next/cache';
+import { detectPersonalRecords } from '@/lib/pr-detection';
 
 export async function getTrainingLogs(date: string, exerciseId?: number) {
   const user = await requireAuth();
@@ -109,13 +110,18 @@ export async function createTrainingLog(data: unknown) {
 
   const nextSortOrder = existingLogs.length > 0 ? (existingLogs[0]?.sortOrder ?? 0) + 1 : 0;
 
-  // TODO: Add PR detection logic here
-  const isPersonalRecord = false;
+  // Detect if this is a personal record
+  const prResult = await detectPersonalRecords(
+    parsed.exerciseId,
+    parsed.workoutDate,
+    parsed.metricWeight,
+    parsed.reps
+  );
 
   const [log] = await db.insert(trainingLogs).values({
     ...parsed,
     sortOrder: nextSortOrder,
-    isPersonalRecord,
+    isPersonalRecord: prResult.isAnyPR,
   }).returning();
 
   revalidatePath('/workout');

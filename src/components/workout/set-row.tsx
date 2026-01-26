@@ -1,10 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Check, Trash, Star } from 'lucide-react';
+import { Check, Trash } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { PRBadge } from './pr-badge';
 
 interface SetRowProps {
   set: {
@@ -47,9 +48,7 @@ export function SetRow({ set, setNumber, isMetric, onUpdate, onDelete }: SetRowP
     )}>
       <span className="w-8 text-center text-sm text-muted-foreground">{setNumber}</span>
 
-      {set.isPersonalRecord && (
-        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-      )}
+      {set.isPersonalRecord && <PRBadge />}
 
       <div className="flex items-center gap-1 flex-1">
         <Input

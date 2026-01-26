@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { Suspense, useState, useEffect, useTransition } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/header';
-import { addDays, subDays, format } from 'date-fns';
+import { addDays, subDays, format, parse, isValid } from 'date-fns';
 import { ExerciseWorkoutCard } from '@/components/workout/exercise-workout-card';
 import { AddExerciseDialog } from '@/components/workout/add-exercise-dialog';
 import {
@@ -42,8 +43,16 @@ interface GroupedLogs {
   };
 }
 
-export default function WorkoutPage() {
-  const [date, setDate] = useState(new Date());
+function WorkoutContent() {
+  const searchParams = useSearchParams();
+  const dateParam = searchParams.get('date');
+
+  // Parse date from URL or default to today
+  const initialDate = dateParam
+    ? parse(dateParam, 'yyyy-MM-dd', new Date())
+    : new Date();
+
+  const [date, setDate] = useState(isValid(initialDate) ? initialDate : new Date());
   const [groupedLogs, setGroupedLogs] = useState<GroupedLogs>({});
   const [isMetric, setIsMetric] = useState(true);
   const [, startTransition] = useTransition();
@@ -240,5 +249,20 @@ export default function WorkoutPage() {
       </div>
       <AddExerciseDialog onAdd={handleAddExercise} />
     </div>
+  );
+}
+
+export default function WorkoutPage() {
+  return (
+    <Suspense fallback={
+      <div>
+        <Header showDateNav date={new Date()} onPrevDate={() => {}} onNextDate={() => {}} />
+        <div className="p-4">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    }>
+      <WorkoutContent />
+    </Suspense>
   );
 }
