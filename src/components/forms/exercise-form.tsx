@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 const exerciseSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   categoryId: z.number().int().positive('Category is required'),
-  exerciseTypeId: z.number().int().min(0).max(3),
+  exerciseTypeId: z.number().int().min(0).max(9),
   notes: z.string().optional(),
   isFavorite: z.boolean(),
 });
@@ -29,11 +29,9 @@ interface ExerciseFormProps {
   isLoading?: boolean;
 }
 
-const exerciseTypes = [
-  { id: 0, name: 'Weight & Reps' },
-  { id: 1, name: 'Duration' },
-  { id: 3, name: 'Distance & Time' },
-];
+import { EXERCISE_TYPES } from '@/lib/exercise-types';
+
+const exerciseTypes = EXERCISE_TYPES;
 
 export function ExerciseForm({ categories, defaultValues, onSubmit, onCancel, isLoading }: ExerciseFormProps) {
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ExerciseFormData>({

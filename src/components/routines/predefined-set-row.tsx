@@ -3,6 +3,7 @@
 import { Trash2, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { getExerciseTypeFields } from '@/lib/exercise-types';
 
 interface PredefinedSetRowProps {
   set: {
@@ -12,7 +13,7 @@ interface PredefinedSetRowProps {
     durationSeconds?: number | null;
   };
   setNumber: number;
-  exerciseType: number; // 0 = weight/reps, 1 = distance/time
+  exerciseType: number;
   isMetric: boolean;
   onUpdate: (field: 'metricWeight' | 'reps' | 'distance' | 'durationSeconds', value: number | null) => void;
   onDelete: () => void;
@@ -78,6 +79,9 @@ export function PredefinedSetRow({
       : (set.distance / 1609.34).toFixed(2)
     : '';
 
+  const fields = getExerciseTypeFields(exerciseType);
+  const fieldCount = [fields.hasWeight, fields.hasReps, fields.hasDistance, fields.hasTime].filter(Boolean).length;
+
   return (
     <div className="flex items-center gap-2 p-2 rounded-lg border bg-card">
       <Button
@@ -90,9 +94,8 @@ export function PredefinedSetRow({
 
       <span className="w-8 text-center text-sm text-muted-foreground">{setNumber}</span>
 
-      {exerciseType === 0 ? (
-        // Weight/Reps inputs
-        <>
+      <div className="flex items-center gap-2 flex-1">
+        {fields.hasWeight && (
           <div className="flex items-center gap-1 flex-1">
             <Input
               type="number"
@@ -106,21 +109,30 @@ export function PredefinedSetRow({
               {isMetric ? 'kg' : 'lb'}
             </span>
           </div>
+        )}
 
+        {fields.hasWeight && (fields.hasReps || fields.hasDistance || fields.hasTime) && (
           <span className="text-muted-foreground">×</span>
+        )}
 
-          <Input
-            type="number"
-            value={set.reps ?? ''}
-            onChange={(e) => handleRepsChange(e.target.value)}
-            placeholder="Reps"
-            className="w-20 text-center"
-          />
-          <span className="text-sm text-muted-foreground w-12">reps</span>
-        </>
-      ) : (
-        // Distance/Duration inputs
-        <>
+        {fields.hasReps && (
+          <div className="flex items-center gap-1 flex-1">
+            <Input
+              type="number"
+              value={set.reps ?? ''}
+              onChange={(e) => handleRepsChange(e.target.value)}
+              placeholder="Reps"
+              className="w-20 text-center"
+            />
+            <span className="text-sm text-muted-foreground">reps</span>
+          </div>
+        )}
+
+        {fields.hasReps && (fields.hasDistance || fields.hasTime) && (
+          <span className="text-muted-foreground">@</span>
+        )}
+
+        {fields.hasDistance && (
           <div className="flex items-center gap-1 flex-1">
             <Input
               type="number"
@@ -134,19 +146,25 @@ export function PredefinedSetRow({
               {isMetric ? 'km' : 'mi'}
             </span>
           </div>
+        )}
 
+        {fields.hasDistance && fields.hasTime && (
           <span className="text-muted-foreground">@</span>
+        )}
 
-          <Input
-            type="number"
-            value={set.durationSeconds ?? ''}
-            onChange={(e) => handleDurationChange(e.target.value)}
-            placeholder="Duration"
-            className="w-20 text-center"
-          />
-          <span className="text-sm text-muted-foreground w-12">sec</span>
-        </>
-      )}
+        {fields.hasTime && (
+          <div className="flex items-center gap-1 flex-1">
+            <Input
+              type="number"
+              value={set.durationSeconds ?? ''}
+              onChange={(e) => handleDurationChange(e.target.value)}
+              placeholder="Duration"
+              className="w-20 text-center"
+            />
+            <span className="text-sm text-muted-foreground">sec</span>
+          </div>
+        )}
+      </div>
 
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onDelete}>
         <Trash2 className="h-4 w-4 text-destructive" />
