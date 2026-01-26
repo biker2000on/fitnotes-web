@@ -1,11 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Link, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { SetRow } from './set-row';
 import { CategoryBadge } from './category-badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
 
 interface Set {
   id: number;
@@ -30,9 +37,13 @@ interface ExerciseWorkoutCardProps {
   sets: Set[];
   previousSets?: Set[];
   isMetric: boolean;
+  workoutDate: string;
+  isSelectable?: boolean;
+  isSelected?: boolean;
   onAddSet: (exerciseId: number) => void;
   onUpdateSet: (id: number, data: SetUpdate) => void;
   onDeleteSet: (id: number) => void;
+  onSelectToggle?: (exerciseId: number) => void;
 }
 
 export function ExerciseWorkoutCard({
@@ -40,6 +51,7 @@ export function ExerciseWorkoutCard({
   sets,
   previousSets,
   isMetric,
+  workoutDate,
   onAddSet,
   onUpdateSet,
   onDeleteSet,
@@ -77,6 +89,7 @@ export function ExerciseWorkoutCard({
             set={set}
             setNumber={index + 1}
             isMetric={isMetric}
+            workoutDate={workoutDate}
             onUpdate={onUpdateSet}
             onDelete={onDeleteSet}
           />

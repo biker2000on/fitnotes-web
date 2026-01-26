@@ -22,3 +22,15 @@ export async function getUserSettings() {
 
   return settings;
 }
+
+export async function updateUserSettings(updates: Partial<typeof userSettings.$inferInsert>) {
+  const user = await requireAuth();
+
+  const [updated] = await db
+    .update(userSettings)
+    .set(updates)
+    .where(eq(userSettings.userId, user.id))
+    .returning();
+
+  return updated;
+}

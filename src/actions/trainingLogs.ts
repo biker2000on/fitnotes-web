@@ -22,7 +22,10 @@ export async function getTrainingLogs(date: string, exerciseId?: number) {
 
   let logs = await db.query.trainingLogs.findMany({
     where: eq(trainingLogs.workoutDate, date),
-    with: { exercise: { with: { category: true } } },
+    with: {
+      exercise: { with: { category: true } },
+      workoutGroup: true,
+    },
     orderBy: [asc(trainingLogs.sortOrder)],
   });
 
@@ -246,4 +249,97 @@ export async function getWorkoutDates(startDate: string, endDate: string) {
     date,
     categoryColors: Array.from(colors),
   }));
+}
+
+// Get paginated workout history
+export async function getWorkoutHistory(limit: number = 20, offset: number = 0) {
+  const user = await requireAuth();
+
+  // Get user's exercise IDs
+  const userExercises = await db.query.exercises.findMany({
+    where: eq(exercises.userId, user.id),
+    columns: { id: true },
+  });
+  const exerciseIds = userExercises.map(e => e.id);
+
+  if (exerciseIds.length === 0) return [];
+
+  // Get all logs
+  const logs = await db.query.trainingLogs.findMany({
+    with: { exercise: { with: { category: true } } },
+    orderBy: [desc(trainingLogs.workoutDate), desc(trainingLogs.id)],
+  });
+
+  // Filter to user's exercises
+  const userLogs = logs.filter(log => exerciseIds.includes(log.exerciseId));
+
+  // Group by date
+  const dateMap = new Map<string, typeof userLogs>();
+  for (const log of userLogs) {
+    if (!dateMap.has(log.workoutDate)) {
+      dateMap.set(log.workoutDate, []);
+    }
+    dateMap.get(log.workoutDate)!.push(log);
+  }
+
+  // Convert to array and paginate
+  const workoutDates = Array.from(dateMap.keys()).sort((a, b) => b.localeCompare(a));
+  const paginatedDates = workoutDates.slice(offset, offset + limit);
+
+  return paginatedDates.map(date => ({
+    date,
+    logs: dateMap.get(date) || [],
+  }));
+}
+
+// Get workout summary for a specific date
+export async function getWorkoutSummary(date: string) {
+  const user = await requireAuth();
+
+  // Get user's exercise IDs
+  const userExercises = await db.query.exercises.findMany({
+    where: eq(exercises.userId, user.id),
+    columns: { id: true },
+  });
+  const exerciseIds = userExercises.map(e => e.id);
+
+  if (exerciseIds.length === 0) {
+    return {
+      date,
+      exerciseCount: 0,
+      setCount: 0,
+      totalVolume: 0,
+      exercises: [],
+    };
+  }
+
+  // Get all logs for this date
+  const logs = await db.query.trainingLogs.findMany({
+    where: eq(trainingLogs.workoutDate, date),
+    with: { exercise: { with: { category: true } } },
+  });
+
+  // Filter to user's exercises
+  const userLogs = logs.filter(log => exerciseIds.includes(log.exerciseId));
+
+  // Calculate stats
+  const exerciseSet = new Set(userLogs.map(log => log.exerciseId));
+  const setCount = userLogs.length;
+  const totalVolume = userLogs.reduce((sum, log) => sum + (log.metricWeight * log.reps), 0);
+
+  // Get unique exercises
+  const exerciseMap = new Map<number, typeof userLogs[0]['exercise']>();
+  for (const log of userLogs) {
+    if (!exerciseMap.has(log.exerciseId)) {
+      exerciseMap.set(log.exerciseId, log.exercise);
+    }
+  }
+
+  return {
+    date,
+    exerciseCount: exerciseSet.size,
+    setCount,
+    totalVolume,
+    exercises: Array.from(exerciseMap.values()),
+  };
 }

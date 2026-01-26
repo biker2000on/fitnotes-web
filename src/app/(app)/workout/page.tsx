@@ -6,6 +6,8 @@ import { Header } from '@/components/layout/header';
 import { addDays, subDays, format, parse, isValid } from 'date-fns';
 import { ExerciseWorkoutCard } from '@/components/workout/exercise-workout-card';
 import { AddExerciseDialog } from '@/components/workout/add-exercise-dialog';
+import { WorkoutDuration } from '@/components/workout/workout-duration';
+import { WorkoutNotes } from '@/components/workout/workout-notes';
 import {
   getTrainingLogs,
   getLastWorkout,
@@ -227,6 +229,8 @@ function WorkoutContent() {
         onNextDate={() => setDate(addDays(date, 1))}
       />
       <div className="p-4 pb-24 space-y-4">
+        <WorkoutDuration date={dateString} />
+        <WorkoutNotes date={dateString} />
         {Object.entries(groupedLogs).length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p className="text-lg font-medium mb-2">No exercises logged yet</p>
@@ -240,6 +244,7 @@ function WorkoutContent() {
               sets={group.sets}
               previousSets={group.previousSets}
               isMetric={isMetric}
+              workoutDate={dateString}
               onAddSet={handleAddSet}
               onUpdateSet={handleUpdateSet}
               onDeleteSet={handleDeleteSet}
