@@ -107,7 +107,7 @@ export async function createTrainingLog(data: unknown) {
     limit: 1,
   });
 
-  const nextSortOrder = existingLogs.length > 0 ? existingLogs[0].sortOrder + 1 : 0;
+  const nextSortOrder = existingLogs.length > 0 ? (existingLogs[0]?.sortOrder ?? 0) + 1 : 0;
 
   // TODO: Add PR detection logic here
   const isPersonalRecord = false;
