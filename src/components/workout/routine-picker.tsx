@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { getRoutines } from '@/actions/routines';
 import { applyRoutineToWorkout } from '@/actions/routines';
 import { useRouter } from 'next/navigation';
@@ -41,6 +42,7 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
   const [open, setOpen] = useState(false);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [selectedRoutine, setSelectedRoutine] = useState<number | null>(null);
+  const [selectedSections, setSelectedSections] = useState<Set<number>>(new Set());
   const [populateOption, setPopulateOption] = useState<PopulateOption>('template');
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -54,12 +56,24 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
     }
   }, [open]);
 
+  // When routine is selected, default to all sections being selected
+  useEffect(() => {
+    if (selectedRoutine) {
+      const routine = routines.find(r => r.id === selectedRoutine);
+      if (routine) {
+        const allSectionIds = new Set(routine.sections.map(s => s.id));
+        setSelectedSections(allSectionIds);
+      }
+    }
+  }, [selectedRoutine, routines]);
+
   const handleApply = async () => {
-    if (!selectedRoutine) return;
+    if (!selectedRoutine || selectedSections.size === 0) return;
 
     startTransition(async () => {
       try {
-        const result = await applyRoutineToWorkout(selectedRoutine, workoutDate, populateOption);
+        const sectionIdsArray = Array.from(selectedSections);
+        const result = await applyRoutineToWorkout(selectedRoutine, workoutDate, populateOption, sectionIdsArray);
 
         if (result) {
           const routine = routines.find(r => r.id === selectedRoutine);
@@ -68,6 +82,7 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
           );
           setOpen(false);
           setSelectedRoutine(null);
+          setSelectedSections(new Set());
           onApplied?.();
         }
       } catch (error) {
@@ -77,12 +92,37 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
     });
   };
 
+  const toggleSection = (sectionId: number) => {
+    const newSelected = new Set(selectedSections);
+    if (newSelected.has(sectionId)) {
+      newSelected.delete(sectionId);
+    } else {
+      newSelected.add(sectionId);
+    }
+    setSelectedSections(newSelected);
+  };
+
+  const toggleAllSections = () => {
+    const routine = routines.find(r => r.id === selectedRoutine);
+    if (!routine) return;
+
+    if (selectedSections.size === routine.sections.length) {
+      // All selected, deselect all
+      setSelectedSections(new Set());
+    } else {
+      // Not all selected, select all
+      const allSectionIds = new Set(routine.sections.map(s => s.id));
+      setSelectedSections(allSectionIds);
+    }
+  };
+
   const selectedRoutineData = routines.find(r => r.id === selectedRoutine);
-  const totalExercises = selectedRoutineData?.sections.reduce(
+  const selectedSectionsData = selectedRoutineData?.sections.filter(s => selectedSections.has(s.id)) ?? [];
+  const totalExercises = selectedSectionsData.reduce(
     (sum, section) => sum + section.exercises.length,
     0
-  ) ?? 0;
-  const totalSections = selectedRoutineData?.sections.length ?? 0;
+  );
+  const totalSections = selectedSectionsData.length;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -105,6 +145,16 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
               <Dumbbell className="h-12 w-12 mx-auto mb-2 opacity-50" />
               <p className="font-medium">No routines found</p>
               <p className="text-sm mt-1">Create a routine first to use this feature</p>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => {
+                  setOpen(false);
+                  router.push('/routines/new');
+                }}
+              >
+                Create Routine
+              </Button>
             </div>
           ) : (
             <>
@@ -149,9 +199,52 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
                 </div>
               </div>
 
-              {selectedRoutine && (
-                <div className="space-y-3 pt-4 border-t">
-                  <Label className="text-sm font-medium">Populate Sets With</Label>
+              {selectedRoutine && selectedRoutineData && (
+                <>
+                  <div className="space-y-3 pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm font-medium">Select Sections</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={toggleAllSections}
+                        className="h-8 text-xs"
+                      >
+                        {selectedSections.size === selectedRoutineData.sections.length ? 'Deselect All' : 'Select All'}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {selectedRoutineData.sections.map((section) => {
+                        const exerciseCount = section.exercises.length;
+                        return (
+                          <div
+                            key={section.id}
+                            className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer"
+                            onClick={() => toggleSection(section.id)}
+                          >
+                            <Checkbox
+                              checked={selectedSections.has(section.id)}
+                              onCheckedChange={() => toggleSection(section.id)}
+                              className="mt-0.5"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex-1">
+                              <Label className="font-medium cursor-pointer">
+                                {section.name}
+                              </Label>
+                              <p className="text-sm text-muted-foreground">
+                                {exerciseCount} exercise{exerciseCount !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-4 border-t">
+                    <Label className="text-sm font-medium">Populate Sets With</Label>
                   <RadioGroup value={populateOption} onValueChange={(value) => setPopulateOption(value as PopulateOption)}>
                     <div className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors">
                       <RadioGroupItem value="blank" id="blank" className="mt-0.5" />
@@ -190,7 +283,8 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
                       </div>
                     </div>
                   </RadioGroup>
-                </div>
+                  </div>
+                </>
               )}
             </>
           )}
@@ -208,7 +302,7 @@ export function RoutinePicker({ workoutDate, onApplied }: RoutinePickerProps) {
             <Button variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
               Cancel
             </Button>
-            <Button onClick={handleApply} disabled={!selectedRoutine || isPending}>
+            <Button onClick={handleApply} disabled={!selectedRoutine || selectedSections.size === 0 || isPending}>
               {isPending ? 'Applying...' : 'Apply Routine'}
             </Button>
           </div>
