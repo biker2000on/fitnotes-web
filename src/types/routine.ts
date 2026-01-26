@@ -24,6 +24,7 @@ export type RoutineExercise = {
   sortOrder: number | null;
   restTimerSeconds: number | null;
   notes: string | null;
+  supersetGroupId: number | null;
   exercise?: {
     id: number;
     name: string;

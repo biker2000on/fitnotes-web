@@ -1,9 +1,9 @@
 'use server';
 
 import { db } from '@/db';
-import { routines, routineSections, routineSectionExercises, routineSectionExerciseSets } from '@/db/schema';
+import { routines, routineSections, routineSectionExercises, routineSectionExerciseSets, workoutGroups } from '@/db/schema';
 import { trainingLogs, exercises } from '@/db/schema';
-import { eq, and, desc, lt, asc } from 'drizzle-orm';
+import { eq, and, desc, lt, asc, inArray, max, sql } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth-utils';
 import { revalidatePath } from 'next/cache';
 import type { Routine } from '@/types/routine';
@@ -37,10 +37,16 @@ export async function getRoutine(id: number): Promise<Routine | null> {
         with: {
           exercises: {
             with: {
+              exercise: {
+                with: {
+                  category: true,
+                },
+              },
               sets: {
                 orderBy: [asc(routineSectionExerciseSets.sortOrder)],
               },
             },
+            orderBy: [asc(routineSectionExercises.sortOrder)],
           },
         },
         orderBy: [asc(routineSections.sortOrder)],
@@ -169,6 +175,7 @@ export async function duplicateRoutine(id: number): Promise<Routine> {
           sortOrder: exercise.sortOrder,
           restTimerSeconds: exercise.restTimerSeconds ?? null,
           notes: exercise.notes ?? null,
+          supersetGroupId: exercise.supersetGroupId ?? null,
         })
         .returning();
 
@@ -438,6 +445,7 @@ export async function applyRoutineToWorkout(
                 orderBy: [asc(routineSectionExerciseSets.sortOrder)],
               },
             },
+            orderBy: [asc(routineSectionExercises.sortOrder)],
           },
         },
         orderBy: [asc(routineSections.sortOrder)],
@@ -449,6 +457,10 @@ export async function applyRoutineToWorkout(
 
   let totalExercises = 0;
   let totalSets = 0;
+
+  // Track superset group mappings: routine supersetGroupId -> workout group id
+  // Keyed by section to avoid conflicts between sections
+  const supersetGroupMap = new Map<string, number>();
 
   // Iterate through all sections and exercises
   for (const section of routine.sections) {
@@ -464,6 +476,30 @@ export async function applyRoutineToWorkout(
       if (!exercise) continue;
 
       totalExercises++;
+
+      // Determine workout group ID if exercise is part of a superset
+      let workoutGroupId: number | null = null;
+      if (routineExercise.supersetGroupId !== null) {
+        const mapKey = `${section.id}-${routineExercise.supersetGroupId}`;
+
+        if (!supersetGroupMap.has(mapKey)) {
+          // Create a new workout group for this superset
+          const result = await db.insert(workoutGroups).values({
+            userId: user.id,
+            workoutDate,
+            name: null, // No specific name
+            color: '#3b82f6', // default blue
+            autoJumpEnabled: true,
+            restTimerAutoStart: false,
+          }).returning();
+
+          if (result[0]) {
+            supersetGroupMap.set(mapKey, result[0].id);
+          }
+        }
+
+        workoutGroupId = supersetGroupMap.get(mapKey) ?? null;
+      }
 
       if (option === 'blank') {
         // Create exercise with no sets
@@ -484,6 +520,7 @@ export async function applyRoutineToWorkout(
               sortOrder: index,
               isComplete: false,
               isPersonalRecord: false,
+              workoutGroupId,
             });
             totalSets++;
           }
@@ -521,6 +558,7 @@ export async function applyRoutineToWorkout(
               sortOrder: index,
               isComplete: false,
               isPersonalRecord: false,
+              workoutGroupId,
             });
             totalSets++;
           }
@@ -720,4 +758,174 @@ export async function deletePredefinedSet(id: number) {
     .where(eq(routineSectionExerciseSets.id, id));
 
   revalidatePath('/routines');
+}
+
+/**
+ * Create a superset from exercises in a section
+ * @param sectionId - The section containing the exercises
+ * @param exerciseIds - Array of routine section exercise IDs to group
+ * @returns The new supersetGroupId
+ */
+export async function createRoutineSuperset(sectionId: number, exerciseIds: number[]): Promise<number> {
+  const user = await requireAuth();
+
+  if (exerciseIds.length < 2) {
+    throw new Error('A superset requires at least 2 exercises');
+  }
+
+  // Verify section ownership through routine
+  const section = await db.query.routineSections.findFirst({
+    where: eq(routineSections.id, sectionId),
+    with: { routine: true },
+  });
+
+  if (!section || section.routine.userId !== user.id) {
+    throw new Error('Section not found');
+  }
+
+  // Verify all exercises belong to this section
+  const exercisesToGroup = await db.query.routineSectionExercises.findMany({
+    where: and(
+      eq(routineSectionExercises.sectionId, sectionId),
+      inArray(routineSectionExercises.id, exerciseIds)
+    ),
+  });
+
+  if (exercisesToGroup.length !== exerciseIds.length) {
+    throw new Error('Some exercises were not found in this section');
+  }
+
+  // Get the next available supersetGroupId for this section
+  const maxGroupResult = await db
+    .select({ maxGroup: max(routineSectionExercises.supersetGroupId) })
+    .from(routineSectionExercises)
+    .where(eq(routineSectionExercises.sectionId, sectionId));
+
+  const newGroupId = (maxGroupResult[0]?.maxGroup ?? 0) + 1;
+
+  // Assign all exercises to the new superset group
+  await db
+    .update(routineSectionExercises)
+    .set({ supersetGroupId: newGroupId })
+    .where(inArray(routineSectionExercises.id, exerciseIds));
+
+  revalidatePath('/routines');
+  return newGroupId;
+}
+
+/**
+ * Remove an exercise from its superset
+ * @param exerciseId - The routine section exercise ID to remove from superset
+ */
+export async function removeFromSuperset(exerciseId: number): Promise<void> {
+  const user = await requireAuth();
+
+  // Verify ownership through section -> routine
+  const sectionExercise = await db.query.routineSectionExercises.findFirst({
+    where: eq(routineSectionExercises.id, exerciseId),
+    with: {
+      section: {
+        with: { routine: true },
+      },
+    },
+  });
+
+  if (!sectionExercise || sectionExercise.section.routine.userId !== user.id) {
+    throw new Error('Exercise not found');
+  }
+
+  if (!sectionExercise.supersetGroupId) {
+    return; // Already not in a superset
+  }
+
+  const sectionId = sectionExercise.sectionId;
+  const groupId = sectionExercise.supersetGroupId;
+
+  // Remove this exercise from the superset
+  await db
+    .update(routineSectionExercises)
+    .set({ supersetGroupId: null })
+    .where(eq(routineSectionExercises.id, exerciseId));
+
+  // Check if only one exercise remains in the superset - if so, dissolve it
+  const remainingInGroup = await db.query.routineSectionExercises.findMany({
+    where: and(
+      eq(routineSectionExercises.sectionId, sectionId),
+      eq(routineSectionExercises.supersetGroupId, groupId)
+    ),
+  });
+
+  if (remainingInGroup.length === 1 && remainingInGroup[0]) {
+    // Only one exercise left, remove it from the superset too
+    await db
+      .update(routineSectionExercises)
+      .set({ supersetGroupId: null })
+      .where(eq(routineSectionExercises.id, remainingInGroup[0].id));
+  }
+
+  revalidatePath('/routines');
+}
+
+/**
+ * Dissolve a superset, ungrouping all exercises
+ * @param sectionId - The section containing the superset
+ * @param supersetGroupId - The superset group ID to dissolve
+ */
+export async function dissolveSuperset(sectionId: number, supersetGroupId: number): Promise<void> {
+  const user = await requireAuth();
+
+  // Verify section ownership through routine
+  const section = await db.query.routineSections.findFirst({
+    where: eq(routineSections.id, sectionId),
+    with: { routine: true },
+  });
+
+  if (!section || section.routine.userId !== user.id) {
+    throw new Error('Section not found');
+  }
+
+  // Remove superset grouping from all exercises in this group
+  await db
+    .update(routineSectionExercises)
+    .set({ supersetGroupId: null })
+    .where(and(
+      eq(routineSectionExercises.sectionId, sectionId),
+      eq(routineSectionExercises.supersetGroupId, supersetGroupId)
+    ));
+
+  revalidatePath('/routines');
+}
+
+/**
+ * Get all exercises in a superset
+ * @param sectionId - The section containing the superset
+ * @param supersetGroupId - The superset group ID
+ */
+export async function getSupersetExercises(sectionId: number, supersetGroupId: number) {
+  const user = await requireAuth();
+
+  // Verify section ownership through routine
+  const section = await db.query.routineSections.findFirst({
+    where: eq(routineSections.id, sectionId),
+    with: { routine: true },
+  });
+
+  if (!section || section.routine.userId !== user.id) {
+    throw new Error('Section not found');
+  }
+
+  const exercises = await db.query.routineSectionExercises.findMany({
+    where: and(
+      eq(routineSectionExercises.sectionId, sectionId),
+      eq(routineSectionExercises.supersetGroupId, supersetGroupId)
+    ),
+    with: {
+      exercise: {
+        with: { category: true },
+      },
+    },
+    orderBy: [asc(routineSectionExercises.sortOrder)],
+  });
+
+  return exercises;
 }

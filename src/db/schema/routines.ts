@@ -31,6 +31,7 @@ export const routineSectionExercises = pgTable('routine_section_exercises', {
   sortOrder: integer('sort_order').default(0),
   restTimerSeconds: integer('rest_timer_seconds'),
   notes: text('notes'),
+  supersetGroupId: integer('superset_group_id'), // nullable - exercises with same groupId are in a superset
 });
 
 export const routineSectionExerciseSets = pgTable('routine_section_exercise_sets', {

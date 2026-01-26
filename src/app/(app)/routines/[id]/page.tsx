@@ -10,12 +10,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { SectionCard } from '@/components/routines/section-card';
 import { Plus, Save } from 'lucide-react';
-import { getRoutine, updateRoutine, addSection, deleteSection, addExerciseToSection, removeExerciseFromSection } from '@/actions/routines';
+import { getRoutine, updateRoutine, addSection, deleteSection, addExerciseToSection, removeExerciseFromSection, reorderSections, reorderExercises } from '@/actions/routines';
 import { getExercises } from '@/actions/exercises';
 import type { Routine } from '@/types/routine';
 import { useRouter } from 'next/navigation';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 
 type Exercise = { id: number; name: string; category: { name: string; color: string } | null };
 
@@ -36,6 +51,13 @@ export default function RoutineEditorPage({ params }: { params: Promise<{ id: st
   const [selectedExerciseId, setSelectedExerciseId] = useState<number | null>(null);
   const [selectedRoutineExerciseId, setSelectedRoutineExerciseId] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   useEffect(() => {
     loadData();
@@ -106,6 +128,32 @@ export default function RoutineEditorPage({ params }: { params: Promise<{ id: st
     });
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || !routine || active.id === over.id) return;
+
+    const oldIndex = routine.sections.findIndex((s) => s.id === active.id);
+    const newIndex = routine.sections.findIndex((s) => s.id === over.id);
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    // Optimistically update local state
+    const newSections = arrayMove(routine.sections, oldIndex, newIndex);
+    setRoutine({ ...routine, sections: newSections });
+
+    // Persist to database
+    startTransition(async () => {
+      await reorderSections(routine.id, newSections.map((s) => s.id));
+    });
+  };
+
+  const handleReorderExercises = async (sectionId: number, exerciseIds: number[]) => {
+    startTransition(async () => {
+      await reorderExercises(sectionId, exerciseIds);
+    });
+  };
+
   if (!routine) {
     return (
       <div>
@@ -163,30 +211,46 @@ export default function RoutineEditorPage({ params }: { params: Promise<{ id: st
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {routine.sections.map((section) => (
-                <SectionCard
-                  key={section.id}
-                  section={section}
-                  onDelete={(id) => {
-                    setSelectedSectionIdForDelete(id);
-                    setIsDeleteSectionDialogOpen(true);
-                  }}
-                  onAddExercise={(id) => {
-                    setSelectedSectionId(id);
-                    setIsAddExerciseDialogOpen(true);
-                  }}
-                  onRemoveExercise={(id) => {
-                    setSelectedRoutineExerciseId(id);
-                    setIsRemoveExerciseDialogOpen(true);
-                  }}
-                  onEditExercise={(id) => {
-                    // TODO: Implement predefined sets editor
-                    console.log('Edit exercise sets:', id);
-                  }}
-                />
-              ))}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={routine.sections.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-3">
+                  {routine.sections.map((section) => (
+                    <SectionCard
+                      key={section.id}
+                      section={section}
+                      onDelete={(id) => {
+                        setSelectedSectionIdForDelete(id);
+                        setIsDeleteSectionDialogOpen(true);
+                      }}
+                      onAddExercise={(id) => {
+                        setSelectedSectionId(id);
+                        setIsAddExerciseDialogOpen(true);
+                      }}
+                      onRemoveExercise={(id) => {
+                        setSelectedRoutineExerciseId(id);
+                        setIsRemoveExerciseDialogOpen(true);
+                      }}
+                      onEditExercise={() => {
+                        // Reload data to update set counts after editing predefined sets
+                        loadData();
+                      }}
+                      onReorderExercises={handleReorderExercises}
+                      onSupersetChange={() => {
+                        // Reload data to update superset groupings
+                        loadData();
+                      }}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           )}
         </ScrollArea>
       </div>
