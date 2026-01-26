@@ -41,6 +41,8 @@ interface PreviousSet {
   reps: number;
   distance: number;
   durationSeconds: number;
+  isComplete: boolean;
+  isPersonalRecord: boolean;
 }
 
 interface GroupedLogs {
@@ -62,6 +64,7 @@ function WorkoutContent() {
 
   const [date, setDate] = useState(isValid(initialDate) ? initialDate : new Date());
   const [groupedLogs, setGroupedLogs] = useState<GroupedLogs>({});
+  const [exerciseOrder, setExerciseOrder] = useState<number[]>([]); // Track exercise display order
   const [isMetric, setIsMetric] = useState(true);
   const [, startTransition] = useTransition();
 
@@ -78,12 +81,14 @@ function WorkoutContent() {
 
       // Group logs by exercise and fetch previous sets
       const grouped: GroupedLogs = {};
+      const order: number[] = []; // Track order of first appearance
       for (const log of fetchedLogs as TrainingLog[]) {
         if (!grouped[log.exerciseId]) {
           grouped[log.exerciseId] = {
             exercise: log.exercise,
             sets: [],
           };
+          order.push(log.exerciseId);
 
           // Fetch previous workout
           const previousSets = await getLastWorkout(log.exerciseId, dateString);
@@ -95,6 +100,7 @@ function WorkoutContent() {
       }
 
       setGroupedLogs(grouped);
+      setExerciseOrder(order);
     });
   };
 
@@ -137,6 +143,7 @@ function WorkoutContent() {
           previousSets: previousSets as PreviousSet[] | undefined,
         },
       });
+      setExerciseOrder([...exerciseOrder, exerciseId]);
     });
   };
 
@@ -194,25 +201,25 @@ function WorkoutContent() {
       isComplete?: boolean;
     }
   ) => {
+    // Optimistically update local state first (no reordering)
+    setGroupedLogs(prevGrouped => {
+      const newGrouped = { ...prevGrouped };
+      for (const exerciseId of Object.keys(newGrouped)) {
+        const group = newGrouped[Number(exerciseId)]!;
+        const setIndex = group.sets.findIndex(s => s.id === id);
+        if (setIndex !== -1) {
+          const updatedSets = [...group.sets];
+          updatedSets[setIndex] = { ...updatedSets[setIndex]!, ...data };
+          newGrouped[Number(exerciseId)] = { ...group, sets: updatedSets };
+          break;
+        }
+      }
+      return newGrouped;
+    });
+
+    // Then persist to database
     startTransition(async () => {
       await updateTrainingLog(id, data);
-
-      // Update local state
-      const fetchedLogs = await getTrainingLogs(dateString);
-
-      // Rebuild grouped logs
-      const grouped: GroupedLogs = {};
-      for (const log of fetchedLogs as TrainingLog[]) {
-        if (!grouped[log.exerciseId]) {
-          grouped[log.exerciseId] = {
-            exercise: log.exercise,
-            sets: [],
-            previousSets: groupedLogs[log.exerciseId]?.previousSets,
-          };
-        }
-        grouped[log.exerciseId]!.sets.push(log);
-      }
-      setGroupedLogs(grouped);
     });
   };
 
@@ -236,6 +243,9 @@ function WorkoutContent() {
         grouped[log.exerciseId]!.sets.push(log);
       }
       setGroupedLogs(grouped);
+      // Update exerciseOrder to remove any exercises that no longer have sets
+      const remainingExerciseIds = new Set(Object.keys(grouped).map(Number));
+      setExerciseOrder(exerciseOrder.filter(id => remainingExerciseIds.has(id)));
     });
   };
 
@@ -253,25 +263,29 @@ function WorkoutContent() {
         </div>
         <WorkoutDuration date={dateString} />
         <WorkoutNotes date={dateString} />
-        {Object.entries(groupedLogs).length === 0 ? (
+        {exerciseOrder.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p className="text-lg font-medium mb-2">No exercises logged yet</p>
             <p className="text-sm">Add an exercise to start your workout</p>
           </div>
         ) : (
-          Object.entries(groupedLogs).map(([exerciseId, group]) => (
-            <ExerciseWorkoutCard
-              key={exerciseId}
-              exercise={group.exercise}
-              sets={group.sets}
-              previousSets={group.previousSets}
-              isMetric={isMetric}
-              workoutDate={dateString}
-              onAddSet={handleAddSet}
-              onUpdateSet={handleUpdateSet}
-              onDeleteSet={handleDeleteSet}
-            />
-          ))
+          exerciseOrder.map((exerciseId) => {
+            const group = groupedLogs[exerciseId];
+            if (!group) return null;
+            return (
+              <ExerciseWorkoutCard
+                key={exerciseId}
+                exercise={group.exercise}
+                sets={group.sets}
+                previousSets={group.previousSets}
+                isMetric={isMetric}
+                workoutDate={dateString}
+                onAddSet={handleAddSet}
+                onUpdateSet={handleUpdateSet}
+                onDeleteSet={handleDeleteSet}
+              />
+            );
+          })
         )}
       </div>
       <AddExerciseDialog onAdd={handleAddExercise} />
