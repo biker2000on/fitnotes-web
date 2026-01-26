@@ -8,6 +8,7 @@ import { ExerciseWorkoutCard } from '@/components/workout/exercise-workout-card'
 import { AddExerciseDialog } from '@/components/workout/add-exercise-dialog';
 import { WorkoutDuration } from '@/components/workout/workout-duration';
 import { WorkoutNotes } from '@/components/workout/workout-notes';
+import { RoutinePicker } from '@/components/workout/routine-picker';
 import {
   getTrainingLogs,
   getLastWorkout,
@@ -61,8 +62,7 @@ function WorkoutContent() {
 
   const dateString = format(date, 'yyyy-MM-dd');
 
-  // Load training logs and settings
-  useEffect(() => {
+  const loadWorkoutData = async () => {
     startTransition(async () => {
       const [fetchedLogs, settings] = await Promise.all([
         getTrainingLogs(dateString),
@@ -91,6 +91,11 @@ function WorkoutContent() {
 
       setGroupedLogs(grouped);
     });
+  };
+
+  // Load training logs and settings
+  useEffect(() => {
+    loadWorkoutData();
   }, [dateString]);
 
   const handleAddExercise = async (exerciseId: number) => {
@@ -229,6 +234,9 @@ function WorkoutContent() {
         onNextDate={() => setDate(addDays(date, 1))}
       />
       <div className="p-4 pb-24 space-y-4">
+        <div className="flex justify-end">
+          <RoutinePicker workoutDate={dateString} onApplied={loadWorkoutData} />
+        </div>
         <WorkoutDuration date={dateString} />
         <WorkoutNotes date={dateString} />
         {Object.entries(groupedLogs).length === 0 ? (

@@ -9,3 +9,4 @@ export * from './workoutGroups';
 export * from './comments';
 export * from './workoutTimes';
 export * from './userSettings';
+export * from './routines';
