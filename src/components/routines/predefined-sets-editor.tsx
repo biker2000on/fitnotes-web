@@ -69,11 +69,13 @@ export function PredefinedSetsEditor({
   };
 
   const handleAddSet = () => {
+    // Copy values from the first set if one exists
+    const firstSet = sets[0];
     const newSet: PredefinedSet = {
-      metricWeight: null,
-      reps: null,
-      distance: null,
-      durationSeconds: null,
+      metricWeight: firstSet?.metricWeight ?? null,
+      reps: firstSet?.reps ?? null,
+      distance: firstSet?.distance ?? null,
+      durationSeconds: firstSet?.durationSeconds ?? null,
       sortOrder: sets.length,
     };
     setSets([...sets, newSet]);

@@ -44,3 +44,8 @@ next-env.d.ts
 # fitnotes-specific
 fitnotes.apk
 FitNotes_Backup*.sqlite
+fitnotes/
+
+# Misc
+test-results/
+playwright-report/
