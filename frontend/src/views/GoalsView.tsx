@@ -93,7 +93,7 @@ export function GoalsView() {
       unit: userUnit === 'kg' ? 1 : 2,
       title: null,
       target_date: targetDate || null,
-      sort_order: existing?.sort_order ?? goals.length,
+      sort_order: existing?.sort_order ?? (goals.reduce((max, g) => Math.max(max, g.sort_order), -1) + 1),
       distance: null,
       duration_seconds: null,
       start_date: existing?.start_date ?? new Date().toISOString().split('T')[0],

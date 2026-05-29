@@ -132,7 +132,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				_, _ = sqliteDB.Exec("INSERT INTO exercise (_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-					exCounter, name, oldCatID, typeID, notes, int(weightIncr), restTime, unitID, isFavInt)
+					exCounter, name, oldCatID, typeID, notes, weightIncr, restTime, unitID, isFavInt)
 				exCounter++
 			}
 		}
@@ -217,9 +217,11 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				setMap[id] = setCounter
 				oldRseID := secExMap[rseID]
 
+				// Weight and distance may be fractional (e.g. 62.5 kg); keep them as
+				// float64 so SQLite stores them as REAL rather than truncating.
 				var wVal interface{} = 0
 				if weight.Valid {
-					wVal = int(weight.Float64)
+					wVal = weight.Float64
 				}
 				var rVal interface{} = 0
 				if reps.Valid {
@@ -227,7 +229,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				}
 				var dVal interface{} = 0
 				if distance.Valid {
-					dVal = int(distance.Float64)
+					dVal = distance.Float64
 				}
 				var durVal interface{} = 0
 				if duration.Valid {
@@ -264,9 +266,11 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 					oldSetID = setMap[setID.UUID]
 				}
 
-				wVal := 0
+				// Weight and distance may be fractional (e.g. 62.5 kg); keep them as
+				// float64 so SQLite stores them as REAL rather than truncating.
+				var wVal interface{} = 0
 				if weight.Valid {
-					wVal = int(weight.Float64)
+					wVal = weight.Float64
 				}
 				rVal := 0
 				if reps.Valid {
@@ -276,9 +280,9 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				if unit.Valid {
 					uVal = int(unit.Int64)
 				}
-				dVal := 0
+				var dVal interface{} = 0
 				if distance.Valid {
-					dVal = int(distance.Float64)
+					dVal = distance.Float64
 				}
 				durVal := 0
 				if duration.Valid {
@@ -322,15 +326,13 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			var weight float64
 			var fat sql.NullFloat64
 			var comments string
-			if err := pgPool.QueryRow(ctx, "SELECT 1").Scan(&err); err == nil || true { // placeholder check
-				if err := bwRows.Scan(&date, &weight, &fat, &comments); err == nil {
-					fatVal := float64(0)
-					if fat.Valid {
-						fatVal = fat.Float64
-					}
-					_, _ = sqliteDB.Exec("INSERT INTO BodyWeight (date, body_weight_metric, body_fat, comments) VALUES (?, ?, ?, ?)",
-						date.Format("2006-01-02"), weight, fatVal, comments)
+			if err := bwRows.Scan(&date, &weight, &fat, &comments); err == nil {
+				fatVal := float64(0)
+				if fat.Valid {
+					fatVal = fat.Float64
 				}
+				_, _ = sqliteDB.Exec("INSERT INTO BodyWeight (date, body_weight_metric, body_fat, comments) VALUES (?, ?, ?, ?)",
+					date.Format("2006-01-02"), weight, fatVal, comments)
 			}
 		}
 	}
@@ -438,7 +440,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 	var calHistoryDots, calHistoryNames, calHistorySets, catColours, measTrackerLoad, measShowLog bool
 	var firstDay, selectedNav, est1RMMaxReps, restTimerSecs, restVol, catSort, graphDefaultType, graphDefaultPeriod, analysisType, analysisPeriod, exListDetail int
 	var weightIncr, bodyWeightIncr, bodyWeightGoalWeight float64
-	var bodyWeightGoal int
+	var bodyWeightGoal bool
 
 	err = pgPool.QueryRow(ctx, `
 		SELECT 
@@ -550,6 +552,10 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 		if measShowLog {
 			measShowLogVal = 1
 		}
+		bodyWeightGoalVal := 0
+		if bodyWeightGoal {
+			bodyWeightGoalVal = 1
+		}
 
 		_, _ = sqliteDB.Exec(`
 			INSERT INTO settings (
@@ -571,7 +577,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				?, ?, ?, ?, ?, ?, ?, 0, 0, 1,
 				0, 1, 0, 1
 			)`,
-			metricVal, firstDay, selectedNav, int(weightIncr), int(bodyWeightIncr), bodyWeightGoal, int(bodyWeightGoalWeight), bwLogVal, est1RMMaxReps,
+			metricVal, firstDay, selectedNav, weightIncr, bodyWeightIncr, bodyWeightGoalVal, bodyWeightGoalWeight, bwLogVal, est1RMMaxReps,
 			est1RMGraphVal, trackPRsVal, markCompleteVal, autoSelectVal, keepScreenOnVal, graphPointsVal, graphTrendVal, graphZeroVal, restTimerSecs, restVibVal,
 			restSoundVal, restVol, restAutoVal, calDetailVal, calDotsVal, calNavVal, calHistDotsVal, calHistNamesVal, calHistSetsVal, catSort, catColorsVal,
 			measTrackerLoadVal, measShowLogVal, graphDefaultType, graphDefaultPeriod, analysisType, analysisPeriod, exListDetail,

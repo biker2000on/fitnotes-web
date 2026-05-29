@@ -379,8 +379,8 @@ export function useFitNotesController() {
                 }
               }, 50);
             } else {
-              if (lastLog.distance !== null) setLogDistance(lastLog.distance.toString());
-              if (lastLog.duration_seconds !== null) setLogDuration((lastLog.duration_seconds / 60).toString());
+              if (lastLog.distance !== null) setLogDistance(String(settings.distance_unit === 2 ? Math.round((lastLog.distance / 1.60934) * 1000) / 1000 : lastLog.distance));
+              if (lastLog.duration_seconds !== null) setLogDuration(lastLog.duration_seconds.toString());
               setTimeout(() => {
                 const dInput = document.getElementById('log-distance-input');
                 if (dInput) {
@@ -853,7 +853,7 @@ export function useFitNotesController() {
     if (!prior) { triggerToast('No previous set found.', 'info'); return; }
     if (prior.metric_weight != null) setLogWeight(String(prior.metric_weight));
     if (prior.reps != null) setLogReps(String(prior.reps));
-    if (prior.distance != null) setLogDistance(String(prior.distance));
+    if (prior.distance != null) setLogDistance(String(settings.distance_unit === 2 ? Math.round((prior.distance / 1.60934) * 1000) / 1000 : prior.distance));
     if (prior.duration_seconds != null) setLogDuration(String(prior.duration_seconds));
   };
 

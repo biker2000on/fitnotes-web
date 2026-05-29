@@ -259,8 +259,8 @@ export function WorkoutLogView() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {/* Render Supersets first */}
-              {workoutGroups.map(wg => {
+              {/* Render Supersets first (only those belonging to the selected day) */}
+              {workoutGroups.filter(wg => wg.date === selectedDate).map(wg => {
                 const linkedExs = groupExercises.filter(ge => ge.workout_group_id === wg.id);
                 if (linkedExs.length === 0) return null;
                 const color = intColorToHex(wg.colour);

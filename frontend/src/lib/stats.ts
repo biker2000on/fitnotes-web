@@ -192,7 +192,14 @@ export type BreakdownPeriod = 'week' | 'month' | 'year' | 'all';
 export const periodStart = (period: BreakdownPeriod): string => {
   const d = new Date();
   if (period === 'week') d.setDate(d.getDate() - 7);
-  else if (period === 'month') d.setMonth(d.getMonth() - 1);
+  else if (period === 'month') {
+    // Go back one calendar month, clamping the day so e.g. May 31 → Apr 30 (not May 1).
+    const day = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() - 1);
+    const lastDayOfPrevMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(day, lastDayOfPrevMonth));
+  }
   else if (period === 'year') d.setFullYear(d.getFullYear() - 1);
   else return '0000-01-01';
   return d.toISOString().split('T')[0];
@@ -235,10 +242,12 @@ const periodKey = (date: string, by: WorkoutGroupBy): string => {
   const d = new Date(date + 'T00:00:00');
   if (by === 'year') return String(d.getFullYear());
   if (by === 'month') return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  // ISO-ish week: year + week number
-  const onejan = new Date(d.getFullYear(), 0, 1);
-  const week = Math.ceil(((d.getTime() - onejan.getTime()) / 86400000 + onejan.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${String(week).padStart(2, '0')}`;
+  // Week bucket keyed by the date of that week's Monday — sorts chronologically
+  // and groups correctly across year boundaries (unlike a naive week number).
+  const dayOfWeek = (d.getDay() + 6) % 7; // 0 = Monday … 6 = Sunday
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - dayOfWeek);
+  return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
 };
 
 export interface WorkoutPoint { period: string; sets: number; reps: number; volume: number; durationMin: number; workouts: number; }

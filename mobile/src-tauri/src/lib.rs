@@ -206,7 +206,7 @@ async fn tauri_sync(
                     let json_val = match val {
                         rusqlite::types::ValueRef::Null => Value::Null,
                         rusqlite::types::ValueRef::Integer(i) => Value::Number(i.into()),
-                        rusqlite::types::ValueRef::Real(f) => Value::Number(serde_json::Number::from_f64(f).unwrap()),
+                        rusqlite::types::ValueRef::Real(f) => serde_json::Number::from_f64(f).map(Value::Number).unwrap_or(Value::Null),
                         rusqlite::types::ValueRef::Text(t) => Value::String(String::from_utf8_lossy(t).into_owned()),
                         rusqlite::types::ValueRef::Blob(b) => Value::String(hex::encode(b)),
                     };

@@ -690,7 +690,7 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 						$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25,
 						$26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, false, false, 1, 0, 1, false, 1, $39
 					)
-				`, userID, metric == 1, firstDay, selectedNav, weightIncr, bodyWeightIncr, bodyWeightGoal, bodyWeightGoalWeight,
+				`, userID, metric == 1, firstDay, selectedNav, weightIncr, bodyWeightIncr, bodyWeightGoal == 1, bodyWeightGoalWeight,
 					bodyWeightShowLog == 1, est1RMMaxReps, est1RMGraph == 1, trackPRs == 1, markComplete == 1, autoSelect == 1, keepScreenOn == 1,
 					graphShowPoints == 1, graphShowTrend == 1, graphStartZero == 1, restTimerSecs, restVibrate == 1, restSound == 1, restVol, restAuto == 1,
 					calDetail == 1, calDots == 1, calNav == 1, calHistoryDots == 1, calHistoryNames == 1, calHistorySets == 1, catSort, catColours == 1,

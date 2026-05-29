@@ -52,8 +52,9 @@ export function CalendarView() {
     return Object.entries(byDate)
       .map(([date, v]) => ({ date, sets: v.sets, exercises: v.exercises.size }))
       .sort((a, b) => b.date.localeCompare(a.date));
+    // matchesFilter resolves cat:/ex: filters against `exercises`, so re-run when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allLogs, filter]);
+  }, [allLogs, filter, exercises]);
 
   return (
     <div className="card" style={{ maxWidth: '800px', margin: '0 auto', width: '100%' }}>
