@@ -1,51 +1,39 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# Go environment
+backend/bin/
+backend/tmp/
+backend/.env
+backend/.env.*
+backend/*.exe
+*.exe
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Node environment
+node_modules/
+dist/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-.pnpm-debug.log*
+pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-!.env.example
+# Rust / Tauri environment
+mobile/src-tauri/target/
+mobile/src-tauri/binaries/
+mobile/src-tauri/gen/
+mobile/src-tauri/.env
+mobile/src-tauri/.env.*
 
-# vercel
-.vercel
+# Operating System Files
+.DS_Store
+Thumbs.db
+*.pem
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# fitnotes-specific
-fitnotes.apk
-FitNotes_Backup*.sqlite
-fitnotes/
-
-# Misc
-test-results/
-playwright-report/
+# Local databases and backups
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+reference/
+.gstack/

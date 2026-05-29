@@ -1,1 +1,0 @@
-ALTER TABLE "routine_section_exercises" ADD COLUMN "superset_group_id" integer;

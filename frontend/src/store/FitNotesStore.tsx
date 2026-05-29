@@ -1,0 +1,2169 @@
+﻿// FitNotesStore.tsx - Central app state + actions.
+// useFitNotesController() owns every useState + handler + effect (relocated from
+// App.tsx so App is a thin shell). It returns the `store` object, which is provided
+// via context; view components consume their slice through useFitNotesStore().
+import React, { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
+import type { DropResult } from '@hello-pangea/dnd';
+import { db, isTauri } from '../storage/db';
+import { uuidv4 } from '../lib/uuid';
+import { DEFAULT_SETTINGS } from '../lib/settings';
+import { beep, vibrate, notify } from '../lib/notify';
+import type {
+  Category, Exercise, TrainingLog, BodyWeight, WorkoutComment,
+  WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
+  RoutineSectionExercise, RoutineSectionExerciseSet,
+  Goal, Measurement, MeasurementRecord, Settings, ExerciseComment, GraphFavourite, CustomUnit,
+} from '../types';
+
+export function useFitNotesController() {
+  const [activeTab, setActiveTab] = useState<'log' | 'calendar' | 'exercises' | 'routines' | 'routine-editor' | 'body' | 'measurements' | 'goals' | 'analysis' | 'tools' | 'history' | 'settings' | 'sync'>('log');
+  const [isLightTheme, setIsLightTheme] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Routine Editor modular states
+  const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
+  const [editorSections, setEditorSections] = useState<RoutineSection[]>([]);
+  const [editorSectionExercises, setEditorSectionExercises] = useState<RoutineSectionExercise[]>([]);
+  const [editorExerciseSets, setEditorExerciseSets] = useState<RoutineSectionExerciseSet[]>([]);
+
+  // User unit preference: kg or lbs
+  const [userUnit, setUserUnit] = useState<'kg' | 'lbs'>(() => {
+    return (localStorage.getItem('fn_user_unit') as 'kg' | 'lbs') || 'kg';
+  });
+
+  // Full settings singleton, loaded from the offline store (synced).
+  const [settings, setSettings] = useState<Settings>(() => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('fn_settings') : null;
+      return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  });
+
+  // Persist a partial settings change to the singleton so it syncs (last-write-wins).
+  const persistSettings = (partial: Record<string, unknown>) => {
+    db.execute('UPDATE settings', [partial]).catch(e => console.warn('Failed to persist settings:', e));
+  };
+
+  // Update one setting: optimistic local state + persisted (dirty) for sync.
+  const updateSetting = <K extends keyof Settings>(key: K, value: Settings[K]) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+    persistSettings({ [key]: value });
+    if (key === 'metric') {
+      const unit = value ? 'kg' : 'lbs';
+      setUserUnit(unit as 'kg' | 'lbs');
+      localStorage.setItem('fn_user_unit', unit);
+    }
+    if (key === 'app_theme_id') {
+      const light = value === 1;
+      setIsLightTheme(light);
+      document.body.classList.toggle('light-theme', light);
+    }
+  };
+
+  // Keep the screen awake during workout logging when enabled (Screen Wake Lock API).
+  useEffect(() => {
+    let sentinel: { release: () => Promise<void> } | null = null;
+    const want = settings.keep_screen_on && activeTab === 'log';
+    if (want && typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+      (navigator as any).wakeLock.request('screen').then((s: any) => { sentinel = s; }).catch(() => {});
+    }
+    return () => { if (sentinel) sentinel.release().catch(() => {}); };
+  }, [settings.keep_screen_on, activeTab]);
+
+  const handleUnitChange = (unit: 'kg' | 'lbs') => {
+    setUserUnit(unit);
+    localStorage.setItem('fn_user_unit', unit);
+    persistSettings({ metric: unit === 'kg' });
+
+    // Suggest standard conversion weights
+    if (unit === 'lbs') {
+      setLogWeight(w => String(Math.round(parseFloat(w) * 2.20462) || 135));
+      setPlateCalcTarget(t => Math.round(t * 2.20462) || 225);
+    } else {
+      setLogWeight(w => String(Math.round(parseFloat(w) / 2.20462) || 60));
+      setPlateCalcTarget(t => Math.round(t / 2.20462) || 100);
+    }
+  };
+
+  const displayWeight = (metricWeight: number | null, logUnit: number | null): string => {
+    if (metricWeight === null) return '';
+    
+    // logUnit: 1 = kg, 2 = lbs
+    const isLogLbs = logUnit === 2;
+    const isPrefLbs = userUnit === 'lbs';
+    
+    if (isLogLbs === isPrefLbs) {
+      return `${metricWeight} ${userUnit}`;
+    }
+    
+    if (isPrefLbs) {
+      // Logged in kg, but pref is lbs -> Convert kg to lbs
+      const converted = Math.round(metricWeight * 2.20462 * 10) / 10;
+      return `${converted} lbs`;
+    } else {
+      // Logged in lbs, but pref is kg -> Convert lbs to kg
+      const converted = Math.round(metricWeight / 2.20462 * 10) / 10;
+      return `${converted} kg`;
+    }
+  };
+  
+  // Auth state
+  const [token, setToken] = useState<string>(localStorage.getItem('fn_token') || '');
+  const [userEmail, setUserEmail] = useState<string>(localStorage.getItem('fn_user_email') || '');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'success' | 'error'>('idle');
+  const [exporting, setExporting] = useState(false);
+
+  // DB Entities State
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [currentLogs, setCurrentLogs] = useState<TrainingLog[]>([]);
+  const [bodyWeights, setBodyWeights] = useState<BodyWeight[]>([]);
+  const [workoutComment, setWorkoutComment] = useState<string>('');
+  
+  // Routines State
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [showRoutineImportModal, setShowRoutineImportModal] = useState(false);
+  const [showCreateRoutineModal, setShowCreateRoutineModal] = useState(false);
+  const [showAddExToSectionModal, setShowAddExToSectionModal] = useState(false);
+  const [editorExSearchQuery, setEditorExSearchQuery] = useState('');
+  const [editorExSelectedCategory, setEditorExSelectedCategory] = useState<string | null>(null);
+  const [selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset] = useState<string[]>([]);
+  const [pastLoggedDates, setPastLoggedDates] = useState<string[]>([]);
+
+  // Supersets / Workout Groups State
+  const [workoutGroups, setWorkoutGroups] = useState<WorkoutGroup[]>([]);
+  const [groupExercises, setGroupExercises] = useState<WorkoutGroupExercise[]>([]);
+  const [selectedLogIdsForGroup, setSelectedLogIdsForGroup] = useState<string[]>([]);
+  
+  // Exercise creation form
+  const [newExName, setNewExName] = useState('');
+  const [newExCategory, setNewExCategory] = useState('');
+  const [newExType, setNewExType] = useState('1'); // 1: Weights, 2: Cardio
+  const [newExNotes, setNewExNotes] = useState('');
+
+  // Category creation form
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#6366f1');
+
+  // Selected Log State
+  const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
+  const [logWeight, setLogWeight] = useState('60');
+  const [logReps, setLogReps] = useState('10');
+  const [logDistance, setLogDistance] = useState('5');
+  const [logDuration, setLogDuration] = useState('30');
+  const [logComment, setLogComment] = useState('');
+  const [exerciseComments, setExerciseComments] = useState<ExerciseComment[]>([]);
+  const [graphFavourites, setGraphFavourites] = useState<GraphFavourite[]>([]);
+  const [customUnits, setCustomUnits] = useState<CustomUnit[]>([]);
+
+  const saveGraphFavourite = async (fav: GraphFavourite) => {
+    await db.execute('INSERT INTO graph_favourites', [fav]);
+    setGraphFavourites(await db.query<GraphFavourite>('SELECT * FROM graph_favourites'));
+    triggerToast('Graph saved to favourites!');
+  };
+  const deleteGraphFavourite = async (id: string) => {
+    const f = graphFavourites.find(x => x.id === id);
+    if (f) await db.execute('UPDATE graph_favourites', [{ ...f, is_deleted: true }]);
+    setGraphFavourites(await db.query<GraphFavourite>('SELECT * FROM graph_favourites'));
+  };
+  const saveCustomUnit = async (u: CustomUnit) => {
+    await db.execute('INSERT INTO custom_units', [u]);
+    setCustomUnits(await db.query<CustomUnit>('SELECT * FROM custom_units'));
+    triggerToast('Custom unit saved!');
+  };
+  const deleteCustomUnit = async (id: string) => {
+    const u = customUnits.find(x => x.id === id);
+    if (u) await db.execute('UPDATE custom_units', [{ ...u, is_deleted: true }]);
+    setCustomUnits(await db.query<CustomUnit>('SELECT * FROM custom_units'));
+  };
+
+  // Rest timer (seconds remaining; null = inactive).
+  const [restRemaining, setRestRemaining] = useState<number | null>(null);
+  const [restPaused, setRestPaused] = useState(false);
+  const startRestTimer = (seconds?: number) => { setRestRemaining(seconds ?? settings.rest_timer_seconds); setRestPaused(false); };
+  const pauseRestTimer = () => setRestPaused(p => !p);
+  const cancelRestTimer = () => { setRestRemaining(null); setRestPaused(false); };
+  const adjustRestTimer = (delta: number) => setRestRemaining(r => (r == null ? r : Math.max(0, r + delta)));
+
+  useEffect(() => {
+    if (restRemaining === null || restPaused) return;
+    if (restRemaining <= 0) {
+      if (settings.rest_timer_sound) beep(settings.rest_timer_volume);
+      if (settings.rest_timer_vibrate) vibrate();
+      notify('Rest complete', 'Time for your next set');
+      setRestRemaining(null);
+      return;
+    }
+    const id = setTimeout(() => setRestRemaining(r => (r == null ? r : r - 1)), 1000);
+    return () => clearTimeout(id);
+  }, [restRemaining, restPaused]);
+
+  // Plate Calculator State
+  const [showPlateCalc, setShowPlateCalc] = useState(false);
+  const [plateCalcTarget, setPlateCalcTarget] = useState(100);
+  const [calculatedPlates, setCalculatedPlates] = useState<Array<{ weight: number; count: number; color: string }>>([]);
+
+  // Analytics graph selection
+  const [analyticExerciseId, setAnalyticExerciseId] = useState<string>('');
+  const [analyticMetric, setAnalyticMetric] = useState<'volume' | 'maxWeight' | 'estimated1RM'>('volume');
+
+  // Routine templates creation states
+  const [newRoutineName, setNewRoutineName] = useState('');
+  const [newRoutineNotes, setNewRoutineNotes] = useState('');
+  const [routineCreatorExercises, setRoutineCreatorExercises] = useState<Array<{ exercise_id: string; weight: string; reps: string; sort_order: number }>>([]);
+  const [selectedExForRoutine, setSelectedExForRoutine] = useState('');
+
+  // Manage Categories modal states
+  const [showManageCatsModal, setShowManageCatsModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [editingCatName, setEditingCatName] = useState('');
+  const [editingCatColor, setEditingCatColor] = useState('#6366f1');
+
+  // Edit Exercise modal states
+  const [showEditExModal, setShowEditExModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
+  const [editExName, setEditExName] = useState('');
+  const [editExCategory, setEditExCategory] = useState('');
+  const [editExType, setEditExType] = useState('1');
+  const [editExNotes, setEditExNotes] = useState('');
+  const [editExWeightIncrement, setEditExWeightIncrement] = useState('2.5');
+  const [editExDefaultRestTime, setEditExDefaultRestTime] = useState('90');
+  const [editExWeightUnit, setEditExWeightUnit] = useState('1');
+  const [editExIsFavourite, setEditExIsFavourite] = useState(false);
+
+  // Superset Manager modal states
+  const [showSupersetManagerModal, setShowSupersetManagerModal] = useState(false);
+  const [selectedExIdsForSuperset, setSelectedExIdsForSuperset] = useState<string[]>([]);
+  const [supersetColor, setSupersetColor] = useState('#ef4444');
+
+  // Calendar day preview modal states
+  const [allLogs, setAllLogs] = useState<TrainingLog[]>([]);
+  const [showCalendarPreviewModal, setShowCalendarPreviewModal] = useState(false);
+  const [previewDate, setPreviewDate] = useState('');
+  const [previewLogs, setPreviewLogs] = useState<TrainingLog[]>([]);
+  const [previewComment, setPreviewComment] = useState<string>('');
+
+  // Calendar Navigation State
+  const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
+  const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth()); // 0-11
+
+  // Toast notifications states
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('success');
+  const [showToast, setShowToast] = useState(false);
+  const [toastTimerId, setToastTimerId] = useState<any>(null);
+
+  const triggerToast = (msg: string, type: 'success' | 'error' | 'info' = 'success') => {
+    if (toastTimerId) clearTimeout(toastTimerId);
+    setToastMessage(msg);
+    setToastType(type);
+    setShowToast(true);
+    const timer = setTimeout(() => {
+      setShowToast(false);
+    }, 3000);
+    setToastTimerId(timer);
+  };
+
+  // Custom confirmation modal states
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmTitle, setConfirmTitle] = useState('');
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmOnApprove, setConfirmOnApprove] = useState<(() => void) | null>(null);
+
+  const triggerConfirm = (title: string, msg: string, onApprove: () => void) => {
+    setConfirmTitle(title);
+    setConfirmMessage(msg);
+    setConfirmOnApprove(() => onApprove);
+    setConfirmOpen(true);
+  };
+
+  // Premium Features States (Phases 10-13)
+  const [showCopyWorkoutDrawer, setShowCopyWorkoutDrawer] = useState(false);
+  const [activeRoutineForPopulate, setActiveRoutineForPopulate] = useState<Routine | null>(null);
+  const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+  const [bulkMoveTargetDate, setBulkMoveTargetDate] = useState<string>(selectedDate);
+
+  // 1-Rep Max Math helpers for Routines Populator
+  const calculateEstimated1RM = (weight: number, reps: number) => {
+    if (reps <= 0) return 0;
+    if (reps === 1) return weight;
+    return weight / (1.0278 - 0.0278 * reps);
+  };
+
+  const getHighest1RM = (exerciseId: string) => {
+    const activeExLogs = allLogs.filter(l => l.exercise_id === exerciseId && !l.is_deleted && l.metric_weight && l.reps);
+    if (activeExLogs.length === 0) return 0;
+    
+    let max1RM = 0;
+    for (const log of activeExLogs) {
+      const w = log.metric_weight || 0;
+      const r = log.reps || 0;
+      const oneRM = calculateEstimated1RM(w, r);
+      if (oneRM > max1RM) {
+        max1RM = oneRM;
+      }
+    }
+    return max1RM;
+  };
+
+  // Global Keyboard Shortcuts Event Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // 1. Ctrl + K (or Cmd + K) -> Toggle Command Palette Quick Exercise Search Selector
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+        return;
+      }
+
+      // 2. Escape -> Close all active modals
+      if (e.key === 'Escape') {
+        setShowCommandPalette(false);
+        setShowRoutineImportModal(false);
+        setShowCreateRoutineModal(false);
+        setShowCatModal(false);
+        setShowManageCatsModal(false);
+        setShowEditExModal(false);
+        setShowSupersetManagerModal(false);
+        setShowCalendarPreviewModal(false);
+        setShowPlateCalc(false);
+        setConfirmOpen(false);
+        return;
+      }
+
+      // If command palette is open, ignore other hotkeys to avoid conflict
+      if (showCommandPalette) return;
+
+      // Check if user is actively typing in a standard input fields
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        (activeEl as HTMLElement).isContentEditable
+      );
+
+      // 3. Ctrl + S -> Save Set (Always allowed, even inside input text fields)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleAddSet();
+        return;
+      }
+
+      // If actively typing, skip single-key or standard navigation logs shortcuts
+      if (isTyping) return;
+
+      // 4. Ctrl + E -> Load last logged set values into active inputs for quick editing
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        if (currentLogs.length > 0 && selectedExercise) {
+          const exLogs = currentLogs.filter(l => l.exercise_id === selectedExercise.id && !l.is_deleted);
+          if (exLogs.length > 0) {
+            const lastLog = exLogs[exLogs.length - 1];
+            if (selectedExercise.exercise_type_id === 1) {
+              if (lastLog.metric_weight !== null) setLogWeight(lastLog.metric_weight.toString());
+              if (lastLog.reps !== null) setLogReps(lastLog.reps.toString());
+              setTimeout(() => {
+                const wInput = document.getElementById('log-weight-input');
+                if (wInput) {
+                  (wInput as HTMLInputElement).focus();
+                  (wInput as HTMLInputElement).select();
+                }
+              }, 50);
+            } else {
+              if (lastLog.distance !== null) setLogDistance(lastLog.distance.toString());
+              if (lastLog.duration_seconds !== null) setLogDuration((lastLog.duration_seconds / 60).toString());
+              setTimeout(() => {
+                const dInput = document.getElementById('log-distance-input');
+                if (dInput) {
+                  (dInput as HTMLInputElement).focus();
+                  (dInput as HTMLInputElement).select();
+                }
+              }, 50);
+            }
+            triggerToast('Last logged set loaded into inputs.');
+          }
+        }
+        return;
+      }
+
+      // 5. Ctrl + M -> Toggle Plate Load Solver Calculator Modal
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        setShowPlateCalc(prev => !prev);
+        return;
+      }
+
+      // 6. Global Date Navigation Hotkeys (+ / - to increment/decrement, t for today)
+      if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() + 1);
+        setSelectedDate(d.toISOString().split('T')[0]);
+        triggerToast('Date set to ' + d.toISOString().split('T')[0]);
+        return;
+      }
+      if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        const d = new Date(selectedDate);
+        d.setDate(d.getDate() - 1);
+        setSelectedDate(d.toISOString().split('T')[0]);
+        triggerToast('Date set to ' + d.toISOString().split('T')[0]);
+        return;
+      }
+      if (e.key.toLowerCase() === 't') {
+        e.preventDefault();
+        const todayStr = new Date().toISOString().split('T')[0];
+        setSelectedDate(todayStr);
+        triggerToast('Date set to Today (' + todayStr + ')');
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCommandPalette, selectedExercise, currentLogs, logWeight, logReps, logDistance, logDuration, selectedDate]);
+
+  // Lightweight location hash router (History API responsive)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace(/^#\//, '');
+      const validTabs = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'];
+      if (validTabs.includes(hash)) {
+        setActiveTab(hash as any);
+      } else {
+        setActiveTab('log');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    
+    // Check initial hash on mount
+    const hash = window.location.hash.replace(/^#\//, '');
+    const validTabs = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'];
+    if (validTabs.includes(hash)) {
+      setActiveTab(hash as any);
+    } else {
+      window.location.hash = '#/log';
+    }
+
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  // Synchronize activeTab changes back to URL hash
+  useEffect(() => {
+    const currentHash = window.location.hash.replace(/^#\//, '');
+    if (currentHash !== activeTab) {
+      window.location.hash = '#/' + activeTab;
+    }
+    // Auto-close sliding mobile sidebar drawer on navigation
+    setSidebarOpen(false);
+  }, [activeTab]);
+
+  // Initial Boot Database seed & data loading
+  useEffect(() => {
+    const seedAndLoad = async () => {
+      // 1. Check if DB has default categories
+      const localCats = await db.query<Category>('SELECT * FROM categories');
+      if (localCats.length === 0) {
+        const defaults = [
+          { id: 'c-chest', name: 'Chest', colour: 4293926400, sort_order: 1 }, // Red (#ef4444)
+          { id: 'c-back', name: 'Back', colour: 4278222848, sort_order: 2 }, // Green (#10b981)
+          { id: 'c-legs', name: 'Legs', colour: 4278190335, sort_order: 3 }, // Blue (#0000ff)
+          { id: 'c-shoulders', name: 'Shoulders', colour: 4294951168, sort_order: 4 }, // Orange (#f59e0b)
+          { id: 'c-arms', name: 'Arms', colour: 4293926655, sort_order: 5 } // Purple (#a855f7)
+        ];
+        for (const cat of defaults) {
+          await db.execute('INSERT INTO categories', [cat]);
+        }
+      }
+
+      // 2. Check if DB has default exercises
+      const localExs = await db.query<Exercise>('SELECT * FROM exercises');
+      if (localExs.length === 0) {
+        const defaults = [
+          { id: 'e-bench', name: 'Barbell Bench Press', category_id: 'c-chest', exercise_type_id: 1, is_favourite: true },
+          { id: 'e-incline', name: 'Incline Dumbbell Press', category_id: 'c-chest', exercise_type_id: 1, is_favourite: false },
+          { id: 'e-deadlift', name: 'Barbell Deadlift', category_id: 'c-back', exercise_type_id: 1, is_favourite: true },
+          { id: 'e-pullups', name: 'Pull Ups', category_id: 'c-back', exercise_type_id: 1, is_favourite: false },
+          { id: 'e-squat', name: 'Barbell Back Squat', category_id: 'c-legs', exercise_type_id: 1, is_favourite: true },
+          { id: 'e-press', name: 'Overhead Barbell Press', category_id: 'c-shoulders', exercise_type_id: 1, is_favourite: true },
+          { id: 'e-curls', name: 'Bicep Dumbbell Curls', category_id: 'c-arms', exercise_type_id: 1, is_favourite: false }
+        ];
+        for (const ex of defaults) {
+          await db.execute('INSERT INTO exercises', [ex]);
+        }
+      }
+
+      // 3. Seed Default Routine Template
+      const localRoutines = await db.query<Routine>('SELECT * FROM routines');
+      if (localRoutines.length === 0) {
+        const defaultRoutine = { id: 'r-ppl-push', name: 'PPL - Push Day A', notes: 'Focus on progressive overload on bench press and overhead shoulders' };
+        await db.execute('INSERT INTO routines', [defaultRoutine]);
+
+        const defaultSection = { id: 'rs-push', routine_id: 'r-ppl-push', name: 'Main Power Work', sort_order: 1 };
+        await db.execute('INSERT INTO routine_sections', [defaultSection]);
+
+        const rse1 = { id: 'rse-1', routine_section_id: 'rs-push', exercise_id: 'e-bench', sort_order: 1, populate_sets_type: 1 };
+        const rse2 = { id: 'rse-2', routine_section_id: 'rs-push', exercise_id: 'e-press', sort_order: 2, populate_sets_type: 1 };
+        await db.execute('INSERT INTO routine_section_exercises', [rse1]);
+        await db.execute('INSERT INTO routine_section_exercises', [rse2]);
+
+        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-1', routine_section_exercise_id: 'rse-1', metric_weight: 80, reps: 5, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
+        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-2', routine_section_exercise_id: 'rse-1', metric_weight: 80, reps: 5, sort_order: 2, distance: null, duration_seconds: null, unit: 1 }]);
+        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-3', routine_section_exercise_id: 'rse-2', metric_weight: 50, reps: 8, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
+      }
+
+      await refreshData();
+    };
+
+    seedAndLoad();
+  }, [selectedDate]);
+
+  const refreshData = async () => {
+    const cats = await db.query<Category>('SELECT * FROM categories');
+    const exs = await db.query<Exercise>('SELECT * FROM exercises');
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ?', [selectedDate]);
+    const allLgs = await db.query<TrainingLog>('SELECT * FROM training_logs');
+    const weights = await db.query<BodyWeight>('SELECT * FROM body_weights');
+    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ?', [selectedDate]);
+    const rts = await db.query<Routine>('SELECT * FROM routines');
+    const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups', [selectedDate]);
+    const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises', [selectedDate]);
+    const gls = await db.query<Goal>('SELECT * FROM goals');
+    const meas = await db.query<Measurement>('SELECT * FROM measurements');
+    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ?', [selectedDate]);
+    setExerciseComments(exComments);
+    const favs = await db.query<GraphFavourite>('SELECT * FROM graph_favourites');
+    setGraphFavourites(favs);
+    const cu = await db.query<CustomUnit>('SELECT * FROM custom_units');
+    setCustomUnits(cu);
+
+    // Reflect synced settings into the UI prefs, unless there's a pending local
+    // change (is_dirty) we haven't pushed yet.
+    const settingsRows = await db.query<Settings>('SELECT * FROM settings');
+    const s = settingsRows[0];
+    if (s) setSettings({ ...DEFAULT_SETTINGS, ...s });
+    if (s && s.is_dirty !== 1) {
+      const serverUnit: 'kg' | 'lbs' = s.metric === false ? 'lbs' : 'kg';
+      if (serverUnit !== userUnit) {
+        setUserUnit(serverUnit);
+        localStorage.setItem('fn_user_unit', serverUnit);
+      }
+      const serverLight = s.app_theme_id === 1;
+      if (serverLight !== isLightTheme) {
+        setIsLightTheme(serverLight);
+        document.body.classList.toggle('light-theme', serverLight);
+      }
+    }
+
+    setCategories(cats);
+    setGoals(gls);
+    setMeasurements(meas);
+    setExercises(exs);
+    setCurrentLogs(logs);
+    setAllLogs(allLgs);
+    setBodyWeights(weights);
+    setRoutines(rts);
+    setWorkoutGroups(wGroups);
+    setGroupExercises(wGroupExs);
+
+    if (cats.length > 0 && !newExCategory) {
+      setNewExCategory(cats[0].id);
+    }
+
+    if (comments.length > 0) {
+      setWorkoutComment(comments[0].comment);
+    } else {
+      setWorkoutComment('');
+    }
+
+    if (exs.length > 0 && !selectedExercise) {
+      setSelectedExercise(exs[0]);
+      setAnalyticExerciseId(exs[0].id);
+      setSelectedExForRoutine(exs[0].id);
+    }
+
+    // Auto-sync browser changes in the background when logged in (online-first browser experience)
+    if (!isTauri() && token) {
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      db.sync(token, apiBaseUrl).catch(e => console.warn("Background auto-sync failed:", e));
+    }
+  };
+
+  // Theme Toggle
+  const toggleTheme = () => {
+    const nextLight = !isLightTheme;
+    setIsLightTheme(nextLight);
+    document.body.classList.toggle('light-theme', nextLight);
+    persistSettings({ app_theme_id: nextLight ? 1 : 0 });
+  };
+
+  // Auth logins
+  const handleAuth = async (mode: 'login' | 'register') => {
+    setAuthError('');
+    if (!authEmail || !authPassword) {
+      setAuthError('Please fill out all credentials');
+      return;
+    }
+
+    try {
+      const endpoint = mode === 'login' ? 'login' : 'register';
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const apiBaseUrl = `http://${resolvedHost}:8080`;
+
+      const res = await fetch(`${apiBaseUrl}/api/auth/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.error || 'Authentication failed');
+        return;
+      }
+
+      setToken(data.token);
+      setUserEmail(data.user.email);
+      localStorage.setItem('fn_token', data.token);
+      localStorage.setItem('fn_user_email', data.user.email);
+      setAuthEmail('');
+      setAuthPassword('');
+      setActiveTab('log');
+    } catch (e) {
+      setAuthError('Connection to API server failed');
+    }
+  };
+
+  const handleLogout = () => {
+    setToken('');
+    setUserEmail('');
+    localStorage.removeItem('fn_token');
+    localStorage.removeItem('fn_user_email');
+    localStorage.removeItem('fn_last_sync_timestamp');
+  };
+
+  // Synchronize
+  const triggerSync = async () => {
+    if (!token) return;
+    setSyncStatus('syncing');
+    try {
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const apiBaseUrl = `http://${resolvedHost}:8080`;
+
+      await db.sync(token, apiBaseUrl);
+      setSyncStatus('success');
+      await refreshData();
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } catch (e) {
+      setSyncStatus('error');
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    }
+  };
+
+  const handleBackupUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+
+    const confirmImport = window.confirm(
+      "Are you sure you want to import this FitNotes backup? This will wipe your current database and local data and replace it with the backup content."
+    );
+    if (!confirmImport) {
+      e.target.value = '';
+      return;
+    }
+
+    setImportStatus('importing');
+    try {
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const apiBaseUrl = `http://${resolvedHost}:8080`;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch(`${apiBaseUrl}/api/import-fitnotes`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to import backup database');
+      }
+
+      // Success! Clear local cache keys
+      const keysToClear = [
+        'fn_categories',
+        'fn_exercises',
+        'fn_training_logs',
+        'fn_body_weights',
+        'fn_plates',
+        'fn_barbells',
+        'fn_workout_comments',
+        'fn_workout_groups',
+        'fn_workout_group_exercises',
+        'fn_routines',
+        'fn_routine_sections',
+        'fn_routine_section_exercises',
+        'fn_routine_section_exercise_sets',
+        'fn_last_sync_timestamp'
+      ];
+      keysToClear.forEach(key => localStorage.removeItem(key));
+
+      setImportStatus('success');
+      
+      // Perform full-history synchronization to pull all migrated records from server
+      setSyncStatus('syncing');
+      await db.sync(token, apiBaseUrl);
+      setSyncStatus('success');
+      await refreshData();
+      setTimeout(() => setSyncStatus('idle'), 3000);
+
+      setTimeout(() => setImportStatus('idle'), 5000);
+    } catch (err: any) {
+      console.error(err);
+      setImportStatus('error');
+      alert(`Import failed: ${err.message || 'Unknown error'}`);
+      setTimeout(() => setImportStatus('idle'), 5000);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleBackupDownload = async () => {
+    if (!token) return;
+    setExporting(true);
+    try {
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const apiBaseUrl = `http://${resolvedHost}:8080`;
+
+      const response = await fetch(`${apiBaseUrl}/api/export-fitnotes`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate export database');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '_');
+      a.download = `FitNotes_Backup_${timestamp}.fitnotes`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Export failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleCsvDownload = async () => {
+    if (!token) return;
+    try {
+      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
+      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
+      const response = await fetch(`http://${resolvedHost}:8080/api/export-csv`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!response.ok) throw new Error('Failed to generate CSV');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FitNotes_Export_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      triggerToast(`CSV export failed: ${err.message || 'error'}`, 'error');
+    }
+  };
+
+  // Log Mutators
+  // Is this weight a new PR for its rep count vs prior logs for the exercise?
+  const isNewPR = (exerciseId: string, weight: number | null, reps: number | null): boolean => {
+    if (!settings.track_personal_records || !weight || !reps) return false;
+    const priorBest = allLogs
+      .filter(l => l.exercise_id === exerciseId && !l.is_deleted && l.reps === reps && (l.metric_weight ?? 0) > 0)
+      .reduce((m, l) => Math.max(m, l.metric_weight as number), 0);
+    return weight > priorBest;
+  };
+
+  const handleAddSet = async () => {
+    if (!selectedExercise) return;
+    const t = selectedExercise.exercise_type_id;
+    const weight = (t === 1 || t === 6 || t === 7) ? (parseFloat(logWeight) || null) : null;
+    const reps = (t === 1 || t === 2) ? (parseInt(logReps) || null) : null;
+    const pr = isNewPR(selectedExercise.id, weight, reps);
+
+    const newLog: TrainingLog = {
+      id: uuidv4(),
+      exercise_id: selectedExercise.id,
+      date: selectedDate,
+      metric_weight: weight,
+      reps,
+      unit: userUnit === 'kg' ? 1 : 2,
+      is_personal_record: pr,
+      is_complete: false,
+      distance: (t === 3 || t === 4 || t === 6) ? (logDistance ? (parseFloat(logDistance) * (settings.distance_unit === 2 ? 1.60934 : 1)) : null) : null,
+      duration_seconds: (t === 3 || t === 5 || t === 7) ? (parseInt(logDuration) || null) : null,
+      comment: logComment || null,
+    };
+
+    await db.execute('INSERT INTO training_logs', [newLog]);
+    setLogComment('');
+    await refreshData();
+    if (pr) triggerToast(`New PR! ${selectedExercise.name}`, 'success');
+    if (settings.rest_timer_auto_start) {
+      startRestTimer(selectedExercise.default_rest_time || settings.rest_timer_seconds);
+    }
+  };
+
+  // Fill the entry form from the most recent prior set of the selected exercise.
+  const handleCopyPreviousSet = () => {
+    if (!selectedExercise) return;
+    const prior = allLogs
+      .filter(l => l.exercise_id === selectedExercise.id && !l.is_deleted && l.date < selectedDate)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!prior) { triggerToast('No previous set found.', 'info'); return; }
+    if (prior.metric_weight != null) setLogWeight(String(prior.metric_weight));
+    if (prior.reps != null) setLogReps(String(prior.reps));
+    if (prior.distance != null) setLogDistance(String(prior.distance));
+    if (prior.duration_seconds != null) setLogDuration(String(prior.duration_seconds));
+  };
+
+  // Clear all sets + superset groups for the selected date.
+  const handleClearDay = () => {
+    triggerConfirm('Clear Day', `Delete all sets logged on ${selectedDate}?`, async () => {
+      for (const l of currentLogs) await db.execute('UPDATE training_logs', [{ ...l, is_deleted: true }]);
+      const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+      for (const g of groups.filter(x => x.date === selectedDate && !x.is_deleted)) await db.execute('UPDATE workout_groups', [{ ...g, is_deleted: true }]);
+      await refreshData();
+      triggerToast('Day cleared.');
+    });
+  };
+
+  // Per-exercise-per-day comment.
+  const saveExerciseComment = async (exerciseId: string, comment: string) => {
+    const existing = exerciseComments.find(c => c.exercise_id === exerciseId && c.date === selectedDate);
+    const rec: ExerciseComment = existing
+      ? { ...existing, comment }
+      : { id: uuidv4(), exercise_id: exerciseId, date: selectedDate, comment };
+    await db.execute('INSERT INTO exercise_comments', [rec]);
+    const recs = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ?', [selectedDate]);
+    setExerciseComments(recs);
+  };
+
+  const handleToggleComplete = async (log: TrainingLog) => {
+    const updated = { ...log, is_complete: !log.is_complete };
+    await db.execute('INSERT INTO training_logs', [updated]);
+    await refreshData();
+  };
+
+  const handleDeleteSet = async (id: string) => {
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs');
+    const target = logs.find(x => x.id === id);
+    if (target) {
+      const deleted = { ...target, is_deleted: true };
+      await db.execute('INSERT INTO training_logs', [deleted]);
+      await refreshData();
+    }
+  };
+
+  // Copy workout selector handler
+  const handleCopyWorkoutConfirm = async (sourceDate: string) => {
+    const sourceLogs = allLogs.filter(l => l.date === sourceDate && !l.is_deleted);
+    if (sourceLogs.length === 0) {
+      triggerToast('No active sets found for selected date!', 'error');
+      return;
+    }
+    
+    const sourceGroups = workoutGroups.filter(g => g.date === sourceDate && !g.is_deleted);
+    const sourceGroupExs = groupExercises.filter(ge => ge.date === sourceDate && !ge.is_deleted);
+
+    const groupIdMap: Record<string, string> = {};
+
+    for (const wg of sourceGroups) {
+      const newGroupId = uuidv4();
+      groupIdMap[wg.id] = newGroupId;
+      const newGroup = {
+        ...wg,
+        id: newGroupId,
+        date: selectedDate,
+        last_modified: new Date().toISOString()
+      };
+      await db.execute('INSERT INTO workout_groups', [newGroup]);
+    }
+
+    for (const ge of sourceGroupExs) {
+      const newGroupId = groupIdMap[ge.workout_group_id];
+      if (newGroupId) {
+        const newGe = {
+          ...ge,
+          id: uuidv4(),
+          date: selectedDate,
+          workout_group_id: newGroupId,
+          last_modified: new Date().toISOString()
+        };
+        await db.execute('INSERT INTO workout_group_exercises', [newGe]);
+      }
+    }
+
+    for (const log of sourceLogs) {
+      const newLog = {
+        ...log,
+        id: uuidv4(),
+        date: selectedDate,
+        is_complete: false,
+        is_personal_record: false,
+        last_modified: new Date().toISOString()
+      };
+      await db.execute('INSERT INTO training_logs', [newLog]);
+    }
+
+    setShowCopyWorkoutDrawer(false);
+    await refreshData();
+    triggerToast(`Successfully copied workout from ${sourceDate}.`);
+  };
+
+  // Start Routine with Populators
+  const handleImportRoutinePopulated = async (
+    routineId: string, 
+    type: 'template' | 'last_workout' | 'one_rep_max', 
+    percentage: number = 75
+  ) => {
+    const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+    const routineSecs = sections.filter(s => s.routine_id === routineId);
+
+    for (const sec of routineSecs) {
+      const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+      const secExs = exList.filter(x => x.routine_section_id === sec.id);
+
+      for (const se of secExs) {
+        const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id);
+
+        if (type === 'template') {
+          for (const s of exSets) {
+            const log: TrainingLog = {
+              id: uuidv4(),
+              exercise_id: se.exercise_id,
+              date: selectedDate,
+              metric_weight: s.metric_weight,
+              reps: s.reps,
+              unit: userUnit === 'kg' ? 1 : 2,
+              is_personal_record: false,
+              is_complete: false,
+              distance: s.distance,
+              duration_seconds: s.duration_seconds
+            };
+            await db.execute('INSERT INTO training_logs', [log]);
+          }
+        } else if (type === 'last_workout') {
+          const pastExLogs = allLogs.filter(l => 
+            l.exercise_id === se.exercise_id && 
+            !l.is_deleted && 
+            l.date !== selectedDate
+          );
+          
+          if (pastExLogs.length > 0) {
+            const uniqueDates = Array.from(new Set(pastExLogs.map(l => l.date)))
+              .sort((a, b) => b.localeCompare(a));
+            const lastDate = uniqueDates[0];
+            const lastSessionLogs = pastExLogs.filter(l => l.date === lastDate);
+            
+            for (const lastLog of lastSessionLogs) {
+              const log: TrainingLog = {
+                id: uuidv4(),
+                exercise_id: se.exercise_id,
+                date: selectedDate,
+                metric_weight: lastLog.metric_weight,
+                reps: lastLog.reps,
+                unit: userUnit === 'kg' ? 1 : 2,
+                is_personal_record: false,
+                is_complete: false,
+                distance: lastLog.distance,
+                duration_seconds: lastLog.duration_seconds
+              };
+              await db.execute('INSERT INTO training_logs', [log]);
+            }
+          } else {
+            for (const s of exSets) {
+              const log: TrainingLog = {
+                id: uuidv4(),
+                exercise_id: se.exercise_id,
+                date: selectedDate,
+                metric_weight: s.metric_weight,
+                reps: s.reps,
+                unit: userUnit === 'kg' ? 1 : 2,
+                is_personal_record: false,
+                is_complete: false,
+                distance: s.distance,
+                duration_seconds: s.duration_seconds
+              };
+              await db.execute('INSERT INTO training_logs', [log]);
+            }
+          }
+        } else if (type === 'one_rep_max') {
+          const highest1RM = getHighest1RM(se.exercise_id);
+          
+          if (highest1RM > 0) {
+            const targetWeight = highest1RM * (percentage / 100);
+            const roundedWeight = Math.round(targetWeight / 2.5) * 2.5;
+
+            for (const s of exSets) {
+              const log: TrainingLog = {
+                id: uuidv4(),
+                exercise_id: se.exercise_id,
+                date: selectedDate,
+                metric_weight: roundedWeight,
+                reps: s.reps,
+                unit: userUnit === 'kg' ? 1 : 2,
+                is_personal_record: false,
+                is_complete: false,
+                distance: s.distance,
+                duration_seconds: s.duration_seconds
+              };
+              await db.execute('INSERT INTO training_logs', [log]);
+            }
+          } else {
+            for (const s of exSets) {
+              const log: TrainingLog = {
+                id: uuidv4(),
+                exercise_id: se.exercise_id,
+                date: selectedDate,
+                metric_weight: s.metric_weight,
+                reps: s.reps,
+                unit: userUnit === 'kg' ? 1 : 2,
+                is_personal_record: false,
+                is_complete: false,
+                distance: s.distance,
+                duration_seconds: s.duration_seconds
+              };
+              await db.execute('INSERT INTO training_logs', [log]);
+            }
+          }
+        }
+      }
+    }
+
+    setShowRoutineImportModal(false);
+    setActiveRoutineForPopulate(null);
+    await refreshData();
+    triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'template defaults'}.`);
+  };
+
+  // Bulk Edit / Mutation Handlers
+  const handleBulkDelete = async () => {
+    for (const id of selectedLogIdsForGroup) {
+      const target = allLogs.find(x => x.id === id);
+      if (target) {
+        const deleted = { ...target, is_deleted: true };
+        await db.execute('INSERT INTO training_logs', [deleted]);
+      }
+    }
+    setSelectedLogIdsForGroup([]);
+    await refreshData();
+    triggerToast('Selected sets deleted.');
+  };
+
+  const handleBulkMoveConfirm = async (targetDate: string) => {
+    for (const id of selectedLogIdsForGroup) {
+      const target = allLogs.find(x => x.id === id);
+      if (target) {
+        const moved = { ...target, date: targetDate };
+        await db.execute('INSERT INTO training_logs', [moved]);
+      }
+    }
+    setSelectedLogIdsForGroup([]);
+    setShowBulkMoveModal(false);
+    await refreshData();
+    triggerToast(`Selected sets moved to ${targetDate}.`);
+  };
+
+  const handleBulkIncrementWeight = async () => {
+    for (const id of selectedLogIdsForGroup) {
+      const target = allLogs.find(x => x.id === id);
+      if (target && target.metric_weight !== null) {
+        const currentWeight = target.metric_weight || 0;
+        const updated = { ...target, metric_weight: currentWeight + 5 };
+        await db.execute('INSERT INTO training_logs', [updated]);
+      }
+    }
+    await refreshData();
+    triggerToast('Incremented weights of selected sets by 5.');
+  };
+
+  const handleBulkIncrementReps = async () => {
+    for (const id of selectedLogIdsForGroup) {
+      const target = allLogs.find(x => x.id === id);
+      if (target && target.reps !== null) {
+        const currentReps = target.reps || 0;
+        const updated = { ...target, reps: currentReps + 2 };
+        await db.execute('INSERT INTO training_logs', [updated]);
+      }
+    }
+    await refreshData();
+    triggerToast('Incremented reps of selected sets by 2.');
+  };
+
+  // Drag and Drop sets and templates reordering handler
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+
+    // Case 1: Active Workout Sets
+    if (result.source.droppableId === 'logged-sets-list') {
+      if (!selectedExercise) return;
+      const exerciseId = selectedExercise.id;
+      const exLogs = currentLogs.filter(x => x.exercise_id === exerciseId);
+
+      const reordered = Array.from(exLogs);
+      const [removed] = reordered.splice(result.source.index, 1);
+      reordered.splice(result.destination.index, 0, removed);
+
+      // High-performance reorder: directly update in localStorage
+      const allLogsFromStore = JSON.parse(localStorage.getItem('fn_training_logs') || '[]');
+      
+      const otherStoreLogs = allLogsFromStore.filter((l: any) => l.exercise_id !== exerciseId || l.date !== selectedDate);
+      const reorderedStoreLogs = reordered.map(l => allLogsFromStore.find((x: any) => x.id === l.id)).filter(Boolean);
+
+      const finalStoreLogs = [...otherStoreLogs, ...reorderedStoreLogs];
+      localStorage.setItem('fn_training_logs', JSON.stringify(finalStoreLogs));
+
+      await refreshData();
+      triggerToast('Sets reordered.');
+      return;
+    }
+
+    // Case 2: Routine Days (Sections) Reordering
+    if (result.source.droppableId === 'routine-days') {
+      if (!editingRoutine) return;
+      const reorderedSections = Array.from(editorSections);
+      const [removed] = reorderedSections.splice(result.source.index, 1);
+      reorderedSections.splice(result.destination.index, 0, removed);
+
+      // Update sort order in db
+      let order = 1;
+      for (const section of reorderedSections) {
+        await db.execute('INSERT INTO routine_sections', [{ ...section, sort_order: order++ }]);
+      }
+
+      await loadEditorData(editingRoutine.id);
+      triggerToast('Workout days reordered.');
+      return;
+    }
+
+    // Case 3: Exercises in Routine Day Reordering
+    if (result.source.droppableId.startsWith('routine-section-exercises-')) {
+      if (!editingRoutine) return;
+      const sectionId = result.source.droppableId.replace('routine-section-exercises-', '');
+      const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId);
+      
+      const reorderedExs = Array.from(secExs);
+      const [removed] = reorderedExs.splice(result.source.index, 1);
+      reorderedExs.splice(result.destination.index, 0, removed);
+
+      let order = 1;
+      for (const se of reorderedExs) {
+        await db.execute('INSERT INTO routine_section_exercises', [{ ...se, sort_order: order++ }]);
+      }
+
+      await loadEditorData(editingRoutine.id);
+      triggerToast('Exercises reordered.');
+      return;
+    }
+  };
+
+  // 7 Dynamic Exercise Types formatter
+  const formatLogValue = (log: TrainingLog, typeId: number) => {
+    const weightStr = log.metric_weight !== null ? `${displayWeight(log.metric_weight, log.unit)}` : '';
+    const repsStr = log.reps !== null ? `${log.reps} reps` : '';
+    const distStr = log.distance !== null
+      ? (settings.distance_unit === 2 ? `${Math.round((log.distance / 1.60934) * 100) / 100} mi` : `${log.distance} km`)
+      : '';
+    const durStr = log.duration_seconds !== null ? `${Math.floor(log.duration_seconds / 60)}m ${log.duration_seconds % 60}s` : '';
+
+    switch (typeId) {
+      case 1: // Weight & Reps
+        return `${weightStr} x ${repsStr}`;
+      case 2: // Reps Only
+        return `${repsStr}`;
+      case 3: // Distance & Time
+        return `${distStr} in ${durStr}`;
+      case 4: // Distance Only
+        return `${distStr}`;
+      case 5: // Time Only
+        return `${durStr}`;
+      case 6: // Weight & Distance
+        return `${weightStr} for ${distStr}`;
+      case 7: // Weight & Time
+        return `${weightStr} for ${durStr}`;
+      default:
+        return `${weightStr} x ${repsStr}`;
+    }
+  };
+
+  // Workout comment mutator
+  const handleSaveComment = async () => {
+    const commentObj = {
+      id: uuidv4(),
+      date: selectedDate,
+      comment: workoutComment
+    };
+    await db.execute('INSERT INTO workout_comments', [commentObj]);
+    triggerToast('Workout comment saved!');
+  };
+
+  // Build a shareable text summary of the selected day and share/copy it.
+  const shareWorkout = async () => {
+    const lines: string[] = [`FitNotes - ${selectedDate}`, ''];
+    const exIds = Array.from(new Set(currentLogs.map(l => l.exercise_id)));
+    let totalVol = 0, totalSets = 0;
+    for (const exId of exIds) {
+      const ex = exercises.find(e => e.id === exId);
+      if (!ex) continue;
+      lines.push(ex.name);
+      currentLogs.filter(l => l.exercise_id === exId).forEach((l, i) => {
+        lines.push(`  ${i + 1}. ${formatLogValue(l, ex.exercise_type_id)}${l.is_personal_record ? ' (PR)' : ''}`);
+        totalVol += (l.metric_weight ?? 0) * (l.reps ?? 0);
+        totalSets += 1;
+      });
+    }
+    if (workoutComment) lines.push('', `Note: ${workoutComment}`);
+    lines.push('', `Total: ${totalSets} sets, ${Math.round(totalVol)} ${userUnit} volume`);
+    const text = lines.join('\n');
+    try {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        await (navigator as any).share({ title: `Workout ${selectedDate}`, text });
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        triggerToast('Workout summary copied to clipboard.');
+      }
+    } catch { /* user cancelled */ }
+  };
+
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  
+  const toggleCategoryExpand = (catId: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [catId]: !prev[catId]
+    }));
+  };
+
+  const handleToggleExerciseFavourite = async (ex: Exercise, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const isFav = !ex.is_favourite;
+    await db.execute('UPDATE exercises', [{ ...ex, is_favourite: isFav }]);
+    await refreshData();
+    triggerToast(ex.name + (isFav ? ' added to favorites.' : ' removed from favorites.'));
+  };
+
+  // Populate the edit-exercise modal fields and open it.
+  const openExerciseEditor = (ex: Exercise) => {
+    setEditingExercise(ex);
+    setEditExName(ex.name);
+    setEditExCategory(ex.category_id || '');
+    setEditExType(ex.exercise_type_id.toString());
+    setEditExNotes(ex.notes || '');
+    setEditExWeightIncrement(ex.weight_increment?.toString() || '2.5');
+    setEditExDefaultRestTime(ex.default_rest_time?.toString() || '90');
+    setEditExWeightUnit(ex.weight_unit_id?.toString() || '1');
+    setEditExIsFavourite(ex.is_favourite);
+    setShowEditExModal(true);
+  };
+
+  // Exercise mutator (Allows Category Assignments)
+  const handleCreateExercise = async () => {
+    if (!newExName) return;
+    const record: Exercise = {
+      id: uuidv4(),
+      name: newExName,
+      category_id: newExCategory || null,
+      exercise_type_id: parseInt(newExType),
+      is_favourite: false,
+      notes: newExNotes || undefined
+    };
+
+    await db.execute('INSERT INTO exercises', [record]);
+    setNewExName('');
+    setNewExNotes('');
+    await refreshData();
+    triggerToast('Custom Exercise successfully added!');
+  };
+
+  // Category mutator (Manage custom categories)
+  const handleCreateCategory = async () => {
+    if (!newCatName) return;
+    
+    // Hex to ARGB Int
+    const hex = newCatColor.replace('#', '');
+    const bigint = parseInt(hex, 16);
+    const colourVal = 4278190080 + bigint; // Map to opaque Alpha ARGB integer
+
+    const record: Category = {
+      id: uuidv4(),
+      name: newCatName,
+      colour: colourVal,
+      sort_order: categories.length + 1
+    };
+
+    await db.execute('INSERT INTO categories', [record]);
+    setNewCatName('');
+    setShowCatModal(false);
+    await refreshData();
+    triggerToast('Category created successfully!');
+  };
+
+  // Category Updator and Soft-Deletor
+  const handleUpdateCategory = async () => {
+    if (!editingCategory || !editingCatName) return;
+    
+    const hex = editingCatColor.replace('#', '');
+    const bigint = parseInt(hex, 16);
+    const colourVal = 4278190080 + bigint; // Map to opaque Alpha ARGB integer
+
+    const updated = {
+      ...editingCategory,
+      name: editingCatName,
+      colour: colourVal
+    };
+
+    await db.execute('INSERT INTO categories', [updated]);
+    setEditingCategory(null);
+    setShowManageCatsModal(false);
+    await refreshData();
+    triggerToast('Category updated successfully!');
+  };
+
+  const handleDeleteCategory = async (id: string) => {
+    triggerConfirm(
+      'Delete Category',
+      'Are you sure you want to delete this category? Exercises inside will become uncategorized.',
+      async () => {
+        const cats = await db.query<Category>('SELECT * FROM categories');
+        const target = cats.find(x => x.id === id);
+        if (target) {
+          const updated = { ...target, is_deleted: true };
+          await db.execute('INSERT INTO categories', [updated]);
+          await refreshData();
+          triggerToast('Category deleted.');
+        }
+      }
+    );
+  };
+
+  // Exercise Updator and Soft-Deletor
+  const handleUpdateExercise = async () => {
+    if (!editingExercise || !editExName) return;
+    const newType = parseInt(editExType);
+
+    const doSave = async () => {
+      const updated: Exercise = {
+        ...editingExercise,
+        name: editExName,
+        category_id: editExCategory || null,
+        exercise_type_id: newType,
+        notes: editExNotes || undefined,
+        weight_increment: parseFloat(editExWeightIncrement) || undefined,
+        default_rest_time: parseInt(editExDefaultRestTime) || undefined,
+        weight_unit_id: parseInt(editExWeightUnit) || undefined,
+        is_favourite: editExIsFavourite,
+      };
+      await db.execute('INSERT INTO exercises', [updated]);
+      setShowEditExModal(false);
+      setEditingExercise(null);
+      await refreshData();
+      triggerToast('Exercise updated successfully!');
+    };
+
+    // Warn if changing the exercise type while logged sets exist — incompatible
+    // fields (e.g. reps when switching to a distance type) won't display.
+    const typeChanged = newType !== editingExercise.exercise_type_id;
+    const hasLogs = allLogs.some(l => l.exercise_id === editingExercise.id && !l.is_deleted);
+    if (typeChanged && hasLogs) {
+      triggerConfirm('Change Exercise Type', 'This exercise has logged sets. Changing its type may hide values that no longer apply. Continue?', () => { doSave(); });
+    } else {
+      await doSave();
+    }
+  };
+
+  const handleDeleteExercise = async (id: string) => {
+    triggerConfirm(
+      'Delete Exercise',
+      "Are you sure you want to delete this exercise? Today's logged sets will be retained but the exercise will be hidden from the catalog.",
+      async () => {
+        const exs = await db.query<Exercise>('SELECT * FROM exercises');
+        const target = exs.find(x => x.id === id);
+        if (target) {
+          const updated = { ...target, is_deleted: true };
+          await db.execute('INSERT INTO exercises', [updated]);
+          setShowEditExModal(false);
+          setEditingExercise(null);
+          await refreshData();
+          triggerToast('Exercise deleted.');
+        }
+      }
+    );
+  };
+
+  // Active workout supersets linker
+  const handleCalendarDayClick = async (dateStr: string) => {
+    setPreviewDate(dateStr);
+    const logsForDate = allLogs.filter(l => l.date === dateStr && !l.is_deleted);
+    setPreviewLogs(logsForDate);
+    
+    // Fetch comment for this date!
+    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ?', [dateStr]);
+    if (comments.length > 0) {
+      setPreviewComment(comments[0].comment);
+    } else {
+      setPreviewComment('');
+    }
+    
+    setShowCalendarPreviewModal(true);
+  };
+
+  const handlePrevMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear(prev => prev - 1);
+    } else {
+      setCalendarMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear(prev => prev + 1);
+    } else {
+      setCalendarMonth(prev => prev + 1);
+    }
+  };
+
+  const handleCreateWorkoutSuperset = async () => {
+    if (selectedExIdsForSuperset.length < 2) {
+      triggerToast('Please select at least 2 exercises to create a superset!', 'error');
+      return;
+    }
+
+    const hex = supersetColor.replace('#', '');
+    const bigint = parseInt(hex, 16);
+    const colourVal = 4278190080 + bigint;
+
+    const groupId = uuidv4();
+    const newGroup: WorkoutGroup = {
+      id: groupId,
+      name: `Superset`,
+      date: selectedDate,
+      colour: colourVal,
+      auto_jump_enabled: true,
+      rest_timer_auto_start_enabled: false
+    };
+
+    await db.execute('INSERT INTO workout_groups', [newGroup]);
+
+    for (const exId of selectedExIdsForSuperset) {
+      const link: WorkoutGroupExercise = {
+        id: uuidv4(),
+        exercise_id: exId,
+        date: selectedDate,
+        workout_group_id: groupId
+      };
+      await db.execute('INSERT INTO workout_group_exercises', [link]);
+    }
+
+    setSelectedExIdsForSuperset([]);
+    setShowSupersetManagerModal(false);
+    await refreshData();
+    triggerToast('Superset created successfully!');
+  };
+
+  // Supersets & Workout Groups Manager
+  const handleCreateSuperset = async () => {
+    if (selectedLogIdsForGroup.length < 2) {
+      triggerToast('Please select at least 2 exercise logs to form a superset!', 'error');
+      return;
+    }
+
+    const groupId = uuidv4();
+    const newGroup: WorkoutGroup = {
+      id: groupId,
+      name: 'Superset Group',
+      date: selectedDate,
+      colour: 4293926400, // Red ARGB default
+      auto_jump_enabled: false,
+      rest_timer_auto_start_enabled: false
+    };
+
+    await db.execute('INSERT INTO workout_groups', [newGroup]);
+
+    for (const logId of selectedLogIdsForGroup) {
+      const log = currentLogs.find(x => x.id === logId);
+      if (log) {
+        const link: WorkoutGroupExercise = {
+          id: uuidv4(),
+          exercise_id: log.exercise_id,
+          date: selectedDate,
+          workout_group_id: groupId
+        };
+        await db.execute('INSERT INTO workout_group_exercises', [link]);
+      }
+    }
+
+    setSelectedLogIdsForGroup([]);
+    await refreshData();
+    triggerToast('Superset created successfully!');
+  };
+
+  const handleClearGroup = async (groupId: string) => {
+    // Soft delete workout group
+    const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+    const links = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+    
+    const targetGroup = groups.find(x => x.id === groupId);
+    if (targetGroup) {
+      await db.execute('INSERT INTO workout_groups', [{ ...targetGroup, is_deleted: true }]);
+    }
+    const targetLinks = links.filter(x => x.workout_group_id === groupId);
+    for (const link of targetLinks) {
+      await db.execute('INSERT INTO workout_group_exercises', [{ ...link, is_deleted: true }]);
+    }
+
+    await refreshData();
+    triggerToast('Superset cleared.');
+  };
+
+  const handleCreateRoutineSuperset = async (sectionId: string, exerciseIds: string[]) => {
+    if (exerciseIds.length < 2) {
+      triggerToast('Please select at least 2 exercises to create a superset!', 'error');
+      return;
+    }
+
+    const hex = supersetColor.replace('#', '');
+    const bigint = parseInt(hex, 16);
+    const colourVal = 4278190080 + bigint;
+
+    const groupId = uuidv4();
+    const newGroup: WorkoutGroup = {
+      id: groupId,
+      name: `Superset`,
+      date: '',
+      routine_section_id: sectionId,
+      colour: colourVal,
+      auto_jump_enabled: true,
+      rest_timer_auto_start_enabled: false
+    };
+
+    await db.execute('INSERT INTO workout_groups', [newGroup]);
+
+    for (const exId of exerciseIds) {
+      const link: WorkoutGroupExercise = {
+        id: uuidv4(),
+        exercise_id: exId,
+        date: '',
+        routine_section_id: sectionId,
+        workout_group_id: groupId
+      };
+      await db.execute('INSERT INTO workout_group_exercises', [link]);
+    }
+
+    await refreshData();
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Routine superset created successfully!');
+  };
+
+  const handleClearRoutineGroup = async (groupId: string) => {
+    const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+    const links = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+    
+    const targetGroup = groups.find(x => x.id === groupId);
+    if (targetGroup) {
+      await db.execute('INSERT INTO workout_groups', [{ ...targetGroup, is_deleted: true }]);
+    }
+    const targetLinks = links.filter(x => x.workout_group_id === groupId);
+    for (const link of targetLinks) {
+      await db.execute('INSERT INTO workout_group_exercises', [{ ...link, is_deleted: true }]);
+    }
+
+    await refreshData();
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Routine superset cleared.');
+  };
+
+  // Routine Template Builder
+  const handleAddExToRoutineCreator = () => {
+    if (!selectedExForRoutine) return;
+    setRoutineCreatorExercises([
+      ...routineCreatorExercises,
+      {
+        exercise_id: selectedExForRoutine,
+        weight: '60',
+        reps: '10',
+        sort_order: routineCreatorExercises.length + 1
+      }
+    ]);
+  };
+
+  const handleCreateRoutineTemplate = async () => {
+    if (!newRoutineName) {
+      triggerToast('Please enter a routine template name!', 'error');
+      return;
+    }
+
+    const routineId = uuidv4();
+    const newRoutine: Routine = {
+      id: routineId,
+      name: newRoutineName,
+      notes: newRoutineNotes || undefined
+    };
+
+    await db.execute('INSERT INTO routines', [newRoutine]);
+
+    const sectionId = uuidv4();
+    const newSection: RoutineSection = {
+      id: sectionId,
+      routine_id: routineId,
+      name: 'Default Sets',
+      sort_order: 1
+    };
+    await db.execute('INSERT INTO routine_sections', [newSection]);
+
+    // Group items by exercise to map correct structure
+    for (const item of routineCreatorExercises) {
+      const rseId = uuidv4();
+      const newRse: RoutineSectionExercise = {
+        id: rseId,
+        routine_section_id: sectionId,
+        exercise_id: item.exercise_id,
+        sort_order: item.sort_order,
+        populate_sets_type: 1
+      };
+      await db.execute('INSERT INTO routine_section_exercises', [newRse]);
+
+      const rsesId = uuidv4();
+      const newRses: RoutineSectionExerciseSet = {
+        id: rsesId,
+        routine_section_exercise_id: rseId,
+        metric_weight: parseFloat(item.weight),
+        reps: parseInt(item.reps),
+        sort_order: 1,
+        distance: null,
+        duration_seconds: null,
+        unit: userUnit === 'kg' ? 1 : 2
+      };
+      await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
+    }
+
+    setNewRoutineName('');
+    setNewRoutineNotes('');
+    setRoutineCreatorExercises([]);
+    setShowCreateRoutineModal(false);
+    await refreshData();
+    triggerToast('Routine template created successfully!');
+  };
+
+  // Import / Load Routine template into current daily logs
+  const handleImportRoutine = async (routineId: string) => {
+    const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+    const routineSecs = sections.filter(s => s.routine_id === routineId);
+
+    for (const sec of routineSecs) {
+      const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+      const secExs = exList.filter(x => x.routine_section_id === sec.id);
+
+      for (const se of secExs) {
+        const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id);
+
+        for (const s of exSets) {
+          const log: TrainingLog = {
+            id: uuidv4(),
+            exercise_id: se.exercise_id,
+            date: selectedDate,
+            metric_weight: s.metric_weight,
+            reps: s.reps,
+            unit: userUnit === 'kg' ? 1 : 2,
+            is_personal_record: false,
+            is_complete: false,
+            distance: s.distance,
+            duration_seconds: s.duration_seconds
+          };
+          await db.execute('INSERT INTO training_logs', [log]);
+        }
+      }
+    }
+
+    setShowRoutineImportModal(false);
+    await refreshData();
+    triggerToast('Routine templates loaded successfully!');
+  };
+
+  // Routine Day Editor loaders and mutators
+  const loadEditorData = async (routineId: string) => {
+    const allSections = await db.query<RoutineSection>('SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order', [routineId]);
+    setEditorSections(allSections);
+
+    const allSecExs = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises ORDER BY sort_order');
+    const activeSecIds = allSections.map(s => s.id);
+    const filteredSecExs = allSecExs.filter(se => activeSecIds.includes(se.routine_section_id));
+    setEditorSectionExercises(filteredSecExs);
+
+    const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets ORDER BY sort_order');
+    const activeSecExIds = filteredSecExs.map(se => se.id);
+    const filteredSets = allSets.filter(s => activeSecExIds.includes(s.routine_section_exercise_id));
+    setEditorExerciseSets(filteredSets);
+  };
+
+  useEffect(() => {
+    if (editingRoutine && activeTab === 'routine-editor') {
+      loadEditorData(editingRoutine.id);
+    }
+  }, [editingRoutine, activeTab]);
+
+  const handleAddDayToRoutine = async () => {
+    if (!editingRoutine) return;
+    const newSection: RoutineSection = {
+      id: uuidv4(),
+      routine_id: editingRoutine.id,
+      name: `Day ${editorSections.length + 1}`,
+      sort_order: editorSections.length + 1
+    };
+    await db.execute('INSERT INTO routine_sections', [newSection]);
+    await loadEditorData(editingRoutine.id);
+    triggerToast('Workout day added to template.');
+  };
+
+  // Open the "add exercise to section" modal targeting a section.
+  const openAddExerciseToSection = (sectionId: string) => {
+    setEditorAddExerciseTargetSectionId(sectionId);
+    setEditorExSearchQuery('');
+    setEditorExSelectedCategory(null);
+    setShowAddExToSectionModal(true);
+  };
+
+  // Open the "import past workout" modal, preloading recent logged dates.
+  const openPastImporter = async (sectionId: string) => {
+    setPastImporterTargetSectionId(sectionId);
+    const dates = await db.query<{ date: string }>('SELECT DISTINCT date FROM training_logs WHERE is_deleted = 0 ORDER BY date DESC LIMIT 5');
+    setPastLoggedDates(dates.map(d => d.date));
+    setPastImporterDate(dates.length > 0 ? dates[0].date : new Date().toISOString().split('T')[0]);
+    setShowPastImporterModal(true);
+  };
+
+  const [editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId] = useState<string | null>(null);
+  
+  const handleAddExerciseToSection = async (sectionId: string, exerciseId: string) => {
+    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId);
+    const newRseId = uuidv4();
+    const newRse: RoutineSectionExercise = {
+      id: newRseId,
+      routine_section_id: sectionId,
+      exercise_id: exerciseId,
+      sort_order: secExs.length + 1,
+      populate_sets_type: 1
+    };
+    await db.execute('INSERT INTO routine_section_exercises', [newRse]);
+    
+    const newRses: RoutineSectionExerciseSet = {
+      id: uuidv4(),
+      routine_section_exercise_id: newRseId,
+      metric_weight: 60,
+      reps: 10,
+      sort_order: 1,
+      distance: null,
+      duration_seconds: null,
+      unit: userUnit === 'kg' ? 1 : 2
+    };
+    await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
+    
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Exercise added to template.');
+  };
+
+  const handleDeleteExerciseFromSection = async (rseId: string) => {
+    await db.execute('DELETE FROM routine_section_exercises WHERE id = ?', [rseId]);
+    await db.execute('DELETE FROM routine_section_exercise_sets WHERE routine_section_exercise_id = ?', [rseId]);
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Exercise removed from template.');
+  };
+
+  const handleAddSetToTemplateExercise = async (rseId: string) => {
+    const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === rseId);
+    const lastSet = exSets[exSets.length - 1];
+    const newSet: RoutineSectionExerciseSet = {
+      id: uuidv4(),
+      routine_section_exercise_id: rseId,
+      metric_weight: lastSet?.metric_weight ?? 60,
+      reps: lastSet?.reps ?? 10,
+      sort_order: exSets.length + 1,
+      distance: lastSet?.distance ?? null,
+      duration_seconds: lastSet?.duration_seconds ?? null,
+      unit: lastSet?.unit ?? (userUnit === 'kg' ? 1 : 2)
+    };
+    await db.execute('INSERT INTO routine_section_exercise_sets', [newSet]);
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Set added to template exercise.');
+  };
+
+  const handleDeleteSetFromTemplateExercise = async (setId: string) => {
+    await db.execute('DELETE FROM routine_section_exercise_sets WHERE id = ?', [setId]);
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Set deleted from template exercise.');
+  };
+
+  const handleUpdateTemplateSetValues = async (setId: string, weight: number, reps: number) => {
+    const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+    const target = allSets.find(s => s.id === setId);
+    if (target) {
+      const updated = {
+        ...target,
+        metric_weight: weight,
+        reps: reps
+      };
+      await db.execute('UPDATE routine_section_exercise_sets', [updated]);
+      if (editingRoutine) {
+        await loadEditorData(editingRoutine.id);
+      }
+    }
+  };
+
+  const handleUpdateSectionName = async (sectionId: string, name: string) => {
+    const allSections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+    const target = allSections.find(s => s.id === sectionId);
+    if (target) {
+      const updated = {
+        ...target,
+        name: name
+      };
+      await db.execute('UPDATE routine_sections', [updated]);
+      if (editingRoutine) {
+        await loadEditorData(editingRoutine.id);
+      }
+    }
+  };
+
+  const handleDeleteSection = async (sectionId: string) => {
+    await db.execute('DELETE FROM routine_sections WHERE id = ?', [sectionId]);
+    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId);
+    for (const se of secExs) {
+      await db.execute('DELETE FROM routine_section_exercises WHERE id = ?', [se.id]);
+      await db.execute('DELETE FROM routine_section_exercise_sets WHERE routine_section_exercise_id = ?', [se.id]);
+    }
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast('Workout day deleted.');
+  };
+
+  const handleAddAllSectionLogs = async (sectionId: string) => {
+    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId);
+    let setsLogged = 0;
+    
+    for (const se of secExs) {
+      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id);
+      for (const s of exSets) {
+        const log: TrainingLog = {
+          id: uuidv4(),
+          exercise_id: se.exercise_id,
+          date: selectedDate,
+          metric_weight: s.metric_weight,
+          reps: s.reps,
+          unit: userUnit === 'kg' ? 1 : 2,
+          is_personal_record: false,
+          is_complete: false,
+          distance: s.distance,
+          duration_seconds: s.duration_seconds
+        };
+        await db.execute('INSERT INTO training_logs', [log]);
+        setsLogged++;
+      }
+    }
+    
+    await refreshData();
+    triggerToast(`Logged all ${setsLogged} sets from this day template into today's log.`);
+    setActiveTab('log');
+  };
+
+  const [showPastImporterModal, setShowPastImporterModal] = useState(false);
+  const [pastImporterTargetSectionId, setPastImporterTargetSectionId] = useState<string | null>(null);
+  const [pastImporterDate, setPastImporterDate] = useState('');
+  
+  const handleImportPastLogsToSection = async (sectionId: string, pastDate: string) => {
+    if (!pastDate) {
+      triggerToast('Please select a target date.', 'error');
+      return;
+    }
+    
+    const pastLogs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [pastDate]);
+    if (pastLogs.length === 0) {
+      triggerToast('No sets found logged on ' + pastDate, 'error');
+      return;
+    }
+    
+    const logsByEx: Record<string, TrainingLog[]> = {};
+    for (const log of pastLogs) {
+      if (!logsByEx[log.exercise_id]) {
+        logsByEx[log.exercise_id] = [];
+      }
+      logsByEx[log.exercise_id].push(log);
+    }
+    
+    let exercisesAdded = 0;
+    for (const [exId, logs] of Object.entries(logsByEx)) {
+      const newRseId = uuidv4();
+      const newRse: RoutineSectionExercise = {
+        id: newRseId,
+        routine_section_id: sectionId,
+        exercise_id: exId,
+        sort_order: ++exercisesAdded,
+        populate_sets_type: 1
+      };
+      await db.execute('INSERT INTO routine_section_exercises', [newRse]);
+      
+      let setOrder = 0;
+      for (const log of logs) {
+        const newRses: RoutineSectionExerciseSet = {
+          id: uuidv4(),
+          routine_section_exercise_id: newRseId,
+          metric_weight: log.metric_weight,
+          reps: log.reps,
+          sort_order: ++setOrder,
+          distance: log.distance,
+          duration_seconds: log.duration_seconds,
+          unit: log.unit
+        };
+        await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
+      }
+    }
+    
+    setShowPastImporterModal(false);
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
+    triggerToast(`Successfully imported exercises from ${pastDate} into day template.`);
+  };
+
+  // Bodyweight Logger
+  const [newWeight, setNewWeight] = useState('75');
+  const [newFat, setNewFat] = useState('15');
+
+  // Goals + Measurements data
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [measurements, setMeasurements] = useState<Measurement[]>([]);
+  const [measurementRecords, setMeasurementRecords] = useState<MeasurementRecord[]>([]);
+
+  // Per-exercise history drawer (null = closed)
+  const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
+  const handleAddWeight = async () => {
+    const record: BodyWeight = {
+      id: uuidv4(),
+      date: selectedDate,
+      body_weight_metric: parseFloat(newWeight),
+      body_fat: newFat ? parseFloat(newFat) : null
+    };
+    await db.execute('INSERT INTO body_weights', [record]);
+    await refreshData();
+    triggerToast('Weight logged successfully!');
+  };
+
+  // ---- Goals ----
+  const saveGoal = async (goal: Goal) => {
+    await db.execute('INSERT INTO goals', [goal]);
+    await refreshData();
+    triggerToast('Goal saved!');
+  };
+
+  const deleteGoal = async (id: string) => {
+    const existing = goals.find(g => g.id === id);
+    if (existing) await db.execute('UPDATE goals', [{ ...existing, is_deleted: true }]);
+    await refreshData();
+    triggerToast('Goal deleted.');
+  };
+
+  // ---- Measurements ----
+  const loadMeasurementRecords = async (measurementId: string) => {
+    const recs = await db.query<MeasurementRecord>('SELECT * FROM measurement_records WHERE measurement_id = ?', [measurementId]);
+    setMeasurementRecords(recs);
+  };
+
+  const saveMeasurement = async (m: Measurement) => {
+    await db.execute('INSERT INTO measurements', [m]);
+    await refreshData();
+    triggerToast('Measurement saved!');
+  };
+
+  const deleteMeasurement = async (id: string) => {
+    const existing = measurements.find(m => m.id === id);
+    if (existing) await db.execute('UPDATE measurements', [{ ...existing, is_deleted: true }]);
+    await refreshData();
+    triggerToast('Measurement deleted.');
+  };
+
+  const saveMeasurementRecord = async (rec: MeasurementRecord) => {
+    // Ensure the parent measurement is persisted before its record so the FK
+    // holds locally and on sync (default measurements may still be virtual).
+    const parent = measurements.find(m => m.id === rec.measurement_id);
+    if (parent) await db.execute('INSERT INTO measurements', [parent]);
+    await db.execute('INSERT INTO measurement_records', [rec]);
+    await loadMeasurementRecords(rec.measurement_id);
+    triggerToast('Record logged!');
+  };
+
+  const deleteMeasurementRecord = async (id: string) => {
+    const existing = measurementRecords.find(r => r.id === id);
+    if (existing) {
+      await db.execute('UPDATE measurement_records', [{ ...existing, is_deleted: true }]);
+      await loadMeasurementRecords(existing.measurement_id);
+    }
+    triggerToast('Record deleted.');
+  };
+
+  // Plate Calculator Solver (Premium plate load drawings)
+  const calculatePlatesSolver = (target: number) => {
+    const barWeight = userUnit === 'kg' ? 20 : 45;
+    const targetSides = (target - barWeight) / 2;
+    if (targetSides <= 0) {
+      setCalculatedPlates([]);
+      return;
+    }
+
+    const availablePlates = userUnit === 'kg' ? [
+      { weight: 20, color: '#ef4444' }, // Red
+      { weight: 15, color: '#3b82f6' }, // Blue
+      { weight: 10, color: '#10b981' }, // Green
+      { weight: 5, color: '#f59e0b' },  // Yellow
+      { weight: 2.5, color: '#94a3b8' } // Silver/Grey
+    ] : [
+      { weight: 45, color: '#ef4444' }, // Red
+      { weight: 35, color: '#3b82f6' }, // Blue
+      { weight: 25, color: '#10b981' }, // Green
+      { weight: 10, color: '#f59e0b' }, // Yellow
+      { weight: 5, color: '#94a3b8' },  // Silver/Grey
+      { weight: 2.5, color: '#a855f7' } // Purple
+    ];
+
+    let remainder = targetSides;
+    const result: Array<{ weight: number; count: number; color: string }> = [];
+
+    for (const plate of availablePlates) {
+      const count = Math.floor(remainder / plate.weight);
+      if (count > 0) {
+        result.push({ weight: plate.weight, count, color: plate.color });
+        remainder -= count * plate.weight;
+      }
+    }
+    setCalculatedPlates(result);
+  };
+
+  useEffect(() => {
+    calculatePlatesSolver(plateCalcTarget);
+  }, [plateCalcTarget, userUnit]);
+
+  // Central store passed to view components via context. Grown as views are extracted.
+  // Complete store: every state value, setter, and handler, provided via context.
+  const store = {
+    activeTab, setActiveTab, isLightTheme, setIsLightTheme, selectedDate, setSelectedDate, sidebarOpen, setSidebarOpen,
+    editingRoutine, setEditingRoutine, editorSections, setEditorSections, editorSectionExercises, setEditorSectionExercises,
+    editorExerciseSets, setEditorExerciseSets, userUnit, setUserUnit, token, setToken, userEmail, setUserEmail,
+    authEmail, setAuthEmail, authPassword, setAuthPassword, authError, setAuthError, syncStatus, setSyncStatus,
+    importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
+    currentLogs, setCurrentLogs, bodyWeights, setBodyWeights, workoutComment, setWorkoutComment, routines, setRoutines,
+    showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,
+    showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
+    editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
+    pastLoggedDates, setPastLoggedDates, workoutGroups, setWorkoutGroups, groupExercises, setGroupExercises,
+    selectedLogIdsForGroup, setSelectedLogIdsForGroup, newExName, setNewExName, newExCategory, setNewExCategory,
+    newExType, setNewExType, newExNotes, setNewExNotes, showCatModal, setShowCatModal, newCatName, setNewCatName,
+    newCatColor, setNewCatColor, selectedExercise, setSelectedExercise, logWeight, setLogWeight, logReps, setLogReps,
+    logDistance, setLogDistance, logDuration, setLogDuration, showPlateCalc, setShowPlateCalc, plateCalcTarget, setPlateCalcTarget,
+    calculatedPlates, setCalculatedPlates, analyticExerciseId, setAnalyticExerciseId, analyticMetric, setAnalyticMetric,
+    newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes, routineCreatorExercises, setRoutineCreatorExercises,
+    selectedExForRoutine, setSelectedExForRoutine, showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
+    editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, showEditExModal, setShowEditExModal,
+    showCommandPalette, setShowCommandPalette, editingExercise, setEditingExercise, editExName, setEditExName,
+    editExCategory, setEditExCategory, editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
+    editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit, editExIsFavourite, setEditExIsFavourite,
+    showSupersetManagerModal, setShowSupersetManagerModal, selectedExIdsForSuperset, setSelectedExIdsForSuperset,
+    supersetColor, setSupersetColor, allLogs, setAllLogs, showCalendarPreviewModal, setShowCalendarPreviewModal,
+    previewDate, setPreviewDate, previewLogs, setPreviewLogs, previewComment, setPreviewComment, calendarYear, setCalendarYear,
+    calendarMonth, setCalendarMonth, toastMessage, setToastMessage, toastType, setToastType, showToast, setShowToast,
+    toastTimerId, setToastTimerId, confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
+    confirmOnApprove, setConfirmOnApprove, showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, activeRoutineForPopulate, setActiveRoutineForPopulate,
+    showBulkMoveModal, setShowBulkMoveModal, bulkMoveTargetDate, setBulkMoveTargetDate, expandedCategories, setExpandedCategories,
+    editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId, showPastImporterModal, setShowPastImporterModal,
+    pastImporterTargetSectionId, setPastImporterTargetSectionId, pastImporterDate, setPastImporterDate, newWeight, setNewWeight,
+    newFat, setNewFat, goals, setGoals, measurements, setMeasurements, measurementRecords, setMeasurementRecords,
+    historyExerciseId, setHistoryExerciseId, uuidv4,
+    settings, updateSetting,
+    logComment, setLogComment, handleCopyPreviousSet, handleClearDay, shareWorkout,
+    exerciseComments, saveExerciseComment,
+    graphFavourites, saveGraphFavourite, deleteGraphFavourite,
+    customUnits, saveCustomUnit, deleteCustomUnit,
+    restRemaining, restPaused, startRestTimer, pauseRestTimer, cancelRestTimer, adjustRestTimer,
+    handleUnitChange, displayWeight, triggerToast, triggerConfirm, calculateEstimated1RM, getHighest1RM, refreshData, toggleTheme,
+    handleAuth, handleLogout, triggerSync, handleBackupUpload, handleBackupDownload, handleCsvDownload, handleAddSet, handleToggleComplete, handleDeleteSet,
+    handleCopyWorkoutConfirm, handleImportRoutinePopulated, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
+    handleDragEnd, formatLogValue, handleSaveComment, toggleCategoryExpand, handleToggleExerciseFavourite, openExerciseEditor,
+    handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise,
+    handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
+    handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleImportRoutine,
+    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
+    handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdateSectionName, handleDeleteSection,
+    handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
+    saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord, calculatePlatesSolver,
+  };
+  return store;
+}
+
+export type FitNotesStore = ReturnType<typeof useFitNotesController>;
+
+const FitNotesContext = createContext<FitNotesStore | null>(null);
+
+export function FitNotesProvider({ value, children }: { value: FitNotesStore; children: ReactNode }) {
+  return <FitNotesContext.Provider value={value}>{children}</FitNotesContext.Provider>;
+}
+
+export function useFitNotesStore(): FitNotesStore {
+  const ctx = useContext(FitNotesContext);
+  if (!ctx) throw new Error('useFitNotesStore must be used within a FitNotesProvider');
+  return ctx;
+}

@@ -1,35 +1,50 @@
-services:
-  app:
-    build: .
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=postgresql://fitnotes:${DB_PASSWORD}@db:5432/fitnotes
-      - AUTH_SECRET=${AUTH_SECRET}
-      - AUTH_URL=${AUTH_URL:-http://localhost:3000}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "3000:3000"
-    volumes:
-      - uploads:/app/uploads
+version: '3.8'
 
+services:
   db:
-    image: postgres:17-alpine
-    restart: unless-stopped
+    image: postgres:16-alpine
+    container_name: fitnotes_db
+    restart: always
     environment:
-      - POSTGRES_USER=fitnotes
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=fitnotes
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: fitnotes
+    ports:
+      - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fitnotes"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fitnotes"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fitnotes_api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:postgrespassword@db:5432/fitnotes?sslmode=disable
+      - JWT_SECRET=change-this-to-a-secure-key-in-production-12345
+      - PORT=8080
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fitnotes_web
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - api
+
 volumes:
-  postgres_data:
-  uploads:
+  pgdata:
