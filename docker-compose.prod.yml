@@ -1,0 +1,54 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fitnotes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-fitnotes}
+    volumes:
+      - ${POSTGRES_DATA_DIR:-/mnt/docker/volumes/fitnotes/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fitnotes} -d ${POSTGRES_DB:-fitnotes}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/biker2000on/fitnotes-web-api:${FITNOTES_IMAGE_TAG:-main}
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-fitnotes}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fitnotes}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PORT: 8080
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.fitnotes-api.rule: Host(`fitnotes.adventureintandem.com`) && PathPrefix(`/api`)
+      traefik.http.routers.fitnotes-api.entrypoints: websecure
+      traefik.http.routers.fitnotes-api.priority: "100"
+      traefik.http.routers.fitnotes-api.tls: "true"
+      traefik.http.routers.fitnotes-api.tls.certresolver: cloudflare
+      traefik.http.routers.fitnotes-api.tls.domains[0].main: adventureintandem.com
+      traefik.http.routers.fitnotes-api.tls.domains[0].sans: "*.adventureintandem.com"
+      traefik.http.services.fitnotes-api.loadbalancer.server.port: "8080"
+
+  web:
+    image: ghcr.io/biker2000on/fitnotes-web-web:${FITNOTES_IMAGE_TAG:-main}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      - api
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.fitnotes-web.rule: Host(`fitnotes.adventureintandem.com`)
+      traefik.http.routers.fitnotes-web.entrypoints: websecure
+      traefik.http.routers.fitnotes-web.priority: "1"
+      traefik.http.routers.fitnotes-web.tls: "true"
+      traefik.http.routers.fitnotes-web.tls.certresolver: cloudflare
+      traefik.http.routers.fitnotes-web.tls.domains[0].main: adventureintandem.com
+      traefik.http.routers.fitnotes-web.tls.domains[0].sans: "*.adventureintandem.com"
+      traefik.http.services.fitnotes-web.loadbalancer.server.port: "3000"

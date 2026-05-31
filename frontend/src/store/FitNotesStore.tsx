@@ -15,6 +15,22 @@ import type {
   Goal, Measurement, MeasurementRecord, Settings, ExerciseComment, GraphFavourite, CustomUnit,
 } from '../types';
 
+const getApiBaseUrl = () => {
+  const configured = import.meta.env.VITE_API_BASE_URL;
+  if (configured) return configured;
+
+  if (typeof window === 'undefined') return 'http://localhost:8080';
+
+  const { hostname, port, origin } = window.location;
+  const localDevPorts = new Set(['3001', '5173']);
+  if (hostname === 'tauri.localhost' || localDevPorts.has(port)) {
+    const resolvedHost = hostname === 'tauri.localhost' || !hostname ? 'localhost' : hostname;
+    return `http://${resolvedHost}:8080`;
+  }
+
+  return origin;
+};
+
 export function useFitNotesController() {
   const [activeTab, setActiveTab] = useState<'log' | 'calendar' | 'exercises' | 'routines' | 'routine-editor' | 'body' | 'measurements' | 'goals' | 'analysis' | 'tools' | 'history' | 'settings' | 'sync'>('log');
   const [isLightTheme, setIsLightTheme] = useState(false);
@@ -594,9 +610,7 @@ export function useFitNotesController() {
 
     // Auto-sync browser changes in the background when logged in (online-first browser experience)
     if (!isTauri() && token) {
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      const apiBaseUrl = getApiBaseUrl();
       db.sync(token, apiBaseUrl).catch(e => console.warn("Background auto-sync failed:", e));
     }
   };
@@ -619,9 +633,7 @@ export function useFitNotesController() {
 
     try {
       const endpoint = mode === 'login' ? 'login' : 'register';
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      const apiBaseUrl = getApiBaseUrl();
 
       const res = await fetch(`${apiBaseUrl}/api/auth/${endpoint}`, {
         method: 'POST',
@@ -660,9 +672,7 @@ export function useFitNotesController() {
     if (!token) return;
     setSyncStatus('syncing');
     try {
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      const apiBaseUrl = getApiBaseUrl();
 
       await db.sync(token, apiBaseUrl);
       setSyncStatus('success');
@@ -688,9 +698,7 @@ export function useFitNotesController() {
 
     setImportStatus('importing');
     try {
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      const apiBaseUrl = getApiBaseUrl();
 
       const formData = new FormData();
       formData.append('file', file);
@@ -751,9 +759,7 @@ export function useFitNotesController() {
     if (!token) return;
     setExporting(true);
     try {
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const apiBaseUrl = `http://${resolvedHost}:8080`;
+      const apiBaseUrl = getApiBaseUrl();
 
       const response = await fetch(`${apiBaseUrl}/api/export-fitnotes`, {
         method: 'GET',
@@ -788,9 +794,8 @@ export function useFitNotesController() {
   const handleCsvDownload = async () => {
     if (!token) return;
     try {
-      const apiHost = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost';
-      const resolvedHost = (apiHost === 'tauri.localhost' || !apiHost) ? 'localhost' : apiHost;
-      const response = await fetch(`http://${resolvedHost}:8080/api/export-csv`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/api/export-csv`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!response.ok) throw new Error('Failed to generate CSV');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
