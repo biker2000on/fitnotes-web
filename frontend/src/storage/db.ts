@@ -1,4 +1,5 @@
 // db.ts - Unified Offline-First Database Driver & Sync Coordinator
+import { invoke } from '@tauri-apps/api/core';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 
 export interface DBDriver {
@@ -601,17 +602,10 @@ class TauriNativeDriver implements DBDriver {
   }
 
   async query<T>(sql: string, params: any[] = []): Promise<T[]> {
-    // @ts-ignore
-    const tauriModule = '@tauri' + '-apps/api/core';
-    const { invoke } = await import(/* @vite-ignore */ tauriModule);
     return (invoke as any)('tauri_query', { sql, params }) as Promise<T[]>;
   }
 
   async execute(sql: string, params: any[] = []): Promise<void> {
-    // @ts-ignore
-    const tauriModule = '@tauri' + '-apps/api/core';
-    const { invoke } = await import(/* @vite-ignore */ tauriModule);
-
     let finalSql = sql;
     let finalParams = params;
 
@@ -628,7 +622,8 @@ class TauriNativeDriver implements DBDriver {
 
     if (isShorthand) {
       const item = params[0];
-      const table = normalized.split(' ')[2]; // e.g. "exercises"
+      const parts = normalized.split(/\s+/);
+      const table = parts[0] === 'update' ? parts[1] : parts[2]; // e.g. "exercises"
       
       if (table === 'settings') {
         const enriched = params[0];
@@ -693,16 +688,10 @@ class TauriNativeDriver implements DBDriver {
   }
 
   async sync(apiToken: string, apiBaseUrl: string): Promise<void> {
-    // @ts-ignore
-    const tauriModule = '@tauri' + '-apps/api/core';
-    const { invoke } = await import(/* @vite-ignore */ tauriModule);
     await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
   }
 
   async invalidateCache(preserveDirty: boolean): Promise<void> {
-    // @ts-ignore
-    const tauriModule = '@tauri' + '-apps/api/core';
-    const { invoke } = await import(/* @vite-ignore */ tauriModule);
     await (invoke as any)('tauri_invalidate_cache', { preserveDirty });
   }
 }

@@ -69,9 +69,9 @@ Goals, Analysis, Sync) plus the Exercise-history drawer lives in `views/` /
 (routines*, workout_groups, workout_group_exercises, goals, measurements,
 measurement_records), with FK-safe upsert ordering. The inline `setup()` schema
 (the migration file is unused) was extended with the matching `CREATE TABLE`s.
-Caveat: there is no Rust toolchain in this environment, so the Rust was reviewed
-against the existing patterns but not compile-verified — run `cargo check` in
-`mobile/src-tauri` before shipping the desktop/mobile build.
+The Android Tauri build was compile-verified on Windows and installed on a Pixel
+9 as package `com.fitnotes.reborn.app`; see `docs/android-tauri-build.md` for the
+current build/install workflow and gotchas.
 
 ## Settings sync (done)
 

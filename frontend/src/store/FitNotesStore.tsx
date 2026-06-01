@@ -775,16 +775,16 @@ export function useFitNotesController() {
   const refreshData = async () => {
     const cats = await db.query<Category>('SELECT * FROM categories');
     const exs = await db.query<Exercise>('SELECT * FROM exercises');
-    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ?', [selectedDate]);
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [selectedDate]);
     const allLgs = await db.query<TrainingLog>('SELECT * FROM training_logs');
     const weights = await db.query<BodyWeight>('SELECT * FROM body_weights');
-    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ?', [selectedDate]);
+    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
     const rts = await db.query<Routine>('SELECT * FROM routines');
-    const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups', [selectedDate]);
-    const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises', [selectedDate]);
+    const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups WHERE date = ? AND is_deleted = 0', [selectedDate]);
+    const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises WHERE date = ? AND is_deleted = 0', [selectedDate]);
     const gls = await db.query<Goal>('SELECT * FROM goals');
     const meas = await db.query<Measurement>('SELECT * FROM measurements');
-    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ?', [selectedDate]);
+    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
     setExerciseComments(exComments);
     const favs = await db.query<GraphFavourite>('SELECT * FROM graph_favourites');
     setGraphFavourites(favs);

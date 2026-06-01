@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
+    "@tauri-apps/api": "^2.11.0",
     "lucide-react": "^0.379.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
