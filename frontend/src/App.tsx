@@ -20,7 +20,7 @@ import {
 import { intColorToHex } from './lib/colors';
 import { typeHasWeight } from './lib/units';
 import { getLocalDateString, addDays } from './lib/date';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { db } from './storage/db';
 import { FitNotesProvider, useFitNotesController, useFitNotesStore } from './store/FitNotesStore';
 import { BodyView } from './views/BodyView';
@@ -164,6 +164,87 @@ export default function App() {
     }
   }, [store.activeRoutineForPopulate]);
 
+  // Touch Swipe Gesture Recognizer for Sidebar
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
+  const activeSwipe = useRef<'open' | 'close' | null>(null);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0];
+      touchStartX.current = touch.clientX;
+      touchStartY.current = touch.clientY;
+      
+      if (!store.sidebarOpen && touch.clientX < 40) {
+        // Swipe from left edge to open
+        activeSwipe.current = 'open';
+        setIsDragging(true);
+        setDragOffset(0);
+      } else if (store.sidebarOpen) {
+        // Swipe left anywhere to close
+        activeSwipe.current = 'close';
+        setIsDragging(true);
+        setDragOffset(280);
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!activeSwipe.current) return;
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - touchStartX.current;
+      const deltaY = touch.clientY - touchStartY.current;
+
+      // Prevent vertical scroll conflicts when swiping horizontally
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        if (e.cancelable) e.preventDefault();
+      }
+
+      if (activeSwipe.current === 'open') {
+        const offset = Math.max(0, Math.min(280, deltaX));
+        setDragOffset(offset);
+      } else if (activeSwipe.current === 'close') {
+        const offset = Math.max(0, Math.min(280, 280 + deltaX));
+        setDragOffset(offset);
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!activeSwipe.current) return;
+      
+      setIsDragging(false);
+      const finalOffset = dragOffset;
+      const swipeType = activeSwipe.current;
+      activeSwipe.current = null;
+
+      if (swipeType === 'open') {
+        if (finalOffset > 100) {
+          store.setSidebarOpen(true);
+        } else {
+          store.setSidebarOpen(false);
+        }
+      } else if (swipeType === 'close') {
+        if (finalOffset < 180) {
+          store.setSidebarOpen(false);
+        } else {
+          store.setSidebarOpen(true);
+        }
+      }
+      setDragOffset(0);
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [store.sidebarOpen, dragOffset]);
+
   const {
     activeTab, setActiveTab, sidebarOpen, setSidebarOpen, userUnit, handleUnitChange,
     token, userEmail, handleLogout, toggleTheme, selectedDate, setSelectedDate,
@@ -201,10 +282,26 @@ export default function App() {
     <FitNotesProvider value={store}>
     <div className="app-container">
       {/* Sidebar Backdrop Overlay on Mobile */}
-      <div className={`sidebar-backdrop ${sidebarOpen ? 'open' : ''}`} onClick={() => setSidebarOpen(false)} />
+      <div 
+        className={`sidebar-backdrop ${sidebarOpen ? 'open' : ''}`} 
+        onClick={() => setSidebarOpen(false)} 
+        style={{
+          display: (isDragging || sidebarOpen) ? 'block' : undefined,
+          opacity: isDragging ? dragOffset / 280 : undefined,
+          transition: isDragging ? 'none' : undefined
+        }}
+      />
 
       {/* 1. Sidebar Panel */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside 
+        className={`sidebar ${sidebarOpen ? 'open' : ''}`}
+        style={{
+          transform: isDragging 
+            ? `translateX(${dragOffset - 280}px)` 
+            : undefined,
+          transition: isDragging ? 'none' : undefined
+        }}
+      >
         <div className="brand">
           <img 
             src="/favicon.svg" 
