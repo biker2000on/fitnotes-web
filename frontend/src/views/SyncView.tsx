@@ -135,7 +135,13 @@ export function SyncView() {
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAuth('login');
+            }}
+            style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}
+          >
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Email Address</label>
               <input type="email" placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} />
@@ -146,10 +152,10 @@ export function SyncView() {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-              <button className="btn btn-primary" onClick={() => handleAuth('login')} style={{ flex: 1 }}>Sign In</button>
-              <button className="btn btn-secondary" onClick={() => handleAuth('register')} style={{ flex: 1 }}>Create Account</button>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Sign In</button>
+              <button type="button" className="btn btn-secondary" onClick={() => handleAuth('register')} style={{ flex: 1 }}>Create Account</button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </div>
