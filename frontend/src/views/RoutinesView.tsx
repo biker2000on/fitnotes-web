@@ -1,61 +1,244 @@
-// RoutinesView.tsx - List of routine templates with edit / start actions.
-import { Bookmark, Plus } from 'lucide-react';
+// RoutinesView.tsx - Expanded interactive list of routines with section (Workout Day) populating.
+import { useState } from 'react';
+import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
+import { db } from '../storage/db';
+import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet } from '../types';
 
 export function RoutinesView() {
   const {
-    routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab, setActiveRoutineForPopulate,
+    routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
+    setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises
   } = useFitNotesStore();
+
+  const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
+  const [routineDetails, setRoutineDetails] = useState<{
+    sections: RoutineSection[];
+    exercises: RoutineSectionExercise[];
+    sets: RoutineSectionExerciseSet[];
+  } | null>(null);
+
+  // Toggle routine card expansion and load details inline
+  const handleToggleExpand = async (routineId: string) => {
+    if (expandedRoutineId === routineId) {
+      setExpandedRoutineId(null);
+      setRoutineDetails(null);
+      return;
+    }
+
+    setExpandedRoutineId(routineId);
+    setLoadingDetails(true);
+    setRoutineDetails(null);
+
+    try {
+      // Query sections
+      const secs = await db.query<RoutineSection>(
+        'SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order ASC',
+        [routineId]
+      );
+      
+      let rseList: RoutineSectionExercise[] = [];
+      let rseSets: RoutineSectionExerciseSet[] = [];
+
+      if (secs.length > 0) {
+        const secIds = secs.map(s => s.id);
+        const secPlaceholders = secIds.map(() => '?').join(',');
+        
+        rseList = await db.query<RoutineSectionExercise>(
+          `SELECT * FROM routine_section_exercises WHERE routine_section_id IN (${secPlaceholders}) ORDER BY sort_order ASC`,
+          secIds
+        );
+
+        if (rseList.length > 0) {
+          const rseIds = rseList.map(e => e.id);
+          const rsePlaceholders = rseIds.map(() => '?').join(',');
+          
+          rseSets = await db.query<RoutineSectionExerciseSet>(
+            `SELECT * FROM routine_section_exercise_sets WHERE routine_section_exercise_id IN (${rsePlaceholders})`,
+            rseIds
+          );
+        }
+      }
+
+      setRoutineDetails({
+        sections: secs,
+        exercises: rseList,
+        sets: rseSets
+      });
+    } catch (e) {
+      console.error('Failed to load routine sections & exercises:', e);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
       <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="card-title"><Bookmark size={18} /> Routine Templates</div>
-          <button className="btn btn-primary" onClick={() => setShowCreateRoutineModal(true)}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Bookmark size={18} color="var(--primary)" />
+            <span>Routine Templates</span>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowCreateRoutineModal(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={16} /> Create Routine Template
           </button>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {routines.map(r => (
-            <div
-              key={r.id}
-              style={{
-                padding: '20px',
-                border: '1px solid var(--border-dark)',
-                borderRadius: '16px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                backgroundColor: 'rgba(255,255,255,0.01)',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
-                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.02)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-dark)';
-                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.01)';
-              }}
-            >
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary-dark)' }}>{r.name}</h3>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '4px' }}>{r.notes || 'No notes added.'}</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => {
-                  setEditingRoutine(r);
-                  setActiveTab('routine-editor');
-                }}>
-                  <Bookmark size={14} /> Edit Template
-                </button>
-                <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setActiveRoutineForPopulate(r)}>
-                  <Bookmark size={14} /> Start Routine
-                </button>
-              </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {routines.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-secondary-dark)' }}>
+              <Bookmark size={32} style={{ opacity: 0.2, marginBottom: '8px', display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
+              No routine templates created yet.
             </div>
-          ))}
+          ) : (
+            routines.map(r => {
+              const isExpanded = expandedRoutineId === r.id;
+              return (
+                <div
+                  key={r.id}
+                  style={{
+                    border: '1px solid var(--border-dark)',
+                    borderRadius: '16px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.01)',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s ease',
+                    borderColor: isExpanded ? 'rgba(99, 102, 241, 0.3)' : 'var(--border-dark)',
+                    boxShadow: isExpanded ? '0 4px 20px rgba(0,0,0,0.2)' : 'none'
+                  }}
+                >
+                  {/* Card Header (Tappable Row) */}
+                  <div
+                    style={{
+                      padding: '20px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                      background: isExpanded ? 'rgba(99, 102, 241, 0.02)' : 'transparent'
+                    }}
+                    onClick={() => handleToggleExpand(r.id)}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary-dark)' }}>{r.name}</h3>
+                        {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary-dark)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary-dark)' }} />}
+                      </div>
+                      <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '4px' }}>{r.notes || 'No notes added.'}</p>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        className="btn btn-secondary" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }} 
+                        onClick={() => {
+                          setEditingRoutine(r);
+                          setActiveTab('routine-editor');
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        className="btn btn-primary" 
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }} 
+                        onClick={() => setActiveRoutineForPopulate(r)}
+                      >
+                        Start Split
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Card Expanded Content */}
+                  {isExpanded && (
+                    <div style={{ padding: '20px', borderTop: '1px solid var(--border-dark)', backgroundColor: 'rgba(0,0,0,0.08)' }}>
+                      {loadingDetails ? (
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '12px 0' }}>Loading workout days...</div>
+                      ) : !routineDetails || routineDetails.sections.length === 0 ? (
+                        <div style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '12px 0' }}>No workout days added to this routine yet. Edit the template to add days.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          <h4 style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginBottom: '4px' }}>Workout Day Splits (Select to Start)</h4>
+                          
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                            {routineDetails.sections.map(sec => {
+                              const secExs = routineDetails.exercises.filter(x => x.routine_section_id === sec.id);
+                              
+                              return (
+                                <div 
+                                  key={sec.id}
+                                  style={{
+                                    background: 'rgba(255,255,255,0.02)',
+                                    border: '1px solid var(--border-dark)',
+                                    borderRadius: '12px',
+                                    padding: '16px',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'space-between',
+                                    gap: '12px',
+                                    transition: 'border-color 0.2s ease'
+                                  }}
+                                  onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
+                                  onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-dark)'}
+                                >
+                                  <div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                      <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary-dark)' }}>{sec.name}</div>
+                                    </div>
+                                    
+                                    {/* Exercise list inside split */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                                      {secExs.length === 0 ? (
+                                        <div style={{ fontStyle: 'italic', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>No exercises</div>
+                                      ) : (
+                                        secExs.map(se => {
+                                          const exName = exercises.find(x => x.id === se.exercise_id)?.name || 'Unknown Exercise';
+                                          const setsCount = routineDetails.sets.filter(s => s.routine_section_exercise_id === se.id).length;
+                                          
+                                          return (
+                                            <div key={se.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)' }}>
+                                              <Dumbbell size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
+                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{exName}</span>
+                                              <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>({setsCount} {setsCount === 1 ? 'set' : 'sets'})</span>
+                                            </div>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <button 
+                                    className="btn btn-primary" 
+                                    style={{ 
+                                      width: '100%', 
+                                      display: 'flex', 
+                                      alignItems: 'center', 
+                                      justifyContent: 'center', 
+                                      gap: '6px', 
+                                      fontSize: '12px',
+                                      padding: '8px 12px',
+                                      marginTop: '8px'
+                                    }}
+                                    onClick={() => {
+                                      // Trigger start of only this Workout Day split
+                                      setActiveSectionForPopulate(sec);
+                                    }}
+                                  >
+                                    <Play size={12} fill="currentColor" /> Start Workout Day
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>
