@@ -96,6 +96,8 @@ export function useFitNotesController() {
   }, [settings.keep_screen_on, activeTab]);
 
   const handleUnitChange = (unit: 'kg' | 'lbs') => {
+    if (unit === userUnit) return;
+
     setUserUnit(unit);
     localStorage.setItem('fn_user_unit', unit);
     persistSettings({ metric: unit === 'kg' });
