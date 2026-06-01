@@ -49,9 +49,9 @@ export function WorkoutLogView() {
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Weight ({userUnit})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String(Math.max(0, parseFloat(w) - (userUnit === 'kg' ? 2.5 : 5))))}>-</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String(Math.max(0, parseFloat(w) - (userUnit === 'kg' ? 2.5 : 5))))} tabIndex={-1}>-</button>
                     <input id="log-weight-input" type="number" value={logWeight} onChange={(e) => setLogWeight(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String((parseFloat(w) || 0) + (userUnit === 'kg' ? 2.5 : 5)))}>+</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String((parseFloat(w) || 0) + (userUnit === 'kg' ? 2.5 : 5)))} tabIndex={-1}>+</button>
                   </div>
                 </div>
               )}
@@ -59,9 +59,9 @@ export function WorkoutLogView() {
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Reps</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String(Math.max(0, parseInt(r) - 1)))}>-</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String(Math.max(0, parseInt(r) - 1)))} tabIndex={-1}>-</button>
                     <input id="log-reps-input" type="number" value={logReps} onChange={(e) => setLogReps(e.target.value)} placeholder="0" style={{ textAlign: 'center' }} />
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String((parseInt(r) || 0) + 1))}>+</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String((parseInt(r) || 0) + 1))} tabIndex={-1}>+</button>
                   </div>
                 </div>
               )}
@@ -69,9 +69,9 @@ export function WorkoutLogView() {
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Distance ({settings.distance_unit === 2 ? 'mi' : 'km'})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String(Math.max(0, parseFloat(d) - 0.5)))}>-</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String(Math.max(0, parseFloat(d) - 0.5)))} tabIndex={-1}>-</button>
                     <input id="log-distance-input" type="number" value={logDistance} onChange={(e) => setLogDistance(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
-                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String((parseFloat(d) || 0) + 0.5))}>+</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String((parseFloat(d) || 0) + 0.5))} tabIndex={-1}>+</button>
                   </div>
                 </div>
               )}
