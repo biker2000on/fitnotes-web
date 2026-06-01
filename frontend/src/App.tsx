@@ -1,4 +1,4 @@
-﻿import {
+import {
   Calendar as CalendarIcon,
   Dumbbell, 
   User, 
@@ -19,6 +19,9 @@
 } from 'lucide-react';
 import { intColorToHex } from './lib/colors';
 import { typeHasWeight } from './lib/units';
+import { getLocalDateString, addDays } from './lib/date';
+import { useState, useEffect } from 'react';
+import { db } from './storage/db';
 import { FitNotesProvider, useFitNotesController } from './store/FitNotesStore';
 import { BodyView } from './views/BodyView';
 import { AnalysisView } from './views/AnalysisView';
@@ -36,7 +39,7 @@ import { ExerciseHistoryDrawer } from './components/ExerciseHistoryDrawer';
 import { RestTimer } from './components/RestTimer';
 import { ToastNotification } from './components/ToastNotification';
 import { ConfirmationModal } from './components/ConfirmationModal';
-import { CalendarPreviewModal } from './components/CalendarPreviewModal';
+
 import { PlateCalculatorModal } from './components/PlateCalculatorModal';
 import { CommandPalette } from './components/CommandPalette';
 import { CopyWorkoutDrawer } from './components/CopyWorkoutDrawer';
@@ -46,10 +49,22 @@ import { RoutinesPopulatorModal } from './components/RoutinesPopulatorModal';
 
 export default function App() {
   const store = useFitNotesController();
+  const [populateSections, setPopulateSections] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (store.activeRoutineForPopulate) {
+      db.query<any>('SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order ASC', [store.activeRoutineForPopulate.id])
+        .then(setPopulateSections)
+        .catch(err => console.error("Failed to load routine sections:", err));
+    } else {
+      setPopulateSections([]);
+    }
+  }, [store.activeRoutineForPopulate]);
+
   const {
     activeTab, setActiveTab, sidebarOpen, setSidebarOpen, userUnit, handleUnitChange,
     token, userEmail, handleLogout, toggleTheme, triggerSync, syncStatus, selectedDate, setSelectedDate,
-    exercises, categories, routines, allLogs, currentLogs, displayWeight,
+    exercises, categories, routines, allLogs, currentLogs,
     editingRoutine, setSelectedExercise, showPlateCalc, setShowPlateCalc, setShowCommandPalette, setShowRoutineImportModal,
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     showCatModal, setShowCatModal, newCatName, setNewCatName, newCatColor, setNewCatColor, handleCreateCategory,
@@ -64,10 +79,12 @@ export default function App() {
     editExIsFavourite, setEditExIsFavourite, handleUpdateExercise, handleDeleteExercise,
     showCommandPalette, showSupersetManagerModal, setShowSupersetManagerModal,
     selectedExIdsForSuperset, setSelectedExIdsForSuperset, supersetColor, setSupersetColor, handleCreateWorkoutSuperset,
-    showCalendarPreviewModal, setShowCalendarPreviewModal, previewDate, previewLogs, previewComment,
+    supersetName, setSupersetName, targetSupersetGroupId, setTargetSupersetGroupId, workoutGroups,
+
     confirmOpen, setConfirmOpen, confirmTitle, confirmMessage, confirmOnApprove,
     showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, handleCopyWorkoutConfirm,
-    showRoutineImportModal, activeRoutineForPopulate, setActiveRoutineForPopulate, handleImportRoutine, handleImportRoutinePopulated,
+    showRoutineImportModal, activeRoutineForPopulate, setActiveRoutineForPopulate, handleImportRoutinePopulated,
+    activeSectionForPopulate, setActiveSectionForPopulate,
     showBulkMoveModal, setShowBulkMoveModal, bulkMoveTargetDate, setBulkMoveTargetDate,
     handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     selectedLogIdsForGroup, setSelectedLogIdsForGroup, handleCreateSuperset,
@@ -213,17 +230,19 @@ export default function App() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={() => setShowCommandPalette(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Dumbbell size={16} /> Select Exercise (Ctrl+K)
-            </button>
-            <button className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
-              <Bookmark size={16} /> Load Routine
-            </button>
+            {activeTab === 'log' && (
+              <>
+                <button className="btn btn-primary" onClick={() => setShowCommandPalette(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Dumbbell size={16} /> Select Exercise (Ctrl+K)
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
+                  <Bookmark size={16} /> Load Routine
+                </button>
+              </>
+            )}
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
               <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Subtract 1 Day" onClick={() => {
-                const d = new Date(selectedDate);
-                d.setDate(d.getDate() - 1);
-                setSelectedDate(d.toISOString().split('T')[0]);
+                setSelectedDate(addDays(selectedDate, -1));
               }}>-</button>
               <input 
                 type="date" 
@@ -232,12 +251,10 @@ export default function App() {
                 style={{ width: '150px', padding: '10px' }}
               />
               <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Add 1 Day" onClick={() => {
-                const d = new Date(selectedDate);
-                d.setDate(d.getDate() + 1);
-                setSelectedDate(d.toISOString().split('T')[0]);
+                setSelectedDate(addDays(selectedDate, 1));
               }}>+</button>
               <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Today" onClick={() => {
-                setSelectedDate(new Date().toISOString().split('T')[0]);
+                setSelectedDate(getLocalDateString());
               }}>Today</button>
             </div>
             {token && (
@@ -447,7 +464,10 @@ export default function App() {
                   <button 
                     key={r.id} 
                     className="btn btn-secondary" 
-                    onClick={() => handleImportRoutine(r.id)}
+                    onClick={() => {
+                      setActiveRoutineForPopulate(r);
+                      setShowRoutineImportModal(false);
+                    }}
                     style={{ width: '100%', justifyContent: 'flex-start', padding: '16px', borderRadius: '16px' }}
                   >
                     <div>
@@ -799,6 +819,46 @@ export default function App() {
               })}
             </div>
 
+            {/* Superset Custom Name Input */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px', marginTop: '16px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600 }}>Superset Name</label>
+              <input 
+                type="text" 
+                value={supersetName} 
+                onChange={(e) => setSupersetName(e.target.value)} 
+                placeholder="e.g. Superset A, Push Split Superset" 
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-dark)', background: 'rgba(255,255,255,0.01)', color: 'var(--text-primary-dark)' }}
+              />
+            </div>
+
+            {/* Superset Link Action (Add to existing or Create New) */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+              <label style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600 }}>Link Action</label>
+              <select 
+                value={targetSupersetGroupId} 
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setTargetSupersetGroupId(val);
+                  if (val) {
+                    const group = workoutGroups.find(g => g.id === val);
+                    if (group) {
+                      setSupersetName(group.name || 'Superset');
+                      const hexColor = intColorToHex(group.colour);
+                      setSupersetColor(hexColor);
+                    }
+                  } else {
+                    setSupersetName('Superset');
+                  }
+                }}
+                style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-dark)', background: 'var(--card-bg-dark)', color: 'var(--text-primary-dark)' }}
+              >
+                <option value="">+ Create New Superset Group</option>
+                {workoutGroups.filter(g => g.date === selectedDate && !g.is_deleted).map(g => (
+                  <option key={g.id} value={g.id}>Add to: {g.name || 'Unnamed Superset'}</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600 }}>Pick Superset Custom Color Theme</label>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -819,23 +879,40 @@ export default function App() {
         </div>
       )}
 
-      {/* 10. Calendar Day Workout Preview Modal */}
-      <CalendarPreviewModal 
-        isOpen={showCalendarPreviewModal}
-        onClose={() => setShowCalendarPreviewModal(false)}
-        date={previewDate}
-        logs={previewLogs}
-        comment={previewComment}
-        exercises={exercises}
-        categories={categories}
-        intColorToHex={intColorToHex}
-        displayWeight={displayWeight}
-        onGoToLog={() => {
-          setSelectedDate(previewDate);
-          setShowCalendarPreviewModal(false);
-          setActiveTab('log');
-        }}
-      />
+      {/* 9.5 Split Day Selector Modal when importing routine */}
+      {activeRoutineForPopulate && populateSections.length > 0 && (
+        <div className="modal-overlay" onClick={() => setActiveRoutineForPopulate(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                <Bookmark size={20} color="var(--primary)" /> Select Split Day to Start
+              </h2>
+              <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setActiveRoutineForPopulate(null)}>Close</button>
+            </div>
+
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginBottom: '16px' }}>
+              Select which workout day split from <strong>{activeRoutineForPopulate.name}</strong> you want to load:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {populateSections.map(sec => (
+                <button 
+                  key={sec.id}
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setActiveSectionForPopulate(sec);
+                    setActiveRoutineForPopulate(null);
+                  }}
+                  style={{ width: '100%', justifyContent: 'space-between', padding: '14px 18px', borderRadius: '12px', display: 'flex', alignItems: 'center' }}
+                >
+                  <span style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary-dark)' }}>{sec.name}</span>
+                  <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 600 }}>Start Day Split →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Custom Confirmation Modal */}
       <ConfirmationModal 
@@ -868,12 +945,16 @@ export default function App() {
         onBulkIncrementReps={handleBulkIncrementReps}
       />
 
-      {activeRoutineForPopulate && (
+      {activeSectionForPopulate && (
         <RoutinesPopulatorModal 
-          isOpen={activeRoutineForPopulate !== null}
-          onClose={() => setActiveRoutineForPopulate(null)}
-          routineName={activeRoutineForPopulate.name}
-          onConfirmStart={(type, percentage) => handleImportRoutinePopulated(activeRoutineForPopulate.id, type, percentage)}
+          isOpen={activeSectionForPopulate !== null}
+          onClose={() => {
+            setActiveSectionForPopulate(null);
+          }}
+          routineName={activeSectionForPopulate.name}
+          onConfirmStart={(type, percentage) => {
+            handleImportRoutinePopulated(activeSectionForPopulate.routine_id, type, percentage, activeSectionForPopulate.id);
+          }}
         />
       )}
 
