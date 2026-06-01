@@ -95,6 +95,36 @@ export function SettingsView() {
         <Toggle k="body_weight_show_in_workout_log" label="Show Body Weight in Workout Log" />
       </Section>
 
+      <Section title="Keyboard Shortcuts">
+        <Row 
+          label="Go to Tab Chords (g followed by key within 1.5s)" 
+          hint={
+            <div style={{ marginTop: '4px', lineHeight: '1.5' }}>
+              • l or w: Workout Log<br />
+              • c: Calendar View<br />
+              • e: Exercises<br />
+              • r: Routines<br />
+              • b: Body Weight<br />
+              • m: Measurements<br />
+              • g: Goals<br />
+              • a: Analytics<br />
+              • t: Tools<br />
+              • s: Settings<br />
+              • y: Sync Center
+            </div>
+          }
+        >
+          <span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 'bold' }}>g + [key]</span>
+        </Row>
+        <Row label="Select Exercise Search Command Palette"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Ctrl + K</span></Row>
+        <Row label="Save Active Set (always active)"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Ctrl + S</span></Row>
+        <Row label="Toggle Plate Load Calculator Modal"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Ctrl + M</span></Row>
+        <Row label="Load Last Logged Set Values into Inputs"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Ctrl + E</span></Row>
+        <Row label="Date Shifts (when not typing)" hint="+ or =: Next day, - or _: Previous day, t: Jump to Today"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>+, -, t</span></Row>
+        <Row label="Calendar Month Shifts (when not typing)" hint="[: Shift calendar backwards one month, ]: Shift calendar forwards one month"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>[, ]</span></Row>
+        <Row label="Close Active Modals / Drawers"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Escape</span></Row>
+      </Section>
+
       <Section title="About">
         <Row label="FitNotes Web/Tauri"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>v1.0</span></Row>
         <Row label="Data" hint="Synced to your account (Postgres); offline-first on web & desktop"><span /></Row>
@@ -113,7 +143,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Row({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
       <div>
