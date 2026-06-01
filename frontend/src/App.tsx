@@ -226,7 +226,21 @@ export default function App() {
             </button>
             <div className="title-section">
               <h1>FitNotes Dashboard</h1>
-              <p>Interactive tracking session for {selectedDate}</p>
+              <p style={{ margin: 0 }}>Interactive tracking session for {selectedDate}</p>
+              <p style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, margin: '2px 0 0 0', textTransform: 'capitalize' }}>
+                {(() => {
+                  try {
+                    const parts = selectedDate.split('-');
+                    if (parts.length === 3) {
+                      const y = parseInt(parts[0], 10);
+                      const m = parseInt(parts[1], 10) - 1;
+                      const d = parseInt(parts[2], 10);
+                      return new Date(y, m, d).toLocaleDateString(undefined, { weekday: 'long' });
+                    }
+                  } catch (e) {}
+                  return '';
+                })()}
+              </p>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
