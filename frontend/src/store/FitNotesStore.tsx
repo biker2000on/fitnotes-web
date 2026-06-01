@@ -184,6 +184,7 @@ export function useFitNotesController() {
   const [logDistance, setLogDistance] = useState('5');
   const [logDuration, setLogDuration] = useState('30');
   const [logComment, setLogComment] = useState('');
+  const [editingLog, setEditingLog] = useState<TrainingLog | null>(null);
   const [exerciseComments, setExerciseComments] = useState<ExerciseComment[]>([]);
   const [graphFavourites, setGraphFavourites] = useState<GraphFavourite[]>([]);
   const [customUnits, setCustomUnits] = useState<CustomUnit[]>([]);
@@ -382,6 +383,95 @@ export function useFitNotesController() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // 0. Chord Navigation Shortcuts (e.g. g then l for Workout Log, g then c for Calendar, etc.)
       const activeEl = document.activeElement;
+
+      // Check if one of the logging fields is focused
+      const isLoggingField = activeEl && (
+        activeEl.id === 'log-weight-input' ||
+        activeEl.id === 'log-reps-input' ||
+        activeEl.id === 'log-distance-input' ||
+        activeEl.id === 'log-duration-min-input' ||
+        activeEl.id === 'log-duration-sec-input' ||
+        activeEl.id === 'log-comment-input'
+      );
+
+      if (isLoggingField) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleAddSet();
+          return;
+        }
+
+        if (activeEl.id !== 'log-comment-input') {
+          if (e.key === '+' || e.key === '=') {
+            e.preventDefault();
+            if (activeEl.id === 'log-weight-input') {
+              const increment = userUnit === 'kg' ? 2.5 : 5;
+              setLogWeight(w => {
+                const val = (parseFloat(w) || 0) + increment;
+                return String(val);
+              });
+            } else if (activeEl.id === 'log-reps-input') {
+              setLogReps(r => String((parseInt(r) || 0) + 1));
+            } else if (activeEl.id === 'log-distance-input') {
+              setLogDistance(d => {
+                const val = (parseFloat(d) || 0) + 0.1;
+                return String(Math.round(val * 10) / 10);
+              });
+            } else if (activeEl.id === 'log-duration-min-input') {
+              setLogDuration(d => {
+                const totalSec = parseInt(d) || 0;
+                const m = Math.floor(totalSec / 60);
+                const s = totalSec % 60;
+                return String((m + 1) * 60 + s);
+              });
+            } else if (activeEl.id === 'log-duration-sec-input') {
+              setLogDuration(d => {
+                const totalSec = parseInt(d) || 0;
+                return String(totalSec + 1);
+              });
+            }
+            setTimeout(() => {
+              (activeEl as HTMLInputElement).select();
+            }, 0);
+            return;
+          }
+
+          if (e.key === '-' || e.key === '_') {
+            e.preventDefault();
+            if (activeEl.id === 'log-weight-input') {
+              const decrement = userUnit === 'kg' ? 2.5 : 5;
+              setLogWeight(w => {
+                const val = Math.max(0, (parseFloat(w) || 0) - decrement);
+                return String(val);
+              });
+            } else if (activeEl.id === 'log-reps-input') {
+              setLogReps(r => String(Math.max(0, (parseInt(r) || 0) - 1)));
+            } else if (activeEl.id === 'log-distance-input') {
+              setLogDistance(d => {
+                const val = Math.max(0, (parseFloat(d) || 0) - 0.1);
+                return String(Math.round(val * 10) / 10);
+              });
+            } else if (activeEl.id === 'log-duration-min-input') {
+              setLogDuration(d => {
+                const totalSec = parseInt(d) || 0;
+                const m = Math.floor(totalSec / 60);
+                const s = totalSec % 60;
+                return String(Math.max(0, m - 1) * 60 + s);
+              });
+            } else if (activeEl.id === 'log-duration-sec-input') {
+              setLogDuration(d => {
+                const totalSec = parseInt(d) || 0;
+                return String(Math.max(0, totalSec - 1));
+              });
+            }
+            setTimeout(() => {
+              (activeEl as HTMLInputElement).select();
+            }, 0);
+            return;
+          }
+        }
+      }
+
       const isTyping = activeEl && (
         activeEl.tagName === 'INPUT' ||
         activeEl.tagName === 'TEXTAREA' ||
@@ -570,7 +660,7 @@ export function useFitNotesController() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCommandPalette, selectedExercise, currentLogs, logWeight, logReps, logDistance, logDuration, selectedDate, setActiveTab, triggerToast, handlePrevMonth, handleNextMonth]);
+  }, [showCommandPalette, selectedExercise, currentLogs, logWeight, logReps, logDistance, logDuration, logComment, editingLog, userUnit, selectedDate, setActiveTab, triggerToast, handlePrevMonth, handleNextMonth]);
 
   // Lightweight location hash router (History API responsive)
   useEffect(() => {
@@ -978,6 +1068,25 @@ export function useFitNotesController() {
     const duration = typeHasDuration(t) ? (parseInt(logDuration) || null) : null;
     const pr = isNewPR(selectedExercise.id, weight, reps);
 
+    if (editingLog) {
+      const updatedLog: TrainingLog = {
+        ...editingLog,
+        metric_weight: weight,
+        reps,
+        unit: userUnit === 'kg' ? 1 : 2,
+        is_personal_record: pr,
+        distance,
+        duration_seconds: duration,
+        comment: logComment || null,
+      };
+      await db.execute('UPDATE training_logs', [updatedLog]);
+      setEditingLog(null);
+      setLogComment('');
+      await refreshData();
+      triggerToast('Set updated.');
+      return;
+    }
+
     const newLog: TrainingLog = {
       id: uuidv4(),
       exercise_id: selectedExercise.id,
@@ -999,6 +1108,63 @@ export function useFitNotesController() {
     if (settings.rest_timer_auto_start) {
       startRestTimer(selectedExercise.default_rest_time || settings.rest_timer_seconds);
     }
+  };
+
+  const handleSelectLogForEdit = (log: TrainingLog) => {
+    const ex = exercises.find(x => x.id === log.exercise_id);
+    if (!ex) return;
+    setSelectedExercise(ex);
+    setEditingLog(log);
+
+    if (log.metric_weight !== null) {
+      if (log.unit === 1 && userUnit === 'lbs') {
+        setLogWeight(String(Math.round(log.metric_weight * 2.20462 * 10) / 10));
+      } else if (log.unit === 2 && userUnit === 'kg') {
+        setLogWeight(String(Math.round(log.metric_weight / 2.20462 * 10) / 10));
+      } else {
+        setLogWeight(String(log.metric_weight));
+      }
+    } else {
+      setLogWeight('');
+    }
+
+    if (log.reps !== null) {
+      setLogReps(String(log.reps));
+    } else {
+      setLogReps('');
+    }
+
+    if (log.distance !== null) {
+      setLogDistance(String(settings.distance_unit === 2 ? Math.round((log.distance / 1.60934) * 1000) / 1000 : log.distance));
+    } else {
+      setLogDistance('');
+    }
+
+    if (log.duration_seconds !== null) {
+      setLogDuration(String(log.duration_seconds));
+    } else {
+      setLogDuration('');
+    }
+
+    setLogComment(log.comment || '');
+
+    // Focus the first relevant input
+    setTimeout(() => {
+      const wInput = document.getElementById('log-weight-input');
+      const rInput = document.getElementById('log-reps-input');
+      const dInput = document.getElementById('log-distance-input');
+      const minInput = document.getElementById('log-duration-min-input');
+      const target = wInput || rInput || dInput || minInput;
+      if (target) {
+        (target as HTMLInputElement).focus();
+        (target as HTMLInputElement).select();
+      }
+    }, 50);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLog(null);
+    setLogComment('');
   };
 
   // Fill the entry form from the most recent prior set of the selected exercise.
@@ -2328,6 +2494,7 @@ export function useFitNotesController() {
     historyExerciseId, setHistoryExerciseId, uuidv4,
     settings, updateSetting,
     logComment, setLogComment, handleCopyPreviousSet, handleClearDay, shareWorkout,
+    editingLog, setEditingLog, handleSelectLogForEdit, handleCancelEdit,
     exerciseComments, saveExerciseComment,
     graphFavourites, saveGraphFavourite, deleteGraphFavourite,
     customUnits, saveCustomUnit, deleteCustomUnit,

@@ -9,7 +9,7 @@ export function CalendarView() {
   const {
     calendarYear, calendarMonth, handlePrevMonth, handleNextMonth,
     allLogs, selectedDate, setSelectedDate, settings, exercises, categories,
-    workoutComment, setActiveTab, formatLogValue
+    workoutComment, setActiveTab, formatLogValue, handleSelectLogForEdit
   } = useFitNotesStore();
   const [view, setView] = useState<'month' | 'list'>('month');
   const [filter, setFilter] = useState(''); // '' | 'cat:<id>' | 'ex:<id>'
@@ -406,7 +406,16 @@ export function CalendarView() {
                 <div className="summary-exercise-name">{ex.name}</div>
                 <div>
                   {ex.sets.map((set, i) => (
-                    <div key={set.id} className="summary-set-row">
+                    <div 
+                      key={set.id} 
+                      className="summary-set-row"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        handleSelectLogForEdit(set);
+                        setActiveTab('log');
+                      }}
+                      title="Click to edit in Workout Log"
+                    >
                       <span className="summary-set-badge">{i + 1}</span>
                       <span>{formatLogValue(set, ex.typeId)}</span>
                       {set.is_complete && <span className="summary-set-completed">✓</span>}

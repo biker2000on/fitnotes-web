@@ -24,6 +24,7 @@ export function WorkoutLogView() {
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     settings, logComment, setLogComment, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout,
+    editingLog, handleSelectLogForEdit, handleCancelEdit,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
 
@@ -92,14 +93,22 @@ export function WorkoutLogView() {
                   </div>
                 </div>
               )}
-              <button className="btn btn-primary" onClick={handleAddSet} style={{ height: '46px', whiteSpace: 'nowrap' }}>
-                <Plus size={18} /> Add Set
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn btn-primary" onClick={handleAddSet} style={{ height: '46px', whiteSpace: 'nowrap' }}>
+                  {editingLog ? <Check size={18} /> : <Plus size={18} />} {editingLog ? 'Update Set' : 'Add Set'}
+                </button>
+                {editingLog && (
+                  <button className="btn btn-secondary" onClick={handleCancelEdit} style={{ height: '46px', whiteSpace: 'nowrap' }}>
+                    Cancel Edit
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Set comment + quick actions */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <input
+                id="log-comment-input"
                 type="text"
                 value={logComment}
                 onChange={(e) => setLogComment(e.target.value)}
@@ -158,7 +167,12 @@ export function WorkoutLogView() {
                                   <GripVertical size={14} />
                                 </td>
                                 <td className="set-td" style={{ fontWeight: 700 }}>{index + 1}</td>
-                                <td className="set-td" style={{ fontWeight: 600 }}>
+                                <td 
+                                  className="set-td" 
+                                  style={{ fontWeight: 600, cursor: 'pointer' }}
+                                  onClick={() => handleSelectLogForEdit(log)}
+                                  title="Click to edit set"
+                                >
                                   {formatLogValue(log, selectedExercise.exercise_type_id)}
                                   {log.comment && <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', fontWeight: 400, marginLeft: '8px' }}>· {log.comment}</span>}
                                 </td>
@@ -400,7 +414,7 @@ export function WorkoutLogView() {
                                     exLogs.map((log, index) => (
                                       <div 
                                         key={log.id} 
-                                        onClick={() => handleToggleComplete(log)} 
+                                        onClick={() => handleSelectLogForEdit(log)} 
                                         style={{ 
                                           display: 'flex', 
                                           alignItems: 'center', 
@@ -432,11 +446,20 @@ export function WorkoutLogView() {
                                           </span>
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          {log.is_complete ? (
-                                            <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                          ) : (
-                                            <span style={{ opacity: 0.2 }}>○</span>
-                                          )}
+                                          <div 
+                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleToggleComplete(log);
+                                            }}
+                                            title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                                          >
+                                            {log.is_complete ? (
+                                              <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
+                                            ) : (
+                                              <span style={{ opacity: 0.2 }}>○</span>
+                                            )}
+                                          </div>
                                           <button 
                                             className="btn btn-secondary" 
                                             style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
@@ -492,7 +515,7 @@ export function WorkoutLogView() {
                           {exLogs.map((log, index) => (
                             <div 
                               key={log.id} 
-                              onClick={() => handleToggleComplete(log)} 
+                              onClick={() => handleSelectLogForEdit(log)} 
                               style={{ 
                                 display: 'flex', 
                                 alignItems: 'center', 
@@ -524,11 +547,20 @@ export function WorkoutLogView() {
                                 </span>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                {log.is_complete ? (
-                                  <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                ) : (
-                                  <span style={{ opacity: 0.2 }}>○</span>
-                                )}
+                                <div 
+                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleComplete(log);
+                                  }}
+                                  title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                                >
+                                  {log.is_complete ? (
+                                    <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
+                                  ) : (
+                                    <span style={{ opacity: 0.2 }}>○</span>
+                                  )}
+                                </div>
                                 <button 
                                   className="btn btn-secondary" 
                                   style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
