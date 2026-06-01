@@ -2,7 +2,7 @@
 // useFitNotesController() owns every useState + handler + effect (relocated from
 // App.tsx so App is a thin shell). It returns the `store` object, which is provided
 // via context; view components consume their slice through useFitNotesStore().
-import React, { useState, useEffect, createContext, useContext, type ReactNode } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext, type ReactNode } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
 import { db, isTauri } from '../storage/db';
 import { uuidv4 } from '../lib/uuid';
@@ -189,6 +189,17 @@ export function useFitNotesController() {
   const [exerciseComments, setExerciseComments] = useState<ExerciseComment[]>([]);
   const [graphFavourites, setGraphFavourites] = useState<GraphFavourite[]>([]);
   const [customUnits, setCustomUnits] = useState<CustomUnit[]>([]);
+
+  const selectedExerciseRef = useRef<Exercise | null>(null);
+  const workoutCommentRef = useRef<string>('');
+
+  useEffect(() => {
+    selectedExerciseRef.current = selectedExercise;
+  }, [selectedExercise]);
+
+  useEffect(() => {
+    workoutCommentRef.current = workoutComment;
+  }, [workoutComment]);
 
   const saveGraphFavourite = async (fav: GraphFavourite) => {
     await db.execute('INSERT INTO graph_favourites', [fav]);
@@ -737,6 +748,8 @@ export function useFitNotesController() {
         await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-3', routine_section_exercise_id: 'rse-2', metric_weight: 50, reps: 8, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
       }
 
+      workoutCommentRef.current = '';
+      setWorkoutComment('');
       await refreshData();
     };
 
@@ -796,12 +809,16 @@ export function useFitNotesController() {
     }
 
     if (comments.length > 0) {
-      setWorkoutComment(comments[0].comment);
+      if (!workoutCommentRef.current) {
+        setWorkoutComment(comments[0].comment);
+      }
     } else {
-      setWorkoutComment('');
+      if (!workoutCommentRef.current) {
+        setWorkoutComment('');
+      }
     }
 
-    if (exs.length > 0 && !selectedExercise) {
+    if (exs.length > 0 && !selectedExerciseRef.current) {
       setSelectedExercise(exs[0]);
       setAnalyticExerciseId(exs[0].id);
       setSelectedExForRoutine(exs[0].id);
