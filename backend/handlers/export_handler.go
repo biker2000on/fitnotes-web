@@ -131,8 +131,25 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 					isFavInt = 1
 				}
 
+				// Convert Web App exercise type ID back to Android FitNotes exercise type ID
+				androidTypeID := 1
+				switch typeID {
+				case 1:
+					androidTypeID = 1 // Barbell
+				case 2:
+					androidTypeID = 4 // Bodyweight (Reps Only)
+				case 3:
+					androidTypeID = 5 // Cardio (Distance & Time)
+				case 5:
+					androidTypeID = 6 // Duration (Time Only)
+				case 7:
+					androidTypeID = 7 // Weight & Duration
+				default:
+					androidTypeID = 1
+				}
+
 				_, _ = sqliteDB.Exec("INSERT INTO exercise (_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-					exCounter, name, oldCatID, typeID, notes, weightIncr, restTime, unitID, isFavInt)
+					exCounter, name, oldCatID, androidTypeID, notes, weightIncr, restTime, unitID, isFavInt)
 				exCounter++
 			}
 		}

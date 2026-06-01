@@ -172,10 +172,27 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				weightUnitVal = int(weightUnit.Int64)
 			}
 
+			// Convert Android FitNotes exercise type ID to Web App exercise type ID
+			webTypeID := 1
+			switch typeID {
+			case 1, 2, 3:
+				webTypeID = 1 // Weight & Reps
+			case 4:
+				webTypeID = 2 // Reps Only
+			case 5:
+				webTypeID = 3 // Distance & Time
+			case 6:
+				webTypeID = 5 // Time Only
+			case 7:
+				webTypeID = 7 // Weight & Time
+			default:
+				webTypeID = 1
+			}
+
 			_, err = tx.Exec(ctx, `
 				INSERT INTO exercises (id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, last_modified, is_deleted)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			`, newID, userID, name, finalCategoryID, typeID, notesVal, weightIncrVal, restTimeVal, weightUnitVal, isFav == 1, time.Now().UTC(), false)
+			`, newID, userID, name, finalCategoryID, webTypeID, notesVal, weightIncrVal, restTimeVal, weightUnitVal, isFav == 1, time.Now().UTC(), false)
 			if err != nil {
 				http.Error(w, `{"error":"failed to import exercises: `+err.Error()+`"}`, http.StatusInternalServerError)
 				return
