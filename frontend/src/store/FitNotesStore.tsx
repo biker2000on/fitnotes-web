@@ -141,6 +141,7 @@ export function useFitNotesController() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'success' | 'error'>('idle');
   const [exporting, setExporting] = useState(false);
 
@@ -806,12 +807,73 @@ export function useFitNotesController() {
       setSelectedExForRoutine(exs[0].id);
     }
 
-    // Auto-sync browser changes in the background when logged in (online-first browser experience)
-    if (!isTauri() && token) {
-      const apiBaseUrl = getApiBaseUrl();
-      db.sync(token, apiBaseUrl).catch(e => console.warn("Background auto-sync failed:", e));
+    // Load last sync time
+    if (isTauri()) {
+      try {
+        const rows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
+        if (rows.length > 0) {
+          setLastSyncTime(rows[0].value);
+        }
+      } catch (e) {
+        console.warn("Failed to query last sync timestamp from SQLite:", e);
+      }
+    } else {
+      setLastSyncTime(localStorage.getItem('fn_last_sync_timestamp') || '');
     }
   };
+
+  // Debounced Auto-Sync Setup
+  const [syncTimeoutId, setSyncTimeoutId] = useState<any>(null);
+
+  const triggerDebouncedSync = () => {
+    if (!token) return;
+    if (syncTimeoutId) clearTimeout(syncTimeoutId);
+    const id = setTimeout(() => {
+      triggerSync();
+    }, 2500); // 2.5 seconds debounce
+    setSyncTimeoutId(id);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutId) clearTimeout(syncTimeoutId);
+    };
+  }, [syncTimeoutId]);
+
+  // Central change listener for all DB operations
+  useEffect(() => {
+    if (!token) return;
+    db.onChange(() => {
+      triggerDebouncedSync();
+    });
+  }, [token]);
+
+  // Sync on Reconnection or App Focus
+  useEffect(() => {
+    if (!token) return;
+
+    const handleOnline = () => {
+      console.log("Network online event triggered. Initiating sync...");
+      triggerSync();
+    };
+
+    const handleFocus = () => {
+      console.log("App gained focus. Initiating sync...");
+      triggerSync();
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('focus', handleFocus);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('focus', handleFocus);
+      }
+    };
+  }, [token]);
 
   // Theme Toggle
   const toggleTheme = () => {
@@ -850,32 +912,8 @@ export function useFitNotesController() {
       localStorage.setItem('fn_token', data.token);
       localStorage.setItem('fn_user_email', data.user.email);
 
-      // Invalidate cache: remove local guest data and sync timestamp so we pull fresh data from Postgres
-      localStorage.removeItem('fn_last_sync_timestamp');
-      const keysToClear = [
-        'fn_categories',
-        'fn_exercises',
-        'fn_training_logs',
-        'fn_body_weights',
-        'fn_plates',
-        'fn_barbells',
-        'fn_workout_comments',
-        'fn_workout_groups',
-        'fn_workout_group_exercises',
-        'fn_routines',
-        'fn_routine_sections',
-        'fn_routine_section_exercises',
-        'fn_routine_section_exercise_sets',
-        'fn_goals',
-        'fn_measurements',
-        'fn_measurement_records',
-        'fn_exercise_comments',
-        'fn_workout_times',
-        'fn_custom_units',
-        'fn_graph_favourites',
-        'fn_settings'
-      ];
-      keysToClear.forEach(key => localStorage.removeItem(key));
+      // Invalidate cache: prune previously synced data while preserving local guest offline modifications
+      await db.invalidateCache(true);
 
       setAuthEmail('');
       setAuthPassword('');
@@ -905,6 +943,7 @@ export function useFitNotesController() {
     localStorage.removeItem('fn_token');
     localStorage.removeItem('fn_user_email');
     localStorage.removeItem('fn_last_sync_timestamp');
+    db.invalidateCache(false).catch(e => console.warn("Failed to clear database on logout:", e));
   };
 
   // Synchronize
@@ -2462,6 +2501,7 @@ export function useFitNotesController() {
     editingRoutine, setEditingRoutine, editorSections, setEditorSections, editorSectionExercises, setEditorSectionExercises,
     editorExerciseSets, setEditorExerciseSets, userUnit, setUserUnit, token, setToken, userEmail, setUserEmail,
     authEmail, setAuthEmail, authPassword, setAuthPassword, authError, setAuthError, syncStatus, setSyncStatus,
+    lastSyncTime, setLastSyncTime,
     importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
     currentLogs, setCurrentLogs, bodyWeights, setBodyWeights, workoutComment, setWorkoutComment, routines, setRoutines,
     showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,

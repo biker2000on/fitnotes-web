@@ -22,7 +22,7 @@ import { typeHasWeight } from './lib/units';
 import { getLocalDateString, addDays } from './lib/date';
 import { useState, useEffect } from 'react';
 import { db } from './storage/db';
-import { FitNotesProvider, useFitNotesController } from './store/FitNotesStore';
+import { FitNotesProvider, useFitNotesController, useFitNotesStore } from './store/FitNotesStore';
 import { BodyView } from './views/BodyView';
 import { AnalysisView } from './views/AnalysisView';
 import { GoalsView } from './views/GoalsView';
@@ -46,6 +46,109 @@ import { CopyWorkoutDrawer } from './components/CopyWorkoutDrawer';
 import { BulkActionsDock } from './components/BulkActionsDock';
 import { RoutinesPopulatorModal } from './components/RoutinesPopulatorModal';
 
+const formatRelativeTime = (timestamp: string): string => {
+  if (!timestamp) return 'Never';
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) return 'Never';
+  
+  const diffMs = Date.now() - parsed;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 10) return 'Just now';
+  if (diffSec < 60) return `${diffSec}s ago`;
+  
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h ago`;
+  
+  return new Date(parsed).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+function SyncStatusIndicator() {
+  const { token, syncStatus, lastSyncTime, triggerSync } = useFitNotesStore();
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    const interval = setInterval(() => {
+      setTick(t => t + 1);
+    }, 10000); // refresh every 10s
+    return () => clearInterval(interval);
+  }, [token]);
+
+  if (!token) return null;
+
+  let statusText = 'Auto-Sync Active';
+  let statusColor = 'var(--primary)';
+  let isSpinning = false;
+
+  if (syncStatus === 'syncing') {
+    statusText = 'Syncing...';
+    statusColor = 'var(--text-secondary-dark)';
+    isSpinning = true;
+  } else if (syncStatus === 'success') {
+    statusText = 'Sync Successful';
+    statusColor = '#22c55e'; // Green
+  } else if (syncStatus === 'error') {
+    statusText = 'Sync Failed / Offline';
+    statusColor = '#ef4444'; // Red
+  }
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      padding: '6px 14px 6px 10px',
+      borderRadius: '20px',
+      backgroundColor: 'rgba(255, 255, 255, 0.03)',
+      border: '1px solid var(--border-dark)',
+      fontSize: '12px',
+      height: '38px',
+    }} className="sync-indicator-container">
+      <button 
+        className={`btn-sync-spin ${isSpinning ? 'spin-animation' : ''}`}
+        onClick={triggerSync}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: statusColor,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '4px',
+          borderRadius: '50%',
+          transition: 'all 0.2s',
+        }}
+        title="Sync Now"
+      >
+        <RefreshCw size={14} className={isSpinning ? 'spin-animation' : ''} />
+      </button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', userSelect: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+          <span style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: statusColor,
+            display: 'inline-block'
+          }}></span>
+          <span style={{ color: 'var(--text-primary-dark)' }} className="sync-status-text">{statusText}</span>
+        </div>
+        <span style={{ color: 'var(--text-secondary-dark)', fontSize: '10px' }} className="sync-time-text">
+          Last sync: {formatRelativeTime(lastSyncTime)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const store = useFitNotesController();
@@ -63,7 +166,7 @@ export default function App() {
 
   const {
     activeTab, setActiveTab, sidebarOpen, setSidebarOpen, userUnit, handleUnitChange,
-    token, userEmail, handleLogout, toggleTheme, triggerSync, syncStatus, selectedDate, setSelectedDate,
+    token, userEmail, handleLogout, toggleTheme, selectedDate, setSelectedDate,
     exercises, categories, routines, allLogs, currentLogs,
     editingRoutine, setSelectedExercise, showPlateCalc, setShowPlateCalc, setShowCommandPalette, setShowRoutineImportModal,
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
@@ -276,11 +379,7 @@ export default function App() {
                 setSelectedDate(getLocalDateString());
               }}>Today</button>
             </div>
-            {token && (
-              <button className={`btn btn-primary ${syncStatus === 'syncing' ? 'loading' : ''}`} onClick={triggerSync}>
-                <RefreshCw size={16} /> Sync
-              </button>
-            )}
+            <SyncStatusIndicator />
           </div>
         </header>
 

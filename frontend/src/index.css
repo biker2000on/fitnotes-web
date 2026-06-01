@@ -676,3 +676,52 @@ body.light-theme .modal-content {
   .cols-2,
   .cols-side { grid-template-columns: 1fr; }
 }
+
+/* Sync Widget Dynamic Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin-animation {
+  animation: spin 1.2s linear infinite;
+}
+
+.sync-indicator-container {
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.sync-indicator-container:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+body.light-theme .sync-indicator-container {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+  border-color: var(--border-light) !important;
+}
+
+body.light-theme .sync-indicator-container:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+body.light-theme .sync-status-text {
+  color: var(--text-primary-light) !important;
+}
+
+body.light-theme .sync-time-text {
+  color: var(--text-secondary-light) !important;
+}
+
+.btn-sync-spin:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+body.light-theme .btn-sync-spin:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}

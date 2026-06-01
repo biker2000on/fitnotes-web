@@ -5,6 +5,8 @@ export interface DBDriver {
   query<T>(sql: string, params?: any[]): Promise<T[]>;
   execute(sql: string, params?: any[]): Promise<void>;
   sync(apiToken: string, apiBaseUrl: string): Promise<void>;
+  invalidateCache(preserveDirty: boolean): Promise<void>;
+  onChange(listener: () => void): void;
 }
 
 // Check if running inside Tauri WebView
@@ -86,6 +88,18 @@ const normalizeForSync = (item: any, uuidFields: string[] = []) => {
 
 // In-Memory/LocalStorage Local Database Driver for Browser Mode
 class BrowserLocalDriver implements DBDriver {
+  private changeListeners: (() => void)[] = [];
+
+  onChange(listener: () => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyListeners(): void {
+    this.changeListeners.forEach(l => {
+      try { l(); } catch (e) { console.error(e); }
+    });
+  }
+
   private getStore(table: string): any[] {
     const data = localStorage.getItem(`fn_${table}`);
     return data ? JSON.parse(data) : [];
@@ -384,6 +398,8 @@ class BrowserLocalDriver implements DBDriver {
       const merged = { ...current, ...params[0], is_dirty: 1, last_modified: new Date().toISOString() };
       localStorage.setItem('fn_settings', JSON.stringify(merged));
     }
+
+    this.notifyListeners();
   }
 
   // Frontend synchronization implementation when operating directly in browser mode
@@ -515,10 +531,75 @@ class BrowserLocalDriver implements DBDriver {
       throw e;
     }
   }
+
+  async invalidateCache(preserveDirty: boolean): Promise<void> {
+    localStorage.removeItem('fn_last_sync_timestamp');
+    const tables = [
+      'categories',
+      'exercises',
+      'training_logs',
+      'body_weights',
+      'plates',
+      'barbells',
+      'workout_comments',
+      'workout_groups',
+      'workout_group_exercises',
+      'routines',
+      'routine_sections',
+      'routine_section_exercises',
+      'routine_section_exercise_sets',
+      'goals',
+      'measurements',
+      'measurement_records',
+      'exercise_comments',
+      'workout_times',
+      'custom_units',
+      'graph_favourites'
+    ];
+
+    tables.forEach(table => {
+      const key = `fn_${table}`;
+      if (preserveDirty) {
+        const store = this.getStore(table);
+        const dirty = store.filter(x => x.is_dirty === 1);
+        localStorage.setItem(key, JSON.stringify(dirty));
+      } else {
+        localStorage.removeItem(key);
+      }
+    });
+
+    if (!preserveDirty) {
+      localStorage.removeItem('fn_settings');
+    } else {
+      const raw = localStorage.getItem('fn_settings');
+      if (raw) {
+        try {
+          const settingsObj = JSON.parse(raw);
+          if (settingsObj.is_dirty !== 1) {
+            localStorage.removeItem('fn_settings');
+          }
+        } catch {
+          localStorage.removeItem('fn_settings');
+        }
+      }
+    }
+  }
 }
 
 // Tauri native sqlite driver implementation that makes IPC calls to Rust side
 class TauriNativeDriver implements DBDriver {
+  private changeListeners: (() => void)[] = [];
+
+  onChange(listener: () => void): void {
+    this.changeListeners.push(listener);
+  }
+
+  private notifyListeners(): void {
+    this.changeListeners.forEach(l => {
+      try { l(); } catch (e) { console.error(e); }
+    });
+  }
+
   async query<T>(sql: string, params: any[] = []): Promise<T[]> {
     // @ts-ignore
     const tauriModule = '@tauri' + '-apps/api/core';
@@ -531,6 +612,7 @@ class TauriNativeDriver implements DBDriver {
     const tauriModule = '@tauri' + '-apps/api/core';
     const { invoke } = await import(/* @vite-ignore */ tauriModule);
     await (invoke as any)('tauri_execute', { sql, params });
+    this.notifyListeners();
   }
 
   async sync(apiToken: string, apiBaseUrl: string): Promise<void> {
@@ -538,6 +620,13 @@ class TauriNativeDriver implements DBDriver {
     const tauriModule = '@tauri' + '-apps/api/core';
     const { invoke } = await import(/* @vite-ignore */ tauriModule);
     await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
+  }
+
+  async invalidateCache(preserveDirty: boolean): Promise<void> {
+    // @ts-ignore
+    const tauriModule = '@tauri' + '-apps/api/core';
+    const { invoke } = await import(/* @vite-ignore */ tauriModule);
+    await (invoke as any)('tauri_invalidate_cache', { preserveDirty });
   }
 }
 

@@ -1,4 +1,4 @@
-﻿// lib.rs - Tauri v2 app library: commands + run(). main.rs is a thin entry point.
+// lib.rs - Tauri v2 app library: commands + run(). main.rs is a thin entry point.
 
 use std::fs;
 use std::sync::Mutex;
@@ -399,6 +399,60 @@ async fn tauri_sync(
     Ok(())
 }
 
+#[tauri::command]
+async fn tauri_invalidate_cache(
+    preserve_dirty: bool,
+    db_state: State<'_, DbConnection>,
+) -> std::result::Result<(), String> {
+    let mut conn = db_state.0.lock().unwrap();
+    let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    let tables = [
+        "categories",
+        "exercises",
+        "routines",
+        "routine_sections",
+        "routine_section_exercises",
+        "routine_section_exercise_sets",
+        "training_logs",
+        "body_weights",
+        "plates",
+        "barbells",
+        "workout_comments",
+        "workout_groups",
+        "workout_group_exercises",
+        "goals",
+        "measurements",
+        "measurement_records",
+        "exercise_comments",
+        "workout_times",
+        "custom_units",
+        "graph_favourites",
+    ];
+
+    for table in &tables {
+        if preserve_dirty {
+            tx.execute(
+                &format!("DELETE FROM {} WHERE is_dirty != 1", table),
+                [],
+            )
+            .map_err(|e| e.to_string())?;
+        } else {
+            tx.execute(&format!("DELETE FROM {}", table), [])
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    tx.execute(
+        "DELETE FROM settings WHERE key = 'last_sync_timestamp'",
+        [],
+    )
+    .map_err(|e| e.to_string())?;
+
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -649,7 +703,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             tauri_query,
             tauri_execute,
-            tauri_sync
+            tauri_sync,
+            tauri_invalidate_cache
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
