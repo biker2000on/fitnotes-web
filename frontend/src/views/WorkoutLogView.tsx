@@ -21,7 +21,6 @@ export function WorkoutLogView() {
     setSelectedExIdsForSuperset, setShowSupersetManagerModal,
     workoutGroups, groupExercises, exercises, categories, selectedDate, handleClearGroup,
     workoutComment, setWorkoutComment, handleSaveComment,
-    plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     settings, logComment, setLogComment, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
@@ -30,7 +29,7 @@ export function WorkoutLogView() {
 
   return (
     <div className="workout-grid">
-      {/* Middle: Active set Logger */}
+      {/* Left: Active set Logger & comments */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         {selectedExercise ? (
           <div className="card" style={{ gap: '20px' }}>
@@ -232,358 +231,6 @@ export function WorkoutLogView() {
           </div>
         )}
 
-        {/* TODAY'S WORKOUT SUMMARY PANEL */}
-        <div className="card" style={{ gap: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Layers size={18} color="var(--primary)" />
-              <span>Today's Workout Summary</span>
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {currentLogs.length > 0 && (
-                <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete}>
-                  ✓ Complete All Sets
-                </button>
-              )}
-              <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
-                <Bookmark size={14} /> Copy Workout
-              </button>
-              {currentLogs.length > 0 && (
-                <>
-                  <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={shareWorkout}>
-                    <Share2 size={14} /> Share
-                  </button>
-                  <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }} onClick={handleClearDay}>
-                    <Trash2 size={14} /> Clear Day
-                  </button>
-                </>
-              )}
-              {currentLogs.length > 0 && (
-                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
-                  setSelectedExIdsForSuperset([]);
-                  setShowSupersetManagerModal(true);
-                }}>
-                  <Plus size={14} /> Link Superset Group
-                </button>
-              )}
-            </div>
-          </div>
-
-          {currentLogs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', margin: 0 }}>
-                No sets logged for today yet. Use the logger above or copy a past session.
-              </p>
-              <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 16px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
-                <Bookmark size={14} color="var(--primary)" /> Copy Past Workout
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {(() => {
-                // 1. Identify superset groups active today
-                const activeGroups = workoutGroups.filter(wg => wg.date === selectedDate && !wg.is_deleted);
-                
-                // Group exercise IDs that are part of today's supersets
-                const groupExerciseIds = new Set<string>();
-                const groupMap: Record<string, typeof activeGroups[0]> = {}; // exerciseId -> group
-                
-                for (const wg of activeGroups) {
-                  const linked = groupExercises.filter(ge => ge.workout_group_id === wg.id && ge.date === selectedDate && !ge.is_deleted);
-                  for (const ge of linked) {
-                    groupExerciseIds.add(ge.exercise_id);
-                    groupMap[ge.exercise_id] = wg;
-                  }
-                }
-
-                // 2. All exercise IDs with sets logged today
-                const loggedExerciseIds = Array.from(new Set(currentLogs.map(l => l.exercise_id)));
-
-                // Create a list of workout items
-                const items: Array<
-                  | { type: 'superset'; group: typeof activeGroups[0]; exerciseIds: string[]; sortIndex: number }
-                  | { type: 'exercise'; exerciseId: string; sortIndex: number }
-                > = [];
-
-                // Tracks which superset groups we have already added to the items list
-                const addedGroupIds = new Set<string>();
-
-                for (const exId of loggedExerciseIds) {
-                  const parentGroup = groupMap[exId];
-                  if (parentGroup) {
-                    if (!addedGroupIds.has(parentGroup.id)) {
-                      addedGroupIds.add(parentGroup.id);
-                      
-                      // Get all exercises linked to this group
-                      const linked = groupExercises
-                        .filter(ge => ge.workout_group_id === parentGroup.id && ge.date === selectedDate && !ge.is_deleted)
-                        .map(ge => ge.exercise_id);
-                        
-                      // Find the minimum index of any set in currentLogs belonging to any of these exercises
-                      let sortIndex = Infinity;
-                      for (const linkedId of linked) {
-                        const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === linkedId);
-                        if (firstSetIndex !== -1 && firstSetIndex < sortIndex) {
-                          sortIndex = firstSetIndex;
-                        }
-                      }
-                      
-                      // If no sets are logged yet, fall back to a high number
-                      if (sortIndex === Infinity) sortIndex = 999999;
-
-                      items.push({
-                        type: 'superset',
-                        group: parentGroup,
-                        exerciseIds: linked,
-                        sortIndex
-                      });
-                    }
-                  } else {
-                    // Individual normal exercise
-                    const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === exId);
-                    items.push({
-                      type: 'exercise',
-                      exerciseId: exId,
-                      sortIndex: firstSetIndex !== -1 ? firstSetIndex : 999999
-                    });
-                  }
-                }
-
-                // Sort ascending by sortIndex
-                const sortedItems = items.sort((a, b) => a.sortIndex - b.sortIndex);
-
-                return sortedItems.map((item) => {
-                  if (item.type === 'superset') {
-                    const wg = item.group;
-                    const color = intColorToHex(wg.colour);
-                    
-                    // Sort exercises inside the superset chronologically based on their first logged set
-                    const sortedExIds = [...item.exerciseIds].sort((a, b) => {
-                      const idxA = currentLogs.findIndex(l => l.exercise_id === a);
-                      const idxB = currentLogs.findIndex(l => l.exercise_id === b);
-                      return (idxA !== -1 ? idxA : 9999) - (idxB !== -1 ? idxB : 9999);
-                    });
-
-                    return (
-                      <div key={wg.id} className="superset-container-panel" style={{ borderLeft: `6px solid ${color}`, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255, 255, 255, 0.01)', borderRadius: '0 12px 12px 0', border: '1px solid var(--border-dark)', borderLeftWidth: '6px', padding: '12px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{wg.name || 'Superset Group'}</span>
-                            {wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
-                          </div>
-                          <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }} onClick={() => handleClearGroup(wg.id)}>
-                            Unlink
-                          </button>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          {sortedExIds.map(exId => {
-                            const ex = exercises.find(x => x.id === exId);
-                            if (!ex) return null;
-                            const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
-                            const cat = categories.find(c => c.id === ex.category_id);
-                            const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
-                            const hasUncompleted = exLogs.some(l => !l.is_complete);
-
-                            return (
-                              <div key={exId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <div style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
-                                    {ex.name}
-                                  </div>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    {exLogs.length > 0 && hasUncompleted && (
-                                      <button 
-                                        className="btn btn-secondary" 
-                                        style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
-                                        onClick={() => handleMarkExerciseComplete(ex.id)}
-                                      >
-                                        ✓ Complete All
-                                      </button>
-                                    )}
-                                    <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                                      {cat?.name || 'Misc'}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                  {exLogs.length === 0 ? (
-                                    <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontStyle: 'italic' }}>No sets logged</span>
-                                  ) : (
-                                    exLogs.map((log, index) => (
-                                      <div 
-                                        key={log.id} 
-                                        onClick={() => handleSelectLogForEdit(log)} 
-                                        style={{ 
-                                          display: 'flex', 
-                                          alignItems: 'center', 
-                                          justifyContent: 'space-between', 
-                                          padding: '8px 12px', 
-                                          borderRadius: '8px', 
-                                          fontSize: '13px', 
-                                          backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
-                                          border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
-                                          cursor: 'pointer',
-                                          transition: 'all 0.15s ease'
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <span style={{ 
-                                            fontSize: '10px', 
-                                            fontWeight: 800, 
-                                            background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
-                                            color: 'var(--text-main-dark)', 
-                                            padding: '2px 6px', 
-                                            borderRadius: '4px',
-                                            minWidth: '20px',
-                                            textAlign: 'center'
-                                          }}>
-                                            {index + 1}
-                                          </span>
-                                          <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
-                                            {formatLogValue(log, ex.exercise_type_id)}
-                                          </span>
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                          <div 
-                                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleToggleComplete(log);
-                                            }}
-                                            title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
-                                          >
-                                            {log.is_complete ? (
-                                              <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                            ) : (
-                                              <span style={{ opacity: 0.2 }}>○</span>
-                                            )}
-                                          </div>
-                                          <button 
-                                            className="btn btn-secondary" 
-                                            style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleDeleteSet(log.id);
-                                            }}
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    const ex = exercises.find(x => x.id === item.exerciseId);
-                    if (!ex) return null;
-                    const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
-                    const cat = categories.find(c => c.id === ex.category_id);
-                    const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
-                    const hasUncompleted = exLogs.some(l => !l.is_complete);
-
-                    return (
-                      <div key={ex.id} className="summary-exercise-card" style={{ padding: '16px', border: '1px solid var(--border-dark)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.005)', borderLeft: `4px solid ${catColor}` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ fontWeight: 700, fontSize: '15px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
-                            {ex.name}
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {exLogs.length > 0 && hasUncompleted && (
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
-                                onClick={() => handleMarkExerciseComplete(ex.id)}
-                              >
-                                ✓ Complete All
-                              </button>
-                            )}
-                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                              {cat?.name || 'Misc'}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          {exLogs.map((log, index) => (
-                            <div 
-                              key={log.id} 
-                              onClick={() => handleSelectLogForEdit(log)} 
-                              style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'space-between', 
-                                padding: '8px 12px', 
-                                borderRadius: '8px', 
-                                fontSize: '13px', 
-                                backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
-                                border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ 
-                                  fontSize: '10px', 
-                                  fontWeight: 800, 
-                                  background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
-                                  color: 'var(--text-main-dark)', 
-                                  padding: '2px 6px', 
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>
-                                  {index + 1}
-                                </span>
-                                <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
-                                  {formatLogValue(log, ex.exercise_type_id)}
-                                </span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div 
-                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleComplete(log);
-                                  }}
-                                  title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
-                                >
-                                  {log.is_complete ? (
-                                    <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                  ) : (
-                                    <span style={{ opacity: 0.2 }}>○</span>
-                                  )}
-                                </div>
-                                <button 
-                                  className="btn btn-secondary" 
-                                  style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteSet(log.id);
-                                  }}
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  }
-                });
-              })()}
-            </div>
-          )}
-        </div>
-
         {/* Workout comments */}
         <div className="card">
           <div className="card-title"><FileText size={16} /> Workout Comments</div>
@@ -599,52 +246,359 @@ export function WorkoutLogView() {
         </div>
       </div>
 
-      {/* Right: Plate loading visualizer side panel */}
-      <div className="card" style={{ gap: '20px' }}>
-        <div className="card-title"><Calculator size={16} /> Plate Loading Visual</div>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>See color-coded plates loaded onto a standard {userUnit === 'kg' ? '20kg' : '45lbs'} barbell sleeve:</p>
-
-        <div style={{ display: 'flex', gap: '12px' }}>
-          <input
-            type="number"
-            value={plateCalcTarget}
-            onChange={(e) => setPlateCalcTarget(parseFloat(e.target.value) || 0)}
-            placeholder="Target Weight"
-          />
-        </div>
-
-        {/* Premium Barbell Draw */}
-        <div className="barbell-preview">
-          <div className="barbell-shaft">
-            <div className="barbell-sleeve right">
-              {calculatedPlates.flatMap(p =>
-                Array.from({ length: p.count }).map((_, i) => (
-                  <div
-                    key={`${p.weight}-${i}`}
-                    className="loaded-plate"
-                    style={{
-                      width: `${p.weight * (userUnit === 'kg' ? 3.5 : 1.6)}px`,
-                      height: `${80 - ((userUnit === 'kg' ? 20 : 45) - p.weight) * (userUnit === 'kg' ? 2 : 0.9)}%`,
-                      backgroundColor: p.color,
-                    }}
-                  />
-                ))
-              )}
-            </div>
+      {/* Right: Today's Workout Summary side panel */}
+      <div className="card" style={{ gap: '16px', height: 'fit-content' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Layers size={18} color="var(--primary)" />
+            <span>Today's Workout Summary</span>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {currentLogs.length > 0 && (
+              <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete}>
+                ✓ Complete All
+              </button>
+            )}
+            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
+              <Bookmark size={14} /> Copy
+            </button>
+            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowPlateCalc(true)}>
+              <Calculator size={14} /> Plate Calc
+            </button>
+            {currentLogs.length > 0 && (
+              <>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={shareWorkout}>
+                  <Share2 size={14} /> Share
+                </button>
+                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }} onClick={handleClearDay}>
+                  <Trash2 size={14} /> Clear
+                </button>
+              </>
+            )}
+            {currentLogs.length > 0 && (
+              <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
+                setSelectedExIdsForSuperset([]);
+                setShowSupersetManagerModal(true);
+              }}>
+                <Plus size={14} /> Link Superset
+              </button>
+            )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {calculatedPlates.map(p => (
-            <div key={p.weight} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: p.color }}></div>
-                <span>{p.weight} {userUnit} Plate</span>
-              </div>
-              <span style={{ fontWeight: 700 }}>x{p.count * 2} <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400 }}>( {p.count} each side )</span></span>
-            </div>
-          ))}
-        </div>
+        {currentLogs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+            <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', margin: 0 }}>
+              No sets logged for today yet. Use the logger or copy a past session.
+            </p>
+            <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 16px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
+              <Bookmark size={14} color="var(--primary)" /> Copy Past Workout
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {(() => {
+              // 1. Identify superset groups active today
+              const activeGroups = workoutGroups.filter(wg => wg.date === selectedDate && !wg.is_deleted);
+              
+              // Group exercise IDs that are part of today's supersets
+              const groupExerciseIds = new Set<string>();
+              const groupMap: Record<string, typeof activeGroups[0]> = {}; // exerciseId -> group
+              
+              for (const wg of activeGroups) {
+                const linked = groupExercises.filter(ge => ge.workout_group_id === wg.id && ge.date === selectedDate && !ge.is_deleted);
+                for (const ge of linked) {
+                  groupExerciseIds.add(ge.exercise_id);
+                  groupMap[ge.exercise_id] = wg;
+                }
+              }
+
+              // 2. All exercise IDs with sets logged today
+              const loggedExerciseIds = Array.from(new Set(currentLogs.map(l => l.exercise_id)));
+
+              // Create a list of workout items
+              const items: Array<
+                | { type: 'superset'; group: typeof activeGroups[0]; exerciseIds: string[]; sortIndex: number }
+                | { type: 'exercise'; exerciseId: string; sortIndex: number }
+              > = [];
+
+              // Tracks which superset groups we have already added to the items list
+              const addedGroupIds = new Set<string>();
+
+              for (const exId of loggedExerciseIds) {
+                const parentGroup = groupMap[exId];
+                if (parentGroup) {
+                  if (!addedGroupIds.has(parentGroup.id)) {
+                    addedGroupIds.add(parentGroup.id);
+                    
+                    // Get all exercises linked to this group
+                    const linked = groupExercises
+                      .filter(ge => ge.workout_group_id === parentGroup.id && ge.date === selectedDate && !ge.is_deleted)
+                      .map(ge => ge.exercise_id);
+                      
+                    // Find the minimum index of any set in currentLogs belonging to any of these exercises
+                    let sortIndex = Infinity;
+                    for (const linkedId of linked) {
+                      const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === linkedId);
+                      if (firstSetIndex !== -1 && firstSetIndex < sortIndex) {
+                        sortIndex = firstSetIndex;
+                      }
+                    }
+                    
+                    // If no sets are logged yet, fall back to a high number
+                    if (sortIndex === Infinity) sortIndex = 999999;
+
+                    items.push({
+                      type: 'superset',
+                      group: parentGroup,
+                      exerciseIds: linked,
+                      sortIndex
+                    });
+                  }
+                } else {
+                  // Individual normal exercise
+                  const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === exId);
+                  items.push({
+                    type: 'exercise',
+                    exerciseId: exId,
+                    sortIndex: firstSetIndex !== -1 ? firstSetIndex : 999999
+                  });
+                }
+              }
+
+              // Sort ascending by sortIndex
+              const sortedItems = items.sort((a, b) => a.sortIndex - b.sortIndex);
+
+              return sortedItems.map((item) => {
+                if (item.type === 'superset') {
+                  const wg = item.group;
+                  const color = intColorToHex(wg.colour);
+                  
+                  // Sort exercises inside the superset chronologically based on their first logged set
+                  const sortedExIds = [...item.exerciseIds].sort((a, b) => {
+                    const idxA = currentLogs.findIndex(l => l.exercise_id === a);
+                    const idxB = currentLogs.findIndex(l => l.exercise_id === b);
+                    return (idxA !== -1 ? idxA : 9999) - (idxB !== -1 ? idxB : 9999);
+                  });
+
+                  return (
+                    <div key={wg.id} className="superset-container-panel" style={{ borderLeft: `6px solid ${color}`, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255, 255, 255, 0.01)', borderRadius: '0 12px 12px 0', border: '1px solid var(--border-dark)', borderLeftWidth: '6px', padding: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{wg.name || 'Superset Group'}</span>
+                          {wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
+                        </div>
+                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }} onClick={() => handleClearGroup(wg.id)}>
+                          Unlink
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {sortedExIds.map(exId => {
+                          const ex = exercises.find(x => x.id === exId);
+                          if (!ex) return null;
+                          const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
+                          const cat = categories.find(c => c.id === ex.category_id);
+                          const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
+                          const hasUncompleted = exLogs.some(l => !l.is_complete);
+
+                          return (
+                            <div key={exId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
+                                  {ex.name}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  {exLogs.length > 0 && hasUncompleted && (
+                                    <button 
+                                      className="btn btn-secondary" 
+                                      style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
+                                      onClick={() => handleMarkExerciseComplete(ex.id)}
+                                    >
+                                      ✓ Complete All
+                                    </button>
+                                  )}
+                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
+                                    {cat?.name || 'Misc'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                {exLogs.length === 0 ? (
+                                  <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontStyle: 'italic' }}>No sets logged</span>
+                                ) : (
+                                  exLogs.map((log, index) => (
+                                    <div 
+                                      key={log.id} 
+                                      onClick={() => handleSelectLogForEdit(log)} 
+                                      style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'space-between', 
+                                        padding: '8px 12px', 
+                                        borderRadius: '8px', 
+                                        fontSize: '13px', 
+                                        backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
+                                        border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
+                                        cursor: 'pointer',
+                                        transition: 'all 0.15s ease'
+                                      }}
+                                    >
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span style={{ 
+                                          fontSize: '10px', 
+                                          fontWeight: 800, 
+                                          background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
+                                          color: 'var(--text-main-dark)', 
+                                          padding: '2px 6px', 
+                                          borderRadius: '4px',
+                                          minWidth: '20px',
+                                          textAlign: 'center'
+                                        }}>
+                                          {index + 1}
+                                        </span>
+                                        <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
+                                          {formatLogValue(log, ex.exercise_type_id)}
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div 
+                                          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleComplete(log);
+                                          }}
+                                          title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                                        >
+                                          {log.is_complete ? (
+                                            <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
+                                          ) : (
+                                            <span style={{ opacity: 0.2 }}>○</span>
+                                          )}
+                                        </div>
+                                        <button 
+                                          className="btn btn-secondary" 
+                                          style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteSet(log.id);
+                                          }}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                } else {
+                  const ex = exercises.find(x => x.id === item.exerciseId);
+                  if (!ex) return null;
+                  const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
+                  const cat = categories.find(c => c.id === ex.category_id);
+                  const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
+                  const hasUncompleted = exLogs.some(l => !l.is_complete);
+
+                  return (
+                    <div key={ex.id} className="summary-exercise-card" style={{ padding: '16px', border: '1px solid var(--border-dark)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.005)', borderLeft: `4px solid ${catColor}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ fontWeight: 700, fontSize: '15px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
+                          {ex.name}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {exLogs.length > 0 && hasUncompleted && (
+                            <button 
+                              className="btn btn-secondary" 
+                              style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
+                              onClick={() => handleMarkExerciseComplete(ex.id)}
+                            >
+                              ✓ Complete All
+                            </button>
+                          )}
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
+                            {cat?.name || 'Misc'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {exLogs.map((log, index) => (
+                          <div 
+                            key={log.id} 
+                            onClick={() => handleSelectLogForEdit(log)} 
+                            style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              justifyContent: 'space-between', 
+                              padding: '8px 12px', 
+                              borderRadius: '8px', 
+                              fontSize: '13px', 
+                              backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
+                              border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
+                                color: 'var(--text-main-dark)', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px',
+                                minWidth: '20px',
+                                textAlign: 'center'
+                              }}>
+                                {index + 1}
+                              </span>
+                              <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
+                                {formatLogValue(log, ex.exercise_type_id)}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div 
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleComplete(log);
+                                }}
+                                title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                              >
+                                {log.is_complete ? (
+                                  <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
+                                ) : (
+                                  <span style={{ opacity: 0.2 }}>○</span>
+                                )}
+                              </div>
+                              <button 
+                                className="btn btn-secondary" 
+                                style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSet(log.id);
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
+              });
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );

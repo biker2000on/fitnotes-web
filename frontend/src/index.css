@@ -280,7 +280,7 @@ body.light-theme .title-section p {
 /* Workout Logging Screen Grid */
 .workout-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 1fr;
   gap: 24px;
   align-items: start;
 }

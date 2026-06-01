@@ -46,6 +46,27 @@ export const PlateCalculatorModal: React.FC<PlateCalculatorModalProps> = ({
           style={{ fontSize: '18px', fontWeight: 700 }}
         />
 
+        {/* Premium Barbell Draw */}
+        <div className="barbell-preview" style={{ marginTop: '8px', marginBottom: '8px' }}>
+          <div className="barbell-shaft">
+            <div className="barbell-sleeve right">
+              {calculatedPlates.flatMap(p =>
+                Array.from({ length: p.count }).map((_, i) => (
+                  <div
+                    key={`${p.weight}-${i}`}
+                    className="loaded-plate"
+                    style={{
+                      width: `${p.weight * (userUnit === 'kg' ? 3.5 : 1.6)}px`,
+                      height: `${80 - ((userUnit === 'kg' ? 20 : 45) - p.weight) * (userUnit === 'kg' ? 2 : 0.9)}%`,
+                      backgroundColor: p.color,
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '8px' }}>
           {calculatedPlates.length === 0 ? (
             <p style={{ textAlign: 'center', padding: '16px', color: 'var(--text-secondary-dark)', fontSize: '13px' }}>
