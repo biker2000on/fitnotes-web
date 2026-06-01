@@ -1,5 +1,6 @@
 // SyncView.tsx - Account login, cloud sync, and FitNotes backup import/export.
-import { RefreshCw, Upload, Download } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { RefreshCw, Upload, Download, Globe } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 
 export function SyncView() {
@@ -7,10 +8,73 @@ export function SyncView() {
     token, userEmail, syncStatus, triggerSync,
     importStatus, handleBackupUpload, exporting, handleBackupDownload,
     authError, authEmail, setAuthEmail, authPassword, setAuthPassword, handleAuth, handleCsvDownload,
+    customApiUrl, updateCustomApiUrl, getApiBaseUrl,
   } = useFitNotesStore();
+
+  const [apiUrlInput, setApiUrlInput] = useState(customApiUrl);
+
+  useEffect(() => {
+    setApiUrlInput(customApiUrl);
+  }, [customApiUrl]);
 
   return (
     <div style={{ maxWidth: '480px', margin: '40px auto 0 auto', width: '100%' }}>
+      {/* API Server Endpoint Override Widget */}
+      <div className="card" style={{ gap: '16px', padding: '24px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+            <Globe size={18} />
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>API Server Endpoint</h3>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', margin: '2px 0 0 0' }}>
+              Override default API URL for mobile or network debugging.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              placeholder="e.g. http://192.168.1.50:8080"
+              value={apiUrlInput}
+              onChange={(e) => setApiUrlInput(e.target.value)}
+              style={{ flex: 1, height: '38px', fontSize: '13px' }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                updateCustomApiUrl(apiUrlInput);
+              }}
+              style={{ padding: '0 16px', height: '38px', fontSize: '13px' }}
+            >
+              Save
+            </button>
+            {customApiUrl && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  updateCustomApiUrl('');
+                  setApiUrlInput('');
+                }}
+                style={{ padding: '0 12px', height: '38px', fontSize: '13px' }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <span style={{ color: 'var(--text-secondary-dark)' }}>Active Target API:</span>
+            <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{getApiBaseUrl()}</code>
+          </div>
+
+          <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', textAlign: 'left', lineHeight: '1.4', borderLeft: '2px solid var(--primary)', paddingLeft: '8px' }}>
+            <strong>Note for Mobile (Android):</strong> <code>localhost</code> points to the phone. To sync with a local server, use your PC's Wi-Fi IP (e.g. <code>http://192.168.1.XX:8080</code>). Ensure the Go server is bound to <code>0.0.0.0</code>.
+          </div>
+        </div>
+      </div>
       {token ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="card" style={{ gap: '24px', padding: '32px', textAlign: 'center' }}>

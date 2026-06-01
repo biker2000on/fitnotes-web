@@ -19,6 +19,10 @@ import type {
 } from '../types';
 
 const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('fn_api_base_url');
+    if (custom) return custom;
+  }
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured) return configured;
 
@@ -137,6 +141,18 @@ export function useFitNotesController() {
   // Auth state
   const [token, setToken] = useState<string>(localStorage.getItem('fn_token') || '');
   const [userEmail, setUserEmail] = useState<string>(localStorage.getItem('fn_user_email') || '');
+  const [customApiUrl, setCustomApiUrl] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' ? localStorage.getItem('fn_api_base_url') : '') || '';
+  });
+  const updateCustomApiUrl = (url: string) => {
+    const trimmed = url.trim();
+    setCustomApiUrl(trimmed);
+    if (trimmed) {
+      localStorage.setItem('fn_api_base_url', trimmed);
+    } else {
+      localStorage.removeItem('fn_api_base_url');
+    }
+  };
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -947,10 +963,12 @@ export function useFitNotesController() {
         .catch(e => {
           console.error("Post-login sync failed:", e);
           setSyncStatus('error');
+          triggerToast('Post-login sync failed: ' + (e?.message || String(e)), 'error');
           setTimeout(() => setSyncStatus('idle'), 3000);
         });
-    } catch (e) {
-      setAuthError('Connection to API server failed');
+    } catch (e: any) {
+      console.error("Authentication failed:", e);
+      setAuthError('Connection to API server failed: ' + (e?.message || String(e)));
     }
   };
 
@@ -2517,6 +2535,7 @@ export function useFitNotesController() {
     activeTab, setActiveTab, isLightTheme, setIsLightTheme, selectedDate, setSelectedDate, sidebarOpen, setSidebarOpen,
     editingRoutine, setEditingRoutine, editorSections, setEditorSections, editorSectionExercises, setEditorSectionExercises,
     editorExerciseSets, setEditorExerciseSets, userUnit, setUserUnit, token, setToken, userEmail, setUserEmail,
+    customApiUrl, updateCustomApiUrl, getApiBaseUrl,
     authEmail, setAuthEmail, authPassword, setAuthPassword, authError, setAuthError, syncStatus, setSyncStatus,
     lastSyncTime, setLastSyncTime,
     importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
