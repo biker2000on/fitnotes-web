@@ -611,7 +611,84 @@ class TauriNativeDriver implements DBDriver {
     // @ts-ignore
     const tauriModule = '@tauri' + '-apps/api/core';
     const { invoke } = await import(/* @vite-ignore */ tauriModule);
-    await (invoke as any)('tauri_execute', { sql, params });
+
+    let finalSql = sql;
+    let finalParams = params;
+
+    const normalized = sql.toLowerCase().trim();
+    const isShorthand = (
+      params.length === 1 && 
+      typeof params[0] === 'object' && 
+      params[0] !== null && 
+      !Array.isArray(params[0]) &&
+      !normalized.includes('values') &&
+      !normalized.includes('set') &&
+      !normalized.includes('(')
+    );
+
+    if (isShorthand) {
+      const item = params[0];
+      const table = normalized.split(' ')[2]; // e.g. "exercises"
+      
+      if (table === 'settings') {
+        const enriched = params[0];
+        for (const [k, v] of Object.entries(enriched)) {
+          if (k === 'is_dirty' || k === 'last_modified') continue;
+          const valStr = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
+          await (invoke as any)('tauri_execute', {
+            sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
+            params: [k, valStr]
+          });
+        }
+        this.notifyListeners();
+        return;
+      }
+
+      const tableColumns: Record<string, string[]> = {
+        categories: ["id", "name", "colour", "sort_order", "last_modified", "is_deleted", "is_dirty"],
+        exercises: ["id", "name", "category_id", "exercise_type_id", "notes", "weight_increment", "default_rest_time", "weight_unit_id", "is_favourite", "last_modified", "is_deleted", "is_dirty"],
+        training_logs: ["id", "exercise_id", "date", "metric_weight", "reps", "unit", "routine_section_exercise_set_id", "is_personal_record", "is_complete", "distance", "duration_seconds", "comment", "last_modified", "is_deleted", "is_dirty"],
+        body_weights: ["id", "date", "body_weight_metric", "body_fat", "comments", "last_modified", "is_deleted", "is_dirty"],
+        plates: ["id", "weight", "unit", "count", "enabled", "colour", "width_ratio", "height_ratio", "last_modified", "is_deleted", "is_dirty"],
+        barbells: ["id", "weight", "unit", "exercise_id", "last_modified", "is_deleted", "is_dirty"],
+        workout_comments: ["id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],
+        routines: ["id", "name", "notes", "last_modified", "is_deleted", "is_dirty"],
+        routine_sections: ["id", "routine_id", "name", "sort_order", "last_modified", "is_deleted", "is_dirty"],
+        routine_section_exercises: ["id", "routine_section_id", "exercise_id", "sort_order", "populate_sets_type", "last_modified", "is_deleted", "is_dirty"],
+        routine_section_exercise_sets: ["id", "routine_section_exercise_id", "metric_weight", "reps", "sort_order", "distance", "duration_seconds", "unit", "last_modified", "is_deleted", "is_dirty"],
+        workout_groups: ["id", "name", "date", "colour", "routine_section_id", "auto_jump_enabled", "rest_timer_auto_start_enabled", "last_modified", "is_deleted", "is_dirty"],
+        workout_group_exercises: ["id", "exercise_id", "date", "routine_section_id", "workout_group_id", "last_modified", "is_deleted", "is_dirty"],
+        goals: ["id", "type_id", "exercise_id", "metric_weight", "reps", "unit", "title", "target_date", "sort_order", "distance", "duration_seconds", "start_date", "last_modified", "is_deleted", "is_dirty"],
+        measurements: ["id", "name", "unit_id", "goal_type", "goal_value", "custom", "enabled", "sort_order", "last_modified", "is_deleted", "is_dirty"],
+        measurement_records: ["id", "measurement_id", "date", "time", "value", "comment", "last_modified", "is_deleted", "is_dirty"],
+        exercise_comments: ["id", "exercise_id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],
+        workout_times: ["id", "date", "start_time", "end_time", "duration_seconds", "last_modified", "is_deleted", "is_dirty"],
+        custom_units: ["id", "name", "abbreviation", "type", "conversion_to_base", "last_modified", "is_deleted", "is_dirty"],
+        graph_favourites: ["id", "exercise_id", "graph_type", "time_period", "rep_filter", "last_modified", "is_deleted", "is_dirty"]
+      };
+
+      const columns = tableColumns[table];
+      if (columns) {
+        const enriched = { 
+          ...item, 
+          is_dirty: 1, 
+          last_modified: new Date().toISOString() 
+        };
+
+        if (normalized.startsWith('insert into') || normalized.startsWith('replace into') || normalized.startsWith('insert or replace into')) {
+          const placeholders = columns.map(() => '?').join(', ');
+          finalSql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
+          finalParams = columns.map(col => enriched[col] !== undefined ? enriched[col] : null);
+        } else if (normalized.startsWith('update')) {
+          const setClause = columns.filter(col => col !== 'id').map(col => `${col} = ?`).join(', ');
+          finalSql = `UPDATE ${table} SET ${setClause} WHERE id = ?`;
+          finalParams = columns.filter(col => col !== 'id').map(col => enriched[col] !== undefined ? enriched[col] : null);
+          finalParams.push(enriched.id);
+        }
+      }
+    }
+
+    await (invoke as any)('tauri_execute', { sql: finalSql, params: finalParams });
     this.notifyListeners();
   }
 
