@@ -132,8 +132,8 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			var categoryID sql.NullInt64
 			var typeID int
 			var notes sql.NullString
-			var weightIncr float64
-			var restTime int
+			var weightIncr sql.NullFloat64
+			var restTime sql.NullInt64
 			var weightUnit sql.NullInt64
 			var isFav int
 
@@ -157,6 +157,16 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				notesVal = notes.String
 			}
 
+			weightIncrVal := 2.5
+			if weightIncr.Valid {
+				weightIncrVal = weightIncr.Float64
+			}
+
+			restTimeVal := 90
+			if restTime.Valid {
+				restTimeVal = int(restTime.Int64)
+			}
+
 			weightUnitVal := 1
 			if weightUnit.Valid {
 				weightUnitVal = int(weightUnit.Int64)
@@ -165,7 +175,7 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			_, err = tx.Exec(ctx, `
 				INSERT INTO exercises (id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, last_modified, is_deleted)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			`, newID, userID, name, finalCategoryID, typeID, notesVal, weightIncr, restTime, weightUnitVal, isFav == 1, time.Now().UTC(), false)
+			`, newID, userID, name, finalCategoryID, typeID, notesVal, weightIncrVal, restTimeVal, weightUnitVal, isFav == 1, time.Now().UTC(), false)
 			if err != nil {
 				http.Error(w, `{"error":"failed to import exercises: `+err.Error()+`"}`, http.StatusInternalServerError)
 				return

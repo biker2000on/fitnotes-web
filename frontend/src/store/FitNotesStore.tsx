@@ -7,7 +7,9 @@ import type { DropResult } from '@hello-pangea/dnd';
 import { db, isTauri } from '../storage/db';
 import { uuidv4 } from '../lib/uuid';
 import { DEFAULT_SETTINGS } from '../lib/settings';
+import { DEFAULT_CATEGORIES, DEFAULT_EXERCISES } from '../lib/defaultData';
 import { beep, vibrate, notify } from '../lib/notify';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type {
   Category, Exercise, TrainingLog, BodyWeight, WorkoutComment,
   WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
@@ -384,24 +386,29 @@ export function useFitNotesController() {
           const exLogs = currentLogs.filter(l => l.exercise_id === selectedExercise.id && !l.is_deleted);
           if (exLogs.length > 0) {
             const lastLog = exLogs[exLogs.length - 1];
-            if (selectedExercise.exercise_type_id === 1) {
+            if (typeHasWeight(selectedExercise.exercise_type_id) || typeHasReps(selectedExercise.exercise_type_id)) {
               if (lastLog.metric_weight !== null) setLogWeight(lastLog.metric_weight.toString());
               if (lastLog.reps !== null) setLogReps(lastLog.reps.toString());
               setTimeout(() => {
                 const wInput = document.getElementById('log-weight-input');
-                if (wInput) {
-                  (wInput as HTMLInputElement).focus();
-                  (wInput as HTMLInputElement).select();
+                const repsInput = document.getElementById('log-reps-input');
+                const target = wInput || repsInput;
+                if (target) {
+                  (target as HTMLInputElement).focus();
+                  (target as HTMLInputElement).select();
                 }
               }, 50);
-            } else {
+            }
+            if (typeHasDistance(selectedExercise.exercise_type_id) || typeHasDuration(selectedExercise.exercise_type_id)) {
               if (lastLog.distance !== null) setLogDistance(String(settings.distance_unit === 2 ? Math.round((lastLog.distance / 1.60934) * 1000) / 1000 : lastLog.distance));
               if (lastLog.duration_seconds !== null) setLogDuration(lastLog.duration_seconds.toString());
               setTimeout(() => {
                 const dInput = document.getElementById('log-distance-input');
-                if (dInput) {
-                  (dInput as HTMLInputElement).focus();
-                  (dInput as HTMLInputElement).select();
+                const durationInput = document.getElementById('log-duration-min-input');
+                const target = dInput || durationInput;
+                if (target) {
+                  (target as HTMLInputElement).focus();
+                  (target as HTMLInputElement).select();
                 }
               }, 50);
             }
@@ -490,14 +497,7 @@ export function useFitNotesController() {
       // 1. Check if DB has default categories
       const localCats = await db.query<Category>('SELECT * FROM categories');
       if (localCats.length === 0) {
-        const defaults = [
-          { id: 'c-chest', name: 'Chest', colour: 4293926400, sort_order: 1 }, // Red (#ef4444)
-          { id: 'c-back', name: 'Back', colour: 4278222848, sort_order: 2 }, // Green (#10b981)
-          { id: 'c-legs', name: 'Legs', colour: 4278190335, sort_order: 3 }, // Blue (#0000ff)
-          { id: 'c-shoulders', name: 'Shoulders', colour: 4294951168, sort_order: 4 }, // Orange (#f59e0b)
-          { id: 'c-arms', name: 'Arms', colour: 4293926655, sort_order: 5 } // Purple (#a855f7)
-        ];
-        for (const cat of defaults) {
+        for (const cat of DEFAULT_CATEGORIES) {
           await db.execute('INSERT INTO categories', [cat]);
         }
       }
@@ -505,16 +505,7 @@ export function useFitNotesController() {
       // 2. Check if DB has default exercises
       const localExs = await db.query<Exercise>('SELECT * FROM exercises');
       if (localExs.length === 0) {
-        const defaults = [
-          { id: 'e-bench', name: 'Barbell Bench Press', category_id: 'c-chest', exercise_type_id: 1, is_favourite: true },
-          { id: 'e-incline', name: 'Incline Dumbbell Press', category_id: 'c-chest', exercise_type_id: 1, is_favourite: false },
-          { id: 'e-deadlift', name: 'Barbell Deadlift', category_id: 'c-back', exercise_type_id: 1, is_favourite: true },
-          { id: 'e-pullups', name: 'Pull Ups', category_id: 'c-back', exercise_type_id: 1, is_favourite: false },
-          { id: 'e-squat', name: 'Barbell Back Squat', category_id: 'c-legs', exercise_type_id: 1, is_favourite: true },
-          { id: 'e-press', name: 'Overhead Barbell Press', category_id: 'c-shoulders', exercise_type_id: 1, is_favourite: true },
-          { id: 'e-curls', name: 'Bicep Dumbbell Curls', category_id: 'c-arms', exercise_type_id: 1, is_favourite: false }
-        ];
-        for (const ex of defaults) {
+        for (const ex of DEFAULT_EXERCISES) {
           await db.execute('INSERT INTO exercises', [ex]);
         }
       }
@@ -528,8 +519,8 @@ export function useFitNotesController() {
         const defaultSection = { id: 'rs-push', routine_id: 'r-ppl-push', name: 'Main Power Work', sort_order: 1 };
         await db.execute('INSERT INTO routine_sections', [defaultSection]);
 
-        const rse1 = { id: 'rse-1', routine_section_id: 'rs-push', exercise_id: 'e-bench', sort_order: 1, populate_sets_type: 1 };
-        const rse2 = { id: 'rse-2', routine_section_id: 'rs-push', exercise_id: 'e-press', sort_order: 2, populate_sets_type: 1 };
+        const rse1 = { id: 'rse-1', routine_section_id: 'rs-push', exercise_id: 'e-flat-barbell-bench-press', sort_order: 1, populate_sets_type: 1 };
+        const rse2 = { id: 'rse-2', routine_section_id: 'rs-push', exercise_id: 'e-overhead-press', sort_order: 2, populate_sets_type: 1 };
         await db.execute('INSERT INTO routine_section_exercises', [rse1]);
         await db.execute('INSERT INTO routine_section_exercises', [rse2]);
 
@@ -822,8 +813,10 @@ export function useFitNotesController() {
   const handleAddSet = async () => {
     if (!selectedExercise) return;
     const t = selectedExercise.exercise_type_id;
-    const weight = (t === 1 || t === 6 || t === 7) ? (parseFloat(logWeight) || null) : null;
-    const reps = (t === 1 || t === 2) ? (parseInt(logReps) || null) : null;
+    const weight = typeHasWeight(t) ? (parseFloat(logWeight) || null) : null;
+    const reps = typeHasReps(t) ? (parseInt(logReps) || null) : null;
+    const distance = typeHasDistance(t) ? (logDistance ? (parseFloat(logDistance) * (settings.distance_unit === 2 ? 1.60934 : 1)) : null) : null;
+    const duration = typeHasDuration(t) ? (parseInt(logDuration) || null) : null;
     const pr = isNewPR(selectedExercise.id, weight, reps);
 
     const newLog: TrainingLog = {
@@ -835,8 +828,8 @@ export function useFitNotesController() {
       unit: userUnit === 'kg' ? 1 : 2,
       is_personal_record: pr,
       is_complete: false,
-      distance: (t === 3 || t === 4 || t === 6) ? (logDistance ? (parseFloat(logDistance) * (settings.distance_unit === 2 ? 1.60934 : 1)) : null) : null,
-      duration_seconds: (t === 3 || t === 5 || t === 7) ? (parseInt(logDuration) || null) : null,
+      distance,
+      duration_seconds: duration,
       comment: logComment || null,
     };
 
@@ -1214,6 +1207,7 @@ export function useFitNotesController() {
     const durStr = log.duration_seconds !== null ? `${Math.floor(log.duration_seconds / 60)}m ${log.duration_seconds % 60}s` : '';
 
     switch (typeId) {
+      case 0: // Weight & Reps (FitNotes Android)
       case 1: // Weight & Reps
         return `${weightStr} x ${repsStr}`;
       case 2: // Reps Only

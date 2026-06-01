@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Keyboard } from 'lucide-react';
+import { getExerciseTypeLabel } from '../lib/units';
 
 interface Exercise {
   id: string;
@@ -186,7 +187,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       {ex.name}
                     </span>
                     <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>
-                      {ex.exercise_type_id === 1 ? 'Weight & Reps' : 'Cardio'}
+                      {getExerciseTypeLabel(ex.exercise_type_id)}
                     </span>
                   </div>
 

@@ -18,6 +18,7 @@
   Settings as SettingsIcon
 } from 'lucide-react';
 import { intColorToHex } from './lib/colors';
+import { typeHasWeight } from './lib/units';
 import { FitNotesProvider, useFitNotesController } from './store/FitNotesStore';
 import { BodyView } from './views/BodyView';
 import { AnalysisView } from './views/AnalysisView';
@@ -302,7 +303,7 @@ export default function App() {
           setShowCommandPalette(false);
           // Automatically focus the appropriate logging input
           setTimeout(() => {
-            const inputId = ex.exercise_type_id === 1 ? 'log-weight-input' : 'log-distance-input';
+            const inputId = typeHasWeight(ex.exercise_type_id) ? 'log-weight-input' : 'log-distance-input';
             const inputEl = document.getElementById(inputId);
             if (inputEl) {
               (inputEl as HTMLInputElement).focus();

@@ -7,6 +7,7 @@ export const lbsToKg = (lbs: number): number => lbs * KG_PER_LB;
 
 export const getExerciseTypeLabel = (typeId: number): string => {
   switch (typeId) {
+    case 0: return 'Weight & Reps';
     case 1: return 'Weight & Reps';
     case 2: return 'Reps Only';
     case 3: return 'Distance & Time';
@@ -20,10 +21,10 @@ export const getExerciseTypeLabel = (typeId: number): string => {
 
 // Whether a given exercise type tracks weight (used to decide which inputs/stats apply).
 export const typeHasWeight = (typeId: number): boolean =>
-  typeId === 1 || typeId === 6 || typeId === 7;
+  typeId === 0 || typeId === 1 || typeId === 6 || typeId === 7;
 
 export const typeHasReps = (typeId: number): boolean =>
-  typeId === 1 || typeId === 2;
+  typeId === 0 || typeId === 1 || typeId === 2;
 
 export const typeHasDistance = (typeId: number): boolean =>
   typeId === 3 || typeId === 4 || typeId === 6;

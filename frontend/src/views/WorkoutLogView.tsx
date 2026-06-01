@@ -8,6 +8,7 @@ import {
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 
 export function WorkoutLogView() {
   const {
@@ -43,7 +44,7 @@ export function WorkoutLogView() {
 
             {/* Dynamic inputs based on exercise type */}
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', width: '100%' }}>
-              {(selectedExercise.exercise_type_id === 1 || selectedExercise.exercise_type_id === 6 || selectedExercise.exercise_type_id === 7) && (
+              {typeHasWeight(selectedExercise.exercise_type_id) && (
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Weight ({userUnit})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -53,7 +54,7 @@ export function WorkoutLogView() {
                   </div>
                 </div>
               )}
-              {(selectedExercise.exercise_type_id === 1 || selectedExercise.exercise_type_id === 2) && (
+              {typeHasReps(selectedExercise.exercise_type_id) && (
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Reps</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -63,7 +64,7 @@ export function WorkoutLogView() {
                   </div>
                 </div>
               )}
-              {(selectedExercise.exercise_type_id === 3 || selectedExercise.exercise_type_id === 4 || selectedExercise.exercise_type_id === 6) && (
+              {typeHasDistance(selectedExercise.exercise_type_id) && (
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Distance ({settings.distance_unit === 2 ? 'mi' : 'km'})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -73,7 +74,7 @@ export function WorkoutLogView() {
                   </div>
                 </div>
               )}
-              {(selectedExercise.exercise_type_id === 3 || selectedExercise.exercise_type_id === 5 || selectedExercise.exercise_type_id === 7) && (
+              {typeHasDuration(selectedExercise.exercise_type_id) && (
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Duration (min/sec)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
