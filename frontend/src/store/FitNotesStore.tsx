@@ -1,4 +1,4 @@
-﻿// FitNotesStore.tsx - Central app state + actions.
+// FitNotesStore.tsx - Central app state + actions.
 // useFitNotesController() owns every useState + handler + effect (relocated from
 // App.tsx so App is a thin shell). It returns the `store` object, which is provided
 // via context; view components consume their slice through useFitNotesStore().
@@ -6,6 +6,7 @@ import React, { useState, useEffect, createContext, useContext, type ReactNode }
 import type { DropResult } from '@hello-pangea/dnd';
 import { db, isTauri } from '../storage/db';
 import { uuidv4 } from '../lib/uuid';
+import { getLocalDateString, addDays } from '../lib/date';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 import { DEFAULT_CATEGORIES, DEFAULT_EXERCISES } from '../lib/defaultData';
 import { beep, vibrate, notify } from '../lib/notify';
@@ -33,10 +34,13 @@ const getApiBaseUrl = () => {
   return origin;
 };
 
+let lastKeyPressed = '';
+let lastKeyPressTime = 0;
+
 export function useFitNotesController() {
   const [activeTab, setActiveTab] = useState<'log' | 'calendar' | 'exercises' | 'routines' | 'routine-editor' | 'body' | 'measurements' | 'goals' | 'analysis' | 'tools' | 'history' | 'settings' | 'sync'>('log');
   const [isLightTheme, setIsLightTheme] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Routine Editor modular states
@@ -262,6 +266,8 @@ export function useFitNotesController() {
   const [showSupersetManagerModal, setShowSupersetManagerModal] = useState(false);
   const [selectedExIdsForSuperset, setSelectedExIdsForSuperset] = useState<string[]>([]);
   const [supersetColor, setSupersetColor] = useState('#ef4444');
+  const [supersetName, setSupersetName] = useState('Superset');
+  const [targetSupersetGroupId, setTargetSupersetGroupId] = useState('');
 
   // Calendar day preview modal states
   const [allLogs, setAllLogs] = useState<TrainingLog[]>([]);
@@ -273,6 +279,23 @@ export function useFitNotesController() {
   // Calendar Navigation State
   const [calendarYear, setCalendarYear] = useState<number>(new Date().getFullYear());
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth()); // 0-11
+
+  // Auto-sync calendar view with selected date changes
+  useEffect(() => {
+    if (selectedDate) {
+      const parts = selectedDate.split('-');
+      if (parts.length === 3) {
+        const year = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        if (!isNaN(year) && !isNaN(month)) {
+          if (year !== calendarYear || month !== calendarMonth) {
+            setCalendarYear(year);
+            setCalendarMonth(month);
+          }
+        }
+      }
+    }
+  }, [selectedDate]);
 
   // Toast notifications states
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -307,6 +330,7 @@ export function useFitNotesController() {
   // Premium Features States (Phases 10-13)
   const [showCopyWorkoutDrawer, setShowCopyWorkoutDrawer] = useState(false);
   const [activeRoutineForPopulate, setActiveRoutineForPopulate] = useState<Routine | null>(null);
+  const [activeSectionForPopulate, setActiveSectionForPopulate] = useState<RoutineSection | null>(null);
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
   const [bulkMoveTargetDate, setBulkMoveTargetDate] = useState<string>(selectedDate);
 
@@ -333,9 +357,96 @@ export function useFitNotesController() {
     return max1RM;
   };
 
+  const handlePrevMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear(prev => prev - 1);
+    } else {
+      setCalendarMonth(prev => prev - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear(prev => prev + 1);
+    } else {
+      setCalendarMonth(prev => prev + 1);
+    }
+  };
+
   // Global Keyboard Shortcuts Event Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // 0. Chord Navigation Shortcuts (e.g. g then l for Workout Log, g then c for Calendar, etc.)
+      const activeEl = document.activeElement;
+      const isTyping = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        (activeEl as HTMLElement).isContentEditable
+      );
+
+      if (!isTyping) {
+        const now = Date.now();
+        if (lastKeyPressed === 'g' && now - lastKeyPressTime < 1500) {
+          const key = e.key.toLowerCase();
+          let targetTab: 'log' | 'calendar' | 'exercises' | 'routines' | 'routine-editor' | 'body' | 'measurements' | 'goals' | 'analysis' | 'tools' | 'history' | 'settings' | 'sync' | null = null;
+          
+          switch (key) {
+            case 'l':
+            case 'w':
+              targetTab = 'log';
+              break;
+            case 'c':
+              targetTab = 'calendar';
+              break;
+            case 'e':
+              targetTab = 'exercises';
+              break;
+            case 'r':
+              targetTab = 'routines';
+              break;
+            case 'b':
+              targetTab = 'body';
+              break;
+            case 'm':
+              targetTab = 'measurements';
+              break;
+            case 'g':
+              targetTab = 'goals';
+              break;
+            case 'a':
+              targetTab = 'analysis';
+              break;
+            case 't':
+              targetTab = 'tools';
+              break;
+            case 's':
+              targetTab = 'settings';
+              break;
+            case 'y':
+              targetTab = 'sync';
+              break;
+          }
+          
+          if (targetTab) {
+            e.preventDefault();
+            setActiveTab(targetTab);
+            window.location.hash = `#/${targetTab}`;
+            triggerToast(`Navigated to ${targetTab.toUpperCase()}`);
+            lastKeyPressed = '';
+            lastKeyPressTime = 0;
+            return;
+          }
+        }
+        
+        if (e.key.toLowerCase() === 'g') {
+          lastKeyPressed = 'g';
+          lastKeyPressTime = now;
+          return;
+        }
+      }
+
       // 1. Ctrl + K (or Cmd + K) -> Toggle Command Palette Quick Exercise Search Selector
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
@@ -360,14 +471,6 @@ export function useFitNotesController() {
 
       // If command palette is open, ignore other hotkeys to avoid conflict
       if (showCommandPalette) return;
-
-      // Check if user is actively typing in a standard input fields
-      const activeEl = document.activeElement;
-      const isTyping = activeEl && (
-        activeEl.tagName === 'INPUT' ||
-        activeEl.tagName === 'TEXTAREA' ||
-        (activeEl as HTMLElement).isContentEditable
-      );
 
       // 3. Ctrl + S -> Save Set (Always allowed, even inside input text fields)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -428,32 +531,44 @@ export function useFitNotesController() {
       // 6. Global Date Navigation Hotkeys (+ / - to increment/decrement, t for today)
       if (e.key === '+' || e.key === '=') {
         e.preventDefault();
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() + 1);
-        setSelectedDate(d.toISOString().split('T')[0]);
-        triggerToast('Date set to ' + d.toISOString().split('T')[0]);
+        const nextDate = addDays(selectedDate, 1);
+        setSelectedDate(nextDate);
+        triggerToast('Date set to ' + nextDate);
         return;
       }
       if (e.key === '-' || e.key === '_') {
         e.preventDefault();
-        const d = new Date(selectedDate);
-        d.setDate(d.getDate() - 1);
-        setSelectedDate(d.toISOString().split('T')[0]);
-        triggerToast('Date set to ' + d.toISOString().split('T')[0]);
+        const prevDate = addDays(selectedDate, -1);
+        setSelectedDate(prevDate);
+        triggerToast('Date set to ' + prevDate);
         return;
       }
       if (e.key.toLowerCase() === 't') {
         e.preventDefault();
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getLocalDateString();
         setSelectedDate(todayStr);
         triggerToast('Date set to Today (' + todayStr + ')');
+        return;
+      }
+
+      // 6.5. Global Month Navigation Hotkeys ([ / ] to shift backwards/forwards one month)
+      if (e.key === '[') {
+        e.preventDefault();
+        handlePrevMonth();
+        triggerToast('Calendar shifted backwards one month');
+        return;
+      }
+      if (e.key === ']') {
+        e.preventDefault();
+        handleNextMonth();
+        triggerToast('Calendar shifted forwards one month');
         return;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showCommandPalette, selectedExercise, currentLogs, logWeight, logReps, logDistance, logDuration, selectedDate]);
+  }, [showCommandPalette, selectedExercise, currentLogs, logWeight, logReps, logDistance, logDuration, selectedDate, setActiveTab, triggerToast, handlePrevMonth, handleNextMonth]);
 
   // Lightweight location hash router (History API responsive)
   useEffect(() => {
@@ -642,9 +757,51 @@ export function useFitNotesController() {
       setUserEmail(data.user.email);
       localStorage.setItem('fn_token', data.token);
       localStorage.setItem('fn_user_email', data.user.email);
+
+      // Invalidate cache: remove local guest data and sync timestamp so we pull fresh data from Postgres
+      localStorage.removeItem('fn_last_sync_timestamp');
+      const keysToClear = [
+        'fn_categories',
+        'fn_exercises',
+        'fn_training_logs',
+        'fn_body_weights',
+        'fn_plates',
+        'fn_barbells',
+        'fn_workout_comments',
+        'fn_workout_groups',
+        'fn_workout_group_exercises',
+        'fn_routines',
+        'fn_routine_sections',
+        'fn_routine_section_exercises',
+        'fn_routine_section_exercise_sets',
+        'fn_goals',
+        'fn_measurements',
+        'fn_measurement_records',
+        'fn_exercise_comments',
+        'fn_workout_times',
+        'fn_custom_units',
+        'fn_graph_favourites',
+        'fn_settings'
+      ];
+      keysToClear.forEach(key => localStorage.removeItem(key));
+
       setAuthEmail('');
       setAuthPassword('');
       setActiveTab('log');
+
+      // Trigger immediate background PostgreSQL sync
+      setSyncStatus('syncing');
+      db.sync(data.token, apiBaseUrl)
+        .then(async () => {
+          setSyncStatus('success');
+          await refreshData();
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        })
+        .catch(e => {
+          console.error("Post-login sync failed:", e);
+          setSyncStatus('error');
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        });
     } catch (e) {
       setAuthError('Connection to API server failed');
     }
@@ -883,6 +1040,30 @@ export function useFitNotesController() {
     await refreshData();
   };
 
+  const handleMarkAllComplete = async () => {
+    const uncompleted = currentLogs.filter(l => !l.is_complete);
+    if (uncompleted.length === 0) return;
+
+    for (const log of uncompleted) {
+      const updated = { ...log, is_complete: true };
+      await db.execute('INSERT INTO training_logs', [updated]);
+    }
+    await refreshData();
+    triggerToast('All sets marked complete.');
+  };
+
+  const handleMarkExerciseComplete = async (exerciseId: string) => {
+    const exLogs = currentLogs.filter(l => l.exercise_id === exerciseId && !l.is_complete);
+    if (exLogs.length === 0) return;
+
+    for (const log of exLogs) {
+      const updated = { ...log, is_complete: true };
+      await db.execute('INSERT INTO training_logs', [updated]);
+    }
+    await refreshData();
+    triggerToast('All exercise sets marked complete.');
+  };
+
   const handleDeleteSet = async (id: string) => {
     const logs = await db.query<TrainingLog>('SELECT * FROM training_logs');
     const target = logs.find(x => x.id === id);
@@ -953,10 +1134,11 @@ export function useFitNotesController() {
   const handleImportRoutinePopulated = async (
     routineId: string, 
     type: 'template' | 'last_workout' | 'one_rep_max', 
-    percentage: number = 75
+    percentage: number = 75,
+    sectionId?: string
   ) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId);
+    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId));
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
@@ -1072,6 +1254,7 @@ export function useFitNotesController() {
 
     setShowRoutineImportModal(false);
     setActiveRoutineForPopulate(null);
+    setActiveSectionForPopulate(null);
     await refreshData();
     triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'template defaults'}.`);
   };
@@ -1448,27 +1631,10 @@ export function useFitNotesController() {
     setShowCalendarPreviewModal(true);
   };
 
-  const handlePrevMonth = () => {
-    if (calendarMonth === 0) {
-      setCalendarMonth(11);
-      setCalendarYear(prev => prev - 1);
-    } else {
-      setCalendarMonth(prev => prev - 1);
-    }
-  };
-
-  const handleNextMonth = () => {
-    if (calendarMonth === 11) {
-      setCalendarMonth(0);
-      setCalendarYear(prev => prev + 1);
-    } else {
-      setCalendarMonth(prev => prev + 1);
-    }
-  };
 
   const handleCreateWorkoutSuperset = async () => {
-    if (selectedExIdsForSuperset.length < 2) {
-      triggerToast('Please select at least 2 exercises to create a superset!', 'error');
+    if (selectedExIdsForSuperset.length === 0) {
+      triggerToast('Please select at least 1 exercise!', 'error');
       return;
     }
 
@@ -1476,32 +1642,56 @@ export function useFitNotesController() {
     const bigint = parseInt(hex, 16);
     const colourVal = 4278190080 + bigint;
 
-    const groupId = uuidv4();
-    const newGroup: WorkoutGroup = {
-      id: groupId,
-      name: `Superset`,
-      date: selectedDate,
-      colour: colourVal,
-      auto_jump_enabled: true,
-      rest_timer_auto_start_enabled: false
-    };
+    let groupId = targetSupersetGroupId;
 
-    await db.execute('INSERT INTO workout_groups', [newGroup]);
+    if (!groupId) {
+      if (selectedExIdsForSuperset.length < 2) {
+        triggerToast('Please select at least 2 exercises to create a new superset!', 'error');
+        return;
+      }
+      groupId = uuidv4();
+      const newGroup: WorkoutGroup = {
+        id: groupId,
+        name: supersetName || 'Superset',
+        date: selectedDate,
+        colour: colourVal,
+        auto_jump_enabled: true,
+        rest_timer_auto_start_enabled: false
+      };
+      await db.execute('INSERT INTO workout_groups', [newGroup]);
+    } else {
+      const existing = workoutGroups.find(g => g.id === groupId);
+      if (existing) {
+        const updated = {
+          ...existing,
+          name: supersetName || existing.name,
+          colour: colourVal
+        };
+        await db.execute('UPDATE workout_groups', [updated]);
+      }
+    }
 
     for (const exId of selectedExIdsForSuperset) {
-      const link: WorkoutGroupExercise = {
-        id: uuidv4(),
-        exercise_id: exId,
-        date: selectedDate,
-        workout_group_id: groupId
-      };
-      await db.execute('INSERT INTO workout_group_exercises', [link]);
+      const alreadyLinked = groupExercises.some(
+        ge => ge.workout_group_id === groupId && ge.exercise_id === exId && ge.date === selectedDate && !ge.is_deleted
+      );
+      if (!alreadyLinked) {
+        const link: WorkoutGroupExercise = {
+          id: uuidv4(),
+          exercise_id: exId,
+          date: selectedDate,
+          workout_group_id: groupId
+        };
+        await db.execute('INSERT INTO workout_group_exercises', [link]);
+      }
     }
 
     setSelectedExIdsForSuperset([]);
+    setSupersetName('Superset');
+    setTargetSupersetGroupId('');
     setShowSupersetManagerModal(false);
     await refreshData();
-    triggerToast('Superset created successfully!');
+    triggerToast(targetSupersetGroupId ? 'Exercises added to superset!' : 'Superset created successfully!');
   };
 
   // Supersets & Workout Groups Manager
@@ -1776,7 +1966,7 @@ export function useFitNotesController() {
     setPastImporterTargetSectionId(sectionId);
     const dates = await db.query<{ date: string }>('SELECT DISTINCT date FROM training_logs WHERE is_deleted = 0 ORDER BY date DESC LIMIT 5');
     setPastLoggedDates(dates.map(d => d.date));
-    setPastImporterDate(dates.length > 0 ? dates[0].date : new Date().toISOString().split('T')[0]);
+    setPastImporterDate(dates.length > 0 ? dates[0].date : getLocalDateString());
     setShowPastImporterModal(true);
   };
 
@@ -2122,11 +2312,13 @@ export function useFitNotesController() {
     editExCategory, setEditExCategory, editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
     editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit, editExIsFavourite, setEditExIsFavourite,
     showSupersetManagerModal, setShowSupersetManagerModal, selectedExIdsForSuperset, setSelectedExIdsForSuperset,
-    supersetColor, setSupersetColor, allLogs, setAllLogs, showCalendarPreviewModal, setShowCalendarPreviewModal,
+    supersetColor, setSupersetColor, supersetName, setSupersetName, targetSupersetGroupId, setTargetSupersetGroupId,
+    allLogs, setAllLogs, showCalendarPreviewModal, setShowCalendarPreviewModal,
     previewDate, setPreviewDate, previewLogs, setPreviewLogs, previewComment, setPreviewComment, calendarYear, setCalendarYear,
     calendarMonth, setCalendarMonth, toastMessage, setToastMessage, toastType, setToastType, showToast, setShowToast,
     toastTimerId, setToastTimerId, confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
     confirmOnApprove, setConfirmOnApprove, showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, activeRoutineForPopulate, setActiveRoutineForPopulate,
+    activeSectionForPopulate, setActiveSectionForPopulate,
     showBulkMoveModal, setShowBulkMoveModal, bulkMoveTargetDate, setBulkMoveTargetDate, expandedCategories, setExpandedCategories,
     editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId, showPastImporterModal, setShowPastImporterModal,
     pastImporterTargetSectionId, setPastImporterTargetSectionId, pastImporterDate, setPastImporterDate, newWeight, setNewWeight,
@@ -2142,6 +2334,7 @@ export function useFitNotesController() {
     handleAuth, handleLogout, triggerSync, handleBackupUpload, handleBackupDownload, handleCsvDownload, handleAddSet, handleToggleComplete, handleDeleteSet,
     handleCopyWorkoutConfirm, handleImportRoutinePopulated, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     handleDragEnd, formatLogValue, handleSaveComment, toggleCategoryExpand, handleToggleExerciseFavourite, openExerciseEditor,
+    handleMarkAllComplete, handleMarkExerciseComplete,
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
     handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleImportRoutine,
