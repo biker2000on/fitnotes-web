@@ -103,7 +103,12 @@ export default function App() {
       {/* 1. Sidebar Panel */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="brand">
-          <div className="brand-logo">F</div>
+          <img 
+            src="/favicon.svg" 
+            alt="FitNotes Logo" 
+            className="brand-logo" 
+            style={{ objectFit: 'contain', padding: '4px', background: 'rgba(255, 255, 255, 0.05)' }} 
+          />
           <div>
             <div className="brand-name">FitNotes Web</div>
             <div style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Premium Unlocked</div>
