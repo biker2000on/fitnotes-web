@@ -144,6 +144,134 @@ struct SyncPayload {
     workout_times: Vec<Value>,
     custom_units: Vec<Value>,
     graph_favourites: Vec<Value>,
+    settings: Option<Value>,
+}
+
+fn parse_setting_value(value: &str) -> Value {
+    if value.eq_ignore_ascii_case("true") {
+        return Value::Bool(true);
+    }
+    if value.eq_ignore_ascii_case("false") {
+        return Value::Bool(false);
+    }
+    if let Ok(i) = value.parse::<i64>() {
+        return Value::Number(i.into());
+    }
+    if let Ok(f) = value.parse::<f64>() {
+        if let Some(n) = serde_json::Number::from_f64(f) {
+            return Value::Number(n);
+        }
+    }
+    Value::String(value.to_string())
+}
+
+fn default_settings_map() -> serde_json::Map<String, Value> {
+    let mut settings = serde_json::Map::new();
+    let mut insert_bool = |key: &str, value: bool| {
+        settings.insert(key.to_string(), Value::Bool(value));
+    };
+    insert_bool("metric", true);
+    insert_bool("body_weight_goal", false);
+    insert_bool("body_weight_show_in_workout_log", true);
+    insert_bool("estimated_1rm_max_apply_to_graph", true);
+    insert_bool("track_personal_records", true);
+    insert_bool("mark_sets_complete", true);
+    insert_bool("auto_select_next_set", true);
+    insert_bool("keep_screen_on", false);
+    insert_bool("graph_show_points", true);
+    insert_bool("graph_show_trend_line", false);
+    insert_bool("graph_start_at_zero", false);
+    insert_bool("rest_timer_vibrate", true);
+    insert_bool("rest_timer_sound", true);
+    insert_bool("rest_timer_auto_start", false);
+    insert_bool("calendar_detail_visible", true);
+    insert_bool("calendar_category_dots_visible", true);
+    insert_bool("calendar_navigation_bar_visible", true);
+    insert_bool("calendar_history_category_dots_visible", true);
+    insert_bool("calendar_history_category_names_visible", true);
+    insert_bool("calendar_history_sets_visible", true);
+    insert_bool("category_show_colours", true);
+    insert_bool("measurement_tracker_initial_load", true);
+    insert_bool("measurement_show_in_workout_log", true);
+    insert_bool("workout_timer_auto_start_enabled", false);
+    insert_bool("workout_timer_auto_stop_enabled", false);
+    insert_bool("home_screen_skip_empty_dates", false);
+
+    let mut insert_i64 = |key: &str, value: i64| {
+        settings.insert(key.to_string(), Value::Number(value.into()));
+    };
+    insert_i64("first_day_of_week", 2);
+    insert_i64("selected_navigation_item_id", 0);
+    insert_i64("estimated_1rm_max_reps_to_include", 10);
+    insert_i64("rest_timer_seconds", 90);
+    insert_i64("rest_timer_volume", 100);
+    insert_i64("category_sort_order", 0);
+    insert_i64("workout_graph_default_graph_type", 0);
+    insert_i64("workout_graph_default_time_period", 0);
+    insert_i64("analysis_breakdown_breakdown_type", 0);
+    insert_i64("analysis_breakdown_time_period", 0);
+    insert_i64("exercise_list_detail_type_id", 0);
+    insert_i64("home_screen_limit_type_id", 0);
+    insert_i64("home_screen_limit_value", 0);
+    insert_i64("home_screen_category_visibility_id", 1);
+    insert_i64("app_theme_id", 0);
+    insert_i64("distance_unit", 1);
+
+    settings.insert(
+        "weight_increment".to_string(),
+        Value::Number(serde_json::Number::from_f64(2.5).unwrap()),
+    );
+    settings.insert(
+        "body_weight_increment".to_string(),
+        Value::Number(serde_json::Number::from_f64(0.1).unwrap()),
+    );
+    settings.insert("body_weight_goal_weight".to_string(), Value::Null);
+
+    settings
+}
+
+fn extract_dirty_settings(conn: &Connection) -> Result<Option<Value>> {
+    let is_dirty: String = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'settings_is_dirty'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "0".to_string());
+
+    if is_dirty != "1" {
+        return Ok(None);
+    }
+
+    let mut settings = default_settings_map();
+    let mut stmt = conn.prepare("SELECT key, value FROM settings")?;
+    let rows = stmt.query_map([], |row| {
+        let key: String = row.get(0)?;
+        let value: Option<String> = row.get(1)?;
+        Ok((key, value.unwrap_or_default()))
+    })?;
+
+    for row in rows {
+        let (key, value) = row?;
+        match key.as_str() {
+            "last_sync_timestamp" | "settings_is_dirty" => {}
+            "settings_last_modified" => {
+                settings.insert("last_modified".to_string(), Value::String(value));
+            }
+            _ => {
+                settings.insert(key, parse_setting_value(&value));
+            }
+        }
+    }
+
+    if !settings.contains_key("last_modified") {
+        settings.insert(
+            "last_modified".to_string(),
+            Value::String("1970-01-01T00:00:00Z".to_string()),
+        );
+    }
+
+    Ok(Some(Value::Object(settings)))
 }
 
 fn is_uuid(value: &str) -> bool {
@@ -297,6 +425,7 @@ struct SyncResponse {
     workout_times: Option<Vec<Value>>,
     custom_units: Option<Vec<Value>>,
     graph_favourites: Option<Vec<Value>>,
+    settings: Option<Value>,
 }
 
 #[tauri::command]
@@ -427,6 +556,7 @@ async fn tauri_sync(
             custom_units: extract_dirty("custom_units", &[], &["is_deleted"]).unwrap_or_default(),
             graph_favourites: extract_dirty("graph_favourites", &["exercise_id"], &["is_deleted"])
                 .unwrap_or_default(),
+            settings: extract_dirty_settings(&conn).unwrap_or_default(),
         }
     };
 
@@ -467,60 +597,67 @@ async fn tauri_sync(
         let tx = conn.transaction().map_err(|e| e.to_string())?;
 
         // Helper upsert function to map server payload directly to SQLite
-        let upsert_table =
-            |table: &str, items: &[Value], columns: &[&str]| -> std::result::Result<(), String> {
-                // 1. Reset dirty flag on our items
-                tx.execute(
-                    &format!("UPDATE {} SET is_dirty = 0 WHERE is_dirty = 1", table),
-                    [],
-                )
-                .map_err(|e| e.to_string())?;
-
-                // 2. Insert or replace server items
-                for item in items {
-                    let map = item.as_object().ok_or("Expected JSON object")?;
-                    let placeholders: Vec<String> =
-                        (1..=columns.len()).map(|i| format!("?{}", i)).collect();
-                    let sql = format!(
-                        "INSERT OR REPLACE INTO {} ({}) VALUES ({})",
-                        table,
-                        columns.join(", "),
-                        placeholders.join(", ")
-                    );
-
-                    let mut params = Vec::new();
-                    for col in columns {
-                        let val = map.get(*col).unwrap_or(&Value::Null);
-                        params.push(val);
-                    }
-
-                    let sql_params: Vec<Box<dyn rusqlite::ToSql>> = params
-                        .iter()
-                        .map(|v| -> Box<dyn rusqlite::ToSql> {
-                            match v {
-                                Value::Null => Box::new(rusqlite::types::Null),
-                                Value::Bool(b) => Box::new(*b),
-                                Value::Number(num) => {
-                                    if let Some(i) = num.as_i64() {
-                                        Box::new(i)
-                                    } else {
-                                        Box::new(num.as_f64().unwrap_or(0.0))
-                                    }
-                                }
-                                Value::String(s) => Box::new(s.clone()),
-                                _ => Box::new(v.to_string()),
-                            }
-                        })
-                        .collect();
-
-                    let sql_params_ref: Vec<&dyn rusqlite::ToSql> =
-                        sql_params.iter().map(|b| b.as_ref()).collect();
-
-                    tx.execute(&sql, &sql_params_ref[..])
-                        .map_err(|e| e.to_string())?;
+        let upsert_table = |table: &str,
+                            items: &[Value],
+                            columns: &[&str],
+                            pushed_items: &[Value]|
+         -> std::result::Result<(), String> {
+            // 1. Reset dirty flag only on items included in this sync request.
+            for item in pushed_items {
+                if let Some(id) = item.get("id").and_then(Value::as_str) {
+                    tx.execute(
+                        &format!("UPDATE {} SET is_dirty = 0 WHERE id = ?1", table),
+                        params![id],
+                    )
+                    .map_err(|e| e.to_string())?;
                 }
-                Ok(())
-            };
+            }
+
+            // 2. Insert or replace server items
+            for item in items {
+                let map = item.as_object().ok_or("Expected JSON object")?;
+                let placeholders: Vec<String> =
+                    (1..=columns.len()).map(|i| format!("?{}", i)).collect();
+                let sql = format!(
+                    "INSERT OR REPLACE INTO {} ({}) VALUES ({})",
+                    table,
+                    columns.join(", "),
+                    placeholders.join(", ")
+                );
+
+                let mut params = Vec::new();
+                for col in columns {
+                    let val = map.get(*col).unwrap_or(&Value::Null);
+                    params.push(val);
+                }
+
+                let sql_params: Vec<Box<dyn rusqlite::ToSql>> = params
+                    .iter()
+                    .map(|v| -> Box<dyn rusqlite::ToSql> {
+                        match v {
+                            Value::Null => Box::new(rusqlite::types::Null),
+                            Value::Bool(b) => Box::new(*b),
+                            Value::Number(num) => {
+                                if let Some(i) = num.as_i64() {
+                                    Box::new(i)
+                                } else {
+                                    Box::new(num.as_f64().unwrap_or(0.0))
+                                }
+                            }
+                            Value::String(s) => Box::new(s.clone()),
+                            _ => Box::new(v.to_string()),
+                        }
+                    })
+                    .collect();
+
+                let sql_params_ref: Vec<&dyn rusqlite::ToSql> =
+                    sql_params.iter().map(|b| b.as_ref()).collect();
+
+                tx.execute(&sql, &sql_params_ref[..])
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        };
 
         if let Some(items) = sync_res.categories {
             upsert_table(
@@ -534,6 +671,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.categories.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.exercises {
@@ -553,6 +691,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.exercises.as_slice(),
             )?;
         }
         // Routine templates: parents before children.
@@ -561,6 +700,7 @@ async fn tauri_sync(
                 "routines",
                 items.as_slice(),
                 &["id", "name", "notes", "last_modified", "is_deleted"],
+                payload.routines.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.routine_sections {
@@ -575,6 +715,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.routine_sections.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.routine_section_exercises {
@@ -590,6 +731,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.routine_section_exercises.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.routine_section_exercise_sets {
@@ -608,6 +750,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.routine_section_exercise_sets.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.training_logs {
@@ -630,6 +773,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.training_logs.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.body_weights {
@@ -645,6 +789,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.body_weights.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.plates {
@@ -663,6 +808,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.plates.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.barbells {
@@ -677,6 +823,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.barbells.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.workout_comments {
@@ -684,6 +831,7 @@ async fn tauri_sync(
                 "workout_comments",
                 items.as_slice(),
                 &["id", "date", "comment", "last_modified", "is_deleted"],
+                payload.workout_comments.as_slice(),
             )?;
         }
         // Supersets: groups before their exercise links (routine_sections already upserted above).
@@ -702,6 +850,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.workout_groups.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.workout_group_exercises {
@@ -717,6 +866,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.workout_group_exercises.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.goals {
@@ -739,6 +889,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.goals.as_slice(),
             )?;
         }
         // Measurements before measurement_records.
@@ -758,6 +909,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.measurements.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.measurement_records {
@@ -774,6 +926,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.measurement_records.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.exercise_comments {
@@ -788,6 +941,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.exercise_comments.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.workout_times {
@@ -803,6 +957,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.workout_times.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.custom_units {
@@ -818,6 +973,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.custom_units.as_slice(),
             )?;
         }
         if let Some(items) = sync_res.graph_favourites {
@@ -833,7 +989,74 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
+                payload.graph_favourites.as_slice(),
             )?;
+        }
+
+        let pushed_settings_last_modified = payload
+            .settings
+            .as_ref()
+            .and_then(|settings| settings.get("last_modified"))
+            .and_then(Value::as_str)
+            .map(|value| value.to_string());
+        let current_settings_last_modified: Option<String> = tx
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'settings_last_modified'",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        let current_settings_dirty: String = tx
+            .query_row(
+                "SELECT value FROM settings WHERE key = 'settings_is_dirty'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or_else(|_| "0".to_string());
+        let settings_changed_during_sync = current_settings_dirty == "1"
+            && match pushed_settings_last_modified.as_ref() {
+                Some(pushed) => current_settings_last_modified.as_ref() != Some(pushed),
+                None => true,
+            };
+
+        if !settings_changed_during_sync {
+            if let Some(settings) = sync_res.settings {
+                if let Some(map) = settings.as_object() {
+                    for (key, value) in map {
+                        if key == "user_id" {
+                            continue;
+                        }
+
+                        let value_string = match value {
+                            Value::Null => String::new(),
+                            Value::Bool(b) => b.to_string(),
+                            Value::Number(n) => n.to_string(),
+                            Value::String(s) => s.clone(),
+                            _ => value.to_string(),
+                        };
+
+                        let local_key = if key == "last_modified" {
+                            "settings_last_modified"
+                        } else {
+                            key.as_str()
+                        };
+
+                        tx.execute(
+                            "INSERT OR REPLACE INTO settings (key, value) VALUES (?1, ?2)",
+                            params![local_key, value_string],
+                        )
+                        .map_err(|e| e.to_string())?;
+                    }
+                }
+            }
+
+            if payload.settings.is_some() {
+                tx.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES ('settings_is_dirty', '0')",
+                    [],
+                )
+                .map_err(|e| e.to_string())?;
+            }
         }
 
         // Save server timestamp as settings: last_sync_timestamp
@@ -894,6 +1117,41 @@ async fn tauri_invalidate_cache(
         .map_err(|e| e.to_string())?;
 
     tx.commit().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn column_exists(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({})", table))?;
+    let mut rows = stmt.query([])?;
+
+    while let Some(row) = rows.next()? {
+        let name: String = row.get(1)?;
+        if name == column {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+fn add_column_if_missing(
+    conn: &Connection,
+    table: &str,
+    column: &str,
+    definition: &str,
+) -> Result<()> {
+    if !column_exists(conn, table, column)? {
+        conn.execute(
+            &format!("ALTER TABLE {} ADD COLUMN {}", table, definition),
+            [],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
+    add_column_if_missing(conn, "training_logs", "comment", "comment TEXT")?;
     Ok(())
 }
 
@@ -1140,6 +1398,8 @@ pub fn run() {
                 "#,
             )
             .expect("Failed to initialize database tables");
+
+            run_sqlite_upgrades(&conn).expect("Failed to upgrade local SQLite schema");
 
             app.manage(DbConnection(Mutex::new(conn)));
             Ok(())

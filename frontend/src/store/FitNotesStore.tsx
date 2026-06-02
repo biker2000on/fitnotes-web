@@ -729,6 +729,37 @@ export function useFitNotesController() {
   // Initial Boot Database seed & data loading
   useEffect(() => {
     const seedAndLoad = async () => {
+      const isAuthenticated = Boolean(token);
+
+      if (isTauri() && isAuthenticated) {
+        const syncRows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
+        const localCats = await db.query<Category>('SELECT * FROM categories');
+        const localExs = await db.query<Exercise>('SELECT * FROM exercises');
+        const localRoutines = await db.query<Routine>('SELECT * FROM routines');
+
+        if (syncRows.length === 0 && localCats.length === 0 && localExs.length === 0 && localRoutines.length === 0) {
+          try {
+            setSyncStatus('syncing');
+            await db.sync(token, getApiBaseUrl());
+            setSyncStatus('success');
+            await refreshData();
+            setTimeout(() => setSyncStatus('idle'), 3000);
+            return;
+          } catch (e) {
+            console.warn('Initial Android sync failed:', e);
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 3000);
+          }
+        }
+      }
+
+      if (isAuthenticated) {
+        workoutCommentRef.current = '';
+        setWorkoutComment('');
+        await refreshData();
+        return;
+      }
+
       // 1. Check if DB has default categories
       const localCats = await db.query<Category>('SELECT * FROM categories');
       if (localCats.length === 0) {
@@ -770,7 +801,7 @@ export function useFitNotesController() {
     };
 
     seedAndLoad();
-  }, [selectedDate]);
+  }, [selectedDate, token]);
 
   const refreshData = async () => {
     const cats = await db.query<Category>('SELECT * FROM categories');
@@ -780,8 +811,8 @@ export function useFitNotesController() {
     const weights = await db.query<BodyWeight>('SELECT * FROM body_weights');
     const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
     const rts = await db.query<Routine>('SELECT * FROM routines');
-    const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups WHERE date = ? AND is_deleted = 0', [selectedDate]);
-    const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises WHERE date = ? AND is_deleted = 0', [selectedDate]);
+    const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+    const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
     const gls = await db.query<Goal>('SELECT * FROM goals');
     const meas = await db.query<Measurement>('SELECT * FROM measurements');
     const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
@@ -856,29 +887,29 @@ export function useFitNotesController() {
   };
 
   // Debounced Auto-Sync Setup
-  const [syncTimeoutId, setSyncTimeoutId] = useState<any>(null);
+  const syncTimeoutRef = useRef<any>(null);
 
   const triggerDebouncedSync = () => {
     if (!token) return;
-    if (syncTimeoutId) clearTimeout(syncTimeoutId);
-    const id = setTimeout(() => {
+    if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+    syncTimeoutRef.current = setTimeout(() => {
       triggerSync();
     }, 2500); // 2.5 seconds debounce
-    setSyncTimeoutId(id);
   };
 
   useEffect(() => {
     return () => {
-      if (syncTimeoutId) clearTimeout(syncTimeoutId);
+      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     };
-  }, [syncTimeoutId]);
+  }, []);
 
   // Central change listener for all DB operations
   useEffect(() => {
     if (!token) return;
-    db.onChange(() => {
+    const unsubscribe = db.onChange(() => {
       triggerDebouncedSync();
     });
+    return unsubscribe;
   }, [token]);
 
   // Sync on Reconnection or App Focus

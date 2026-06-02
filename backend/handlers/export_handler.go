@@ -14,6 +14,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func fitNotesDateString(date time.Time) string {
+	if date.IsZero() {
+		return ""
+	}
+	return date.Format("2006-01-02")
+}
+
 func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := middleware.GetUserID(r.Context())
 	if err != nil {
@@ -383,7 +390,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				_, _ = sqliteDB.Exec("INSERT INTO WorkoutGroup (_id, name, date, colour, routine_section_id, auto_jump_enabled, rest_timer_auto_start_enabled) VALUES (?, ?, ?, ?, ?, ?, ?)",
-					wgCounter, name, date.Format("2006-01-02"), colour, oldSecID, autoJumpInt, restAutoInt)
+					wgCounter, name, fitNotesDateString(date), colour, oldSecID, autoJumpInt, restAutoInt)
 				wgCounter++
 			}
 		}
@@ -407,7 +414,7 @@ func ExportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				}
 
 				_, _ = sqliteDB.Exec("INSERT INTO WorkoutGroupExercise (exercise_id, date, routine_section_id, workout_group_id) VALUES (?, ?, ?, ?)",
-					oldExID, date.Format("2006-01-02"), oldSecID, oldGroupID)
+					oldExID, fitNotesDateString(date), oldSecID, oldGroupID)
 			}
 		}
 	}

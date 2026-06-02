@@ -82,6 +82,7 @@ CREATE TABLE training_logs (
     is_complete INTEGER DEFAULT 0 NOT NULL,
     distance REAL,
     duration_seconds INTEGER,
+    comment TEXT,
     last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
     is_deleted INTEGER DEFAULT 0 NOT NULL,
     is_dirty INTEGER DEFAULT 0 NOT NULL
@@ -194,6 +195,49 @@ CREATE TABLE measurement_records (
     time TEXT NOT NULL,
     value REAL NOT NULL,
     comment TEXT,
+    last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_deleted INTEGER DEFAULT 0 NOT NULL,
+    is_dirty INTEGER DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE exercise_comments (
+    id TEXT PRIMARY KEY,
+    exercise_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    comment TEXT,
+    last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_deleted INTEGER DEFAULT 0 NOT NULL,
+    is_dirty INTEGER DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE workout_times (
+    id TEXT PRIMARY KEY,
+    date TEXT NOT NULL,
+    start_time TEXT,
+    end_time TEXT,
+    duration_seconds INTEGER,
+    last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_deleted INTEGER DEFAULT 0 NOT NULL,
+    is_dirty INTEGER DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE custom_units (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    abbreviation TEXT NOT NULL,
+    type INTEGER NOT NULL,
+    conversion_to_base REAL NOT NULL,
+    last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_deleted INTEGER DEFAULT 0 NOT NULL,
+    is_dirty INTEGER DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE graph_favourites (
+    id TEXT PRIMARY KEY,
+    exercise_id TEXT,
+    graph_type INTEGER NOT NULL,
+    time_period INTEGER NOT NULL,
+    rep_filter TEXT,
     last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
     is_deleted INTEGER DEFAULT 0 NOT NULL,
     is_dirty INTEGER DEFAULT 0 NOT NULL

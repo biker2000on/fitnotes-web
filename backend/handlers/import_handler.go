@@ -15,6 +15,26 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+func parseFitNotesDate(dateStr string) (time.Time, bool) {
+	if dateStr == "" {
+		return time.Time{}, true
+	}
+
+	parsedDate, err := time.Parse("2006-01-02", dateStr)
+	if err == nil {
+		return parsedDate, true
+	}
+
+	if len(dateStr) > 10 {
+		parsedDate, err = time.Parse("2006-01-02", dateStr[:10])
+		if err == nil {
+			return parsedDate, true
+		}
+	}
+
+	return time.Time{}, false
+}
+
 func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	userID, err := middleware.GetUserID(r.Context())
@@ -536,12 +556,9 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			newGroupID := uuid.New()
 			groupMap[oldID] = newGroupID
 
-			var parsedDate time.Time
-			if dateStr != "" {
-				parsedDate, err = time.Parse("2006-01-02", dateStr)
-				if err != nil && len(dateStr) > 10 {
-					parsedDate, _ = time.Parse("2006-01-02", dateStr[:10])
-				}
+			parsedDate, ok := parseFitNotesDate(dateStr)
+			if !ok {
+				continue
 			}
 
 			var newSecID interface{} = nil
@@ -582,12 +599,9 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			var parsedDate time.Time
-			if dateStr != "" {
-				parsedDate, err = time.Parse("2006-01-02", dateStr)
-				if err != nil && len(dateStr) > 10 {
-					parsedDate, _ = time.Parse("2006-01-02", dateStr[:10])
-				}
+			parsedDate, ok := parseFitNotesDate(dateStr)
+			if !ok {
+				continue
 			}
 
 			var newSecID interface{} = nil

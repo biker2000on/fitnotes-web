@@ -7,7 +7,7 @@ export interface DBDriver {
   execute(sql: string, params?: any[]): Promise<void>;
   sync(apiToken: string, apiBaseUrl: string): Promise<void>;
   invalidateCache(preserveDirty: boolean): Promise<void>;
-  onChange(listener: () => void): void;
+  onChange(listener: () => void): () => void;
 }
 
 // Check if running inside Tauri WebView
@@ -91,8 +91,11 @@ const normalizeForSync = (item: any, uuidFields: string[] = []) => {
 class BrowserLocalDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
 
-  onChange(listener: () => void): void {
+  onChange(listener: () => void): () => void {
     this.changeListeners.push(listener);
+    return () => {
+      this.changeListeners = this.changeListeners.filter(l => l !== listener);
+    };
   }
 
   private notifyListeners(): void {
@@ -591,8 +594,11 @@ class BrowserLocalDriver implements DBDriver {
 class TauriNativeDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
 
-  onChange(listener: () => void): void {
+  onChange(listener: () => void): () => void {
     this.changeListeners.push(listener);
+    return () => {
+      this.changeListeners = this.changeListeners.filter(l => l !== listener);
+    };
   }
 
   private notifyListeners(): void {
@@ -601,7 +607,34 @@ class TauriNativeDriver implements DBDriver {
     });
   }
 
+  private parseSettingsValue(value: unknown): unknown {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+      return Number(value);
+    }
+    return value;
+  }
+
   async query<T>(sql: string, params: any[] = []): Promise<T[]> {
+    const normalized = sql.toLowerCase().trim();
+    if (normalized === 'select * from settings') {
+      const rows = await (invoke as any)('tauri_query', { sql, params }) as Array<{ key: string; value: unknown }>;
+      const settings = { ...DEFAULT_SETTINGS, is_dirty: 0 } as Record<string, unknown>;
+
+      rows.forEach(row => {
+        if (row.key === 'settings_is_dirty') {
+          settings.is_dirty = Number(row.value) || 0;
+        } else if (row.key === 'settings_last_modified') {
+          settings.last_modified = row.value;
+        } else if (row.key !== 'last_sync_timestamp') {
+          settings[row.key] = this.parseSettingsValue(row.value);
+        }
+      });
+
+      return [settings] as T[];
+    }
+
     return (invoke as any)('tauri_query', { sql, params }) as Promise<T[]>;
   }
 
@@ -635,6 +668,14 @@ class TauriNativeDriver implements DBDriver {
             params: [k, valStr]
           });
         }
+        await (invoke as any)('tauri_execute', {
+          sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
+          params: ['settings_is_dirty', '1']
+        });
+        await (invoke as any)('tauri_execute', {
+          sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
+          params: ['settings_last_modified', new Date().toISOString()]
+        });
         this.notifyListeners();
         return;
       }
