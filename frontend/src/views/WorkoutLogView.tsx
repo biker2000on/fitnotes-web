@@ -2,9 +2,10 @@
 // sets table (drag to reorder), today's summary with supersets, comments, and
 // the plate-loading visualizer.
 import {
-  TrendingUp, Calculator, Plus, Check, Trash2, GripVertical,
-  Dumbbell, Layers, Bookmark, FileText, Timer, Share2,
+  TrendingUp, Calculator, Plus, Check, Trash2, GripVertical, X,
+  Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
@@ -24,25 +25,109 @@ export function WorkoutLogView() {
     settings, logComment, setLogComment, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
+    setHistoryExerciseId,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
+  const [showEntryModal, setShowEntryModal] = useState(false);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const selectedExerciseLogs = selectedExercise ? currentLogs.filter(x => x.exercise_id === selectedExercise.id) : [];
+
+  useEffect(() => {
+    const openComments = () => setShowCommentsModal(true);
+    const openSetEntry = () => setShowEntryModal(true);
+    window.addEventListener('fitnotes:open-workout-comments', openComments);
+    window.addEventListener('fitnotes:open-set-entry', openSetEntry);
+    return () => {
+      window.removeEventListener('fitnotes:open-workout-comments', openComments);
+      window.removeEventListener('fitnotes:open-set-entry', openSetEntry);
+    };
+  }, []);
+
+  const submitSet = async () => {
+    await handleAddSet();
+  };
+
+  const cancelEntry = () => {
+    if (editingLog) handleCancelEdit();
+    setShowEntryModal(false);
+  };
+
+  const openEntryForLog = (log: typeof currentLogs[number]) => {
+    handleSelectLogForEdit(log);
+    setShowEntryModal(true);
+  };
+
+  const openEntryForExercise = (exercise: typeof exercises[number]) => {
+    setSelectedExercise(exercise);
+    setShowEntryModal(true);
+  };
 
   return (
     <div className="workout-grid">
       {/* Left: Active set Logger & comments */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      <div className="workout-log-input-column">
         {selectedExercise ? (
-          <div className="card" style={{ gap: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div className="card-title">
-                <TrendingUp size={18} color="var(--primary)" />
-                {selectedExercise.name}
+          <div className="card active-exercise-card" style={{ gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <div className="card-title">
+                  <TrendingUp size={18} color="var(--primary)" />
+                  {selectedExercise.name}
+                </div>
+                <div style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', marginTop: '6px' }}>
+                  {selectedExerciseLogs.length} set{selectedExerciseLogs.length === 1 ? '' : 's'} logged today
+                </div>
               </div>
-              <button className="btn btn-secondary" onClick={() => setShowPlateCalc(true)}>
-                <Calculator size={16} /> Plate Calc
+              <div className="selected-exercise-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button className="btn btn-primary" onClick={() => setShowEntryModal(true)}>
+                  <Plus size={16} /> Log Set
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowCommandPalette(true)}>
+                  <Dumbbell size={16} /> Change
+                </button>
+                <button className="btn btn-secondary" onClick={() => setShowPlateCalc(true)}>
+                  <Calculator size={16} /> Plate Calc
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="card active-exercise-card" style={{ gap: '20px', padding: '40px 24px', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderStyle: 'dashed' }}>
+            <Dumbbell size={48} color="var(--text-secondary-dark)" style={{ opacity: 0.5, marginBottom: '8px' }} />
+            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>No Exercise Selected</h3>
+            <p style={{ color: 'var(--text-secondary-dark)', fontSize: '14px', maxWidth: '320px', margin: '4px 0 16px 0' }}>
+              Select an exercise or load a routine to start logging today's work.
+            </p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={() => setShowCommandPalette(true)}>
+                <Dumbbell size={16} /> Select Exercise
+              </button>
+              <button className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
+                <Bookmark size={16} /> Load Routine
               </button>
             </div>
+          </div>
+        )}
 
+        {showEntryModal && selectedExercise && (
+          <div className="modal-overlay mobile-modal-overlay" onClick={cancelEntry}>
+            <div className="modal-content mobile-modal-content workout-entry-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-modal-header">
+                <div>
+                  <div className="card-title">
+                    <TrendingUp size={18} color="var(--primary)" />
+                    {selectedExercise.name}
+                  </div>
+                  <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>
+                    {editingLog ? 'Edit logged set' : 'Add a set'}
+                  </div>
+                </div>
+                <button className="btn btn-secondary icon-btn" onClick={cancelEntry} aria-label="Close set entry">
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="mobile-modal-scroll">
             {/* Dynamic inputs based on exercise type */}
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', width: '100%' }}>
               {typeHasWeight(selectedExercise.exercise_type_id) && (
@@ -93,11 +178,11 @@ export function WorkoutLogView() {
                 </div>
               )}
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-primary" onClick={handleAddSet} style={{ height: '46px', whiteSpace: 'nowrap' }}>
+                <button className="btn btn-primary" onClick={submitSet} style={{ height: '46px', whiteSpace: 'nowrap' }}>
                   {editingLog ? <Check size={18} /> : <Plus size={18} />} {editingLog ? 'Update Set' : 'Add Set'}
                 </button>
                 {editingLog && (
-                  <button className="btn btn-secondary" onClick={handleCancelEdit} style={{ height: '46px', whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-secondary" onClick={cancelEntry} style={{ height: '46px', whiteSpace: 'nowrap' }}>
                     Cancel Edit
                   </button>
                 )}
@@ -140,7 +225,7 @@ export function WorkoutLogView() {
                         </tr>
                       </thead>
                       <tbody>
-                        {currentLogs.filter(x => x.exercise_id === selectedExercise.id).map((log, index) => (
+                        {selectedExerciseLogs.map((log, index) => (
                           <Draggable key={log.id} draggableId={log.id} index={index}>
                             {(draggableProvided) => (
                               <tr
@@ -169,7 +254,7 @@ export function WorkoutLogView() {
                                 <td 
                                   className="set-td" 
                                   style={{ fontWeight: 600, cursor: 'pointer' }}
-                                  onClick={() => handleSelectLogForEdit(log)}
+                                  onClick={() => openEntryForLog(log)}
                                   title="Click to edit set"
                                 >
                                   {formatLogValue(log, selectedExercise.exercise_type_id)}
@@ -212,27 +297,13 @@ export function WorkoutLogView() {
                 </button>
               </div>
             )}
+              </div>
           </div>
-        ) : (
-          <div className="card" style={{ gap: '20px', padding: '40px 24px', alignItems: 'center', justifyContent: 'center', textAlign: 'center', borderStyle: 'dashed' }}>
-            <Dumbbell size={48} color="var(--text-secondary-dark)" style={{ opacity: 0.5, marginBottom: '8px' }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700, margin: 0 }}>No Exercise Selected</h3>
-            <p style={{ color: 'var(--text-secondary-dark)', fontSize: '14px', maxWidth: '320px', margin: '4px 0 16px 0' }}>
-              Select an exercise to log your sets, reps, and track your workout progress.
-            </p>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button className="btn btn-primary" onClick={() => setShowCommandPalette(true)}>
-                Select Exercise
-              </button>
-              <button className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
-                Load Routine
-              </button>
-            </div>
           </div>
         )}
 
         {/* Workout comments */}
-        <div className="card">
+        <div className="card workout-comments-card">
           <div className="card-title"><FileText size={16} /> Workout Comments</div>
           <textarea
             value={workoutComment}
@@ -244,6 +315,28 @@ export function WorkoutLogView() {
             Save Comments
           </button>
         </div>
+
+        {showCommentsModal && (
+          <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCommentsModal(false)}>
+            <div className="modal-content mobile-modal-content workout-comments-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="mobile-modal-header">
+                <div className="card-title"><FileText size={16} /> Workout Comments</div>
+                <button className="btn btn-secondary icon-btn" onClick={() => setShowCommentsModal(false)} aria-label="Close workout comments">
+                  <X size={18} />
+                </button>
+              </div>
+              <textarea
+                value={workoutComment}
+                onChange={(e) => setWorkoutComment(e.target.value)}
+                placeholder="Enter notes, targets, or mood for today's session..."
+                rows={5}
+              />
+              <button className="btn btn-primary" onClick={() => { handleSaveComment(); setShowCommentsModal(false); }}>
+                Save Comments
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right: Today's Workout Summary side panel */}
@@ -255,36 +348,43 @@ export function WorkoutLogView() {
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {currentLogs.length > 0 && (
-              <button className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete}>
+              <button className="btn btn-primary complete-all-icon-btn summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete} title="Complete All" aria-label="Complete All">
                 ✓ Complete All
               </button>
             )}
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
-              <Bookmark size={14} /> Copy
+            <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCopyWorkoutDrawer(true)} title="Copy Workout" aria-label="Copy Workout">
+              <Copy size={14} /> Copy
             </button>
-            <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowPlateCalc(true)}>
+            <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowPlateCalc(true)} title="Plate Calculator" aria-label="Plate Calculator">
               <Calculator size={14} /> Plate Calc
             </button>
             {currentLogs.length > 0 && (
               <>
-                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={shareWorkout}>
+                <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={shareWorkout} title="Share Workout" aria-label="Share Workout">
                   <Share2 size={14} /> Share
                 </button>
-                <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }} onClick={handleClearDay}>
+                <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }} onClick={handleClearDay} title="Clear Workout" aria-label="Clear Workout">
                   <Trash2 size={14} /> Clear
                 </button>
               </>
             )}
             {currentLogs.length > 0 && (
-              <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
+              <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
                 setSelectedExIdsForSuperset([]);
                 setShowSupersetManagerModal(true);
-              }}>
+              }} title="Link Superset" aria-label="Link Superset">
                 <Plus size={14} /> Link Superset
               </button>
             )}
           </div>
         </div>
+
+        {workoutComment.trim() && (
+          <div className="workout-summary-comment">
+            <FileText size={15} />
+            <span>{workoutComment}</span>
+          </div>
+        )}
 
         {currentLogs.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
@@ -405,22 +505,37 @@ export function WorkoutLogView() {
                           return (
                             <div key={exId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
-                                  {ex.name}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                  <div style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => openEntryForExercise(ex)}>
+                                    {ex.name}
+                                  </div>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
+                                    {cat?.name || 'Misc'}
+                                  </span>
                                   {exLogs.length > 0 && hasUncompleted && (
                                     <button 
-                                      className="btn btn-secondary" 
+                                      className="btn btn-secondary complete-all-icon-btn" 
                                       style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
                                       onClick={() => handleMarkExerciseComplete(ex.id)}
+                                      title="Complete All"
+                                      aria-label={`Complete all sets for ${ex.name}`}
                                     >
                                       ✓ Complete All
                                     </button>
                                   )}
-                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                                    {cat?.name || 'Misc'}
-                                  </span>
+                                  <button
+                                    className="icon-btn workout-history-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setHistoryExerciseId(ex.id);
+                                    }}
+                                    title="History, records, and graph"
+                                    aria-label={`Open history, records, and graph for ${ex.name}`}
+                                  >
+                                    <HistoryIcon size={15} />
+                                  </button>
                                 </div>
                               </div>
 
@@ -431,7 +546,7 @@ export function WorkoutLogView() {
                                   exLogs.map((log, index) => (
                                     <div 
                                       key={log.id} 
-                                      onClick={() => handleSelectLogForEdit(log)} 
+                                      onClick={() => openEntryForLog(log)} 
                                       style={{ 
                                         display: 'flex', 
                                         alignItems: 'center', 
@@ -509,22 +624,37 @@ export function WorkoutLogView() {
                   return (
                     <div key={ex.id} className="summary-exercise-card" style={{ padding: '16px', border: '1px solid var(--border-dark)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.005)', borderLeft: `4px solid ${catColor}` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ fontWeight: 700, fontSize: '15px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => setSelectedExercise(ex)}>
-                          {ex.name}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: '15px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => openEntryForExercise(ex)}>
+                            {ex.name}
+                          </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
+                            {cat?.name || 'Misc'}
+                          </span>
                           {exLogs.length > 0 && hasUncompleted && (
                             <button 
-                              className="btn btn-secondary" 
+                              className="btn btn-secondary complete-all-icon-btn" 
                               style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
                               onClick={() => handleMarkExerciseComplete(ex.id)}
+                              title="Complete All"
+                              aria-label={`Complete all sets for ${ex.name}`}
                             >
                               ✓ Complete All
                             </button>
                           )}
-                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                            {cat?.name || 'Misc'}
-                          </span>
+                          <button
+                            className="icon-btn workout-history-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHistoryExerciseId(ex.id);
+                            }}
+                            title="History, records, and graph"
+                            aria-label={`Open history, records, and graph for ${ex.name}`}
+                          >
+                            <HistoryIcon size={15} />
+                          </button>
                         </div>
                       </div>
 
@@ -532,7 +662,7 @@ export function WorkoutLogView() {
                         {exLogs.map((log, index) => (
                           <div 
                             key={log.id} 
-                            onClick={() => handleSelectLogForEdit(log)} 
+                            onClick={() => openEntryForLog(log)} 
                             style={{ 
                               display: 'flex', 
                               alignItems: 'center', 

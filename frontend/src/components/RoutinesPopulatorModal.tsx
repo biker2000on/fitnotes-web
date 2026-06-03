@@ -20,9 +20,9 @@ export const RoutinesPopulatorModal: React.FC<RoutinesPopulatorModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 100000 }}>
+    <div className="modal-overlay mobile-modal-overlay" onClick={onClose} style={{ zIndex: 100000 }}>
       <div 
-        className="modal-content" 
+        className="modal-content mobile-modal-content" 
         style={{ 
           maxWidth: '460px',
           backgroundColor: 'rgba(30, 41, 59, 0.95)',
@@ -36,16 +36,19 @@ export const RoutinesPopulatorModal: React.FC<RoutinesPopulatorModalProps> = ({
         }} 
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ borderBottom: '1px solid var(--border-dark)', paddingBottom: '12px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary-dark)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Play size={20} color="var(--primary)" /> Start Routine
-          </h2>
-          <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
-            Choose how to populate sets for **{routineName}**
-          </span>
+        <div className="mobile-modal-header" style={{ borderBottom: '1px solid var(--border-dark)', paddingBottom: '12px' }}>
+          <div>
+            <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary-dark)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+              <Play size={20} color="var(--primary)" /> Start Routine
+            </h2>
+            <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+              Choose how to populate sets for {routineName}
+            </span>
+          </div>
+          <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={onClose}>Close</button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div className="mobile-modal-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {/* Option A: Template Defaults */}
           <div 
             onClick={() => setSelectedType('template')}
@@ -143,7 +146,7 @@ export const RoutinesPopulatorModal: React.FC<RoutinesPopulatorModalProps> = ({
           )}
         </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--border-dark)', paddingTop: '16px' }}>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '12px', borderTop: '1px solid var(--border-dark)', paddingTop: '16px', flexShrink: 0 }}>
           <button 
             className="btn btn-primary" 
             style={{ flex: 1 }}

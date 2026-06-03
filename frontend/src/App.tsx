@@ -4,12 +4,15 @@ import {
   User, 
   LineChart, 
   Calculator,
+  CalendarDays,
   RefreshCw,
   LogOut,
   Lock,
   Flame,
   FolderPlus,
   Bookmark,
+  MessageSquare,
+  Plus,
   Layers,
   Layers3,
   Menu,
@@ -423,62 +426,84 @@ export default function App() {
       </aside>
 
       {/* 2. Main Workspace Dashboard */}
-      <main className="main-content">
-        <header className="header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} title="Open navigation Menu">
-              <Menu size={24} />
-            </button>
-            <div className="title-section">
-              <h1>FitNotes Dashboard</h1>
-              <p style={{ margin: 0 }}>Interactive tracking session for {selectedDate}</p>
-              <p style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, margin: '2px 0 0 0', textTransform: 'capitalize' }}>
-                {(() => {
-                  try {
-                    const parts = selectedDate.split('-');
-                    if (parts.length === 3) {
-                      const y = parseInt(parts[0], 10);
-                      const m = parseInt(parts[1], 10) - 1;
-                      const d = parseInt(parts[2], 10);
-                      return new Date(y, m, d).toLocaleDateString(undefined, { weekday: 'long' });
-                    }
-                  } catch (e) {}
-                  return '';
-                })()}
-              </p>
+      <main className={`main-content ${activeTab === 'log' || activeTab === 'exercises' ? 'has-mobile-bottom-actions' : ''}`}>
+        {activeTab !== 'calendar' && (
+          <header className="header" style={{ flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} title="Open navigation Menu">
+                <Menu size={24} />
+              </button>
+              <div className="title-section">
+                <h1>FitNotes Dashboard</h1>
+                <p style={{ margin: 0 }}>Interactive tracking session for {selectedDate}</p>
+                <p style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 600, margin: '2px 0 0 0', textTransform: 'capitalize' }}>
+                  {(() => {
+                    try {
+                      const parts = selectedDate.split('-');
+                      if (parts.length === 3) {
+                        const y = parseInt(parts[0], 10);
+                        const m = parseInt(parts[1], 10) - 1;
+                        const d = parseInt(parts[2], 10);
+                        return new Date(y, m, d).toLocaleDateString(undefined, { weekday: 'long' });
+                      }
+                    } catch (e) {}
+                    return '';
+                  })()}
+                </p>
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {activeTab === 'log' && (
-              <>
-                <button className="btn btn-primary" onClick={() => setShowCommandPalette(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Dumbbell size={16} /> Select Exercise (Ctrl+K)
-                </button>
-                <button className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
-                  <Bookmark size={16} /> Load Routine
-                </button>
-              </>
-            )}
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-              <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Subtract 1 Day" onClick={() => {
-                setSelectedDate(addDays(selectedDate, -1));
-              }}>-</button>
-              <input 
-                type="date" 
-                value={selectedDate} 
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{ width: '150px', padding: '10px' }}
-              />
-              <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Add 1 Day" onClick={() => {
-                setSelectedDate(addDays(selectedDate, 1));
-              }}>+</button>
-              <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Today" onClick={() => {
-                setSelectedDate(getLocalDateString());
-              }}>Today</button>
+            <div className={`header-actions ${activeTab === 'log' || activeTab === 'exercises' ? 'mobile-bottom-actions' : ''} ${activeTab === 'exercises' ? 'mobile-exercise-actions' : ''}`} style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+              {activeTab === 'log' && (
+                <>
+                  <button className="btn btn-primary mobile-action-primary" onClick={() => setShowCommandPalette(true)} title="Select Exercise" aria-label="Select Exercise" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Dumbbell size={16} /> Select Exercise (Ctrl+K)
+                  </button>
+                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => setShowRoutineImportModal(true)} title="Load Routine" aria-label="Load Routine">
+                    <Bookmark size={16} /> Load Routine
+                  </button>
+                  <button className="btn btn-secondary mobile-action-comments" title="Workout Comments" aria-label="Workout Comments" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-workout-comments'))}>
+                    <MessageSquare size={16} />
+                  </button>
+                </>
+              )}
+              {activeTab === 'exercises' && (
+                <>
+                  <button className="btn btn-primary mobile-action-primary" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-create-exercise'))} title="Create Exercise" aria-label="Create Exercise">
+                    <Plus size={16} /> Create Exercise
+                  </button>
+                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => { setNewCatName(''); setNewCatColor('#6366f1'); setShowCatModal(true); }} title="Add Category" aria-label="Add Category">
+                    <FolderPlus size={16} /> Add Category
+                  </button>
+                  <button className="btn btn-secondary mobile-action-tertiary" onClick={() => setShowManageCatsModal(true)} title="Manage Categories" aria-label="Manage Categories">
+                    <SettingsIcon size={16} /> Manage Categories
+                  </button>
+                </>
+              )}
+              {activeTab === 'log' && (
+                <>
+                  <div className="date-nav-actions" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Subtract 1 Day" onClick={() => {
+                      setSelectedDate(addDays(selectedDate, -1));
+                    }}>-</button>
+                    <input 
+                      type="date" 
+                      value={selectedDate} 
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      style={{ width: '150px', padding: '10px' }}
+                    />
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Add 1 Day" onClick={() => {
+                      setSelectedDate(addDays(selectedDate, 1));
+                    }}>+</button>
+                    <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Today" onClick={() => {
+                      setSelectedDate(getLocalDateString());
+                    }}><CalendarDays size={16} /><span className="desktop-label">Today</span></button>
+                  </div>
+                  <SyncStatusIndicator />
+                </>
+              )}
             </div>
-            <SyncStatusIndicator />
-          </div>
-        </header>
+          </header>
+        )}
 
         {/* -------------------- LOG TAB -------------------- */}
         {activeTab === 'log' && <WorkoutLogView />}
@@ -533,6 +558,7 @@ export default function App() {
         onSelectExercise={(ex) => {
           setSelectedExercise(ex);
           setShowCommandPalette(false);
+          window.dispatchEvent(new CustomEvent('fitnotes:open-set-entry'));
           // Automatically focus the appropriate logging input
           setTimeout(() => {
             const inputId = typeHasWeight(ex.exercise_type_id) ? 'log-weight-input' : 'log-distance-input';
@@ -662,36 +688,38 @@ export default function App() {
 
       {/* 6. Routine Import Picker Modal Drawer */}
       {showRoutineImportModal && (
-        <div className="modal-overlay" onClick={() => setShowRoutineImportModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowRoutineImportModal(false)}>
+          <div className="modal-content mobile-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-modal-header">
               <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Bookmark size={20} color="var(--primary)" /> Select Routine to Load</h2>
               <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowRoutineImportModal(false)}>Close</button>
             </div>
             
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Choose a template to automatically load its exercises and target sets into today's log:</p>
+            <div className="mobile-modal-scroll">
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Choose a template to automatically load its exercises and target sets into today's log:</p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
-              {routines.length === 0 ? (
-                <p style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary-dark)' }}>No routines constructed yet.</p>
-              ) : (
-                routines.map(r => (
-                  <button 
-                    key={r.id} 
-                    className="btn btn-secondary" 
-                    onClick={() => {
-                      setActiveRoutineForPopulate(r);
-                      setShowRoutineImportModal(false);
-                    }}
-                    style={{ width: '100%', justifyContent: 'flex-start', padding: '16px', borderRadius: '16px' }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary-dark)', textAlign: 'left' }}>{r.name}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', marginTop: '4px', textAlign: 'left' }}>{r.notes || 'No description notes added.'}</div>
-                    </div>
-                  </button>
-                ))
-              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '12px' }}>
+                {routines.length === 0 ? (
+                  <p style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary-dark)' }}>No routines constructed yet.</p>
+                ) : (
+                  routines.map(r => (
+                    <button 
+                      key={r.id} 
+                      className="btn btn-secondary" 
+                      onClick={() => {
+                        setActiveRoutineForPopulate(r);
+                        setShowRoutineImportModal(false);
+                      }}
+                      style={{ width: '100%', justifyContent: 'flex-start', padding: '16px', borderRadius: '16px' }}
+                    >
+                      <div>
+                        <div style={{ fontWeight: 800, fontSize: '15px', color: 'var(--text-primary-dark)', textAlign: 'left' }}>{r.name}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', marginTop: '4px', textAlign: 'left' }}>{r.notes || 'No description notes added.'}</div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1096,15 +1124,16 @@ export default function App() {
 
       {/* 9.5 Split Day Selector Modal when importing routine */}
       {activeRoutineForPopulate && populateSections.length > 0 && (
-        <div className="modal-overlay" onClick={() => setActiveRoutineForPopulate(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div className="modal-overlay mobile-modal-overlay" onClick={() => setActiveRoutineForPopulate(null)}>
+          <div className="modal-content mobile-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="mobile-modal-header">
               <h2 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 <Bookmark size={20} color="var(--primary)" /> Select Split Day to Start
               </h2>
               <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setActiveRoutineForPopulate(null)}>Close</button>
             </div>
 
+            <div className="mobile-modal-scroll">
             <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginBottom: '16px' }}>
               Select which workout day split from <strong>{activeRoutineForPopulate.name}</strong> you want to load:
             </p>
@@ -1124,6 +1153,7 @@ export default function App() {
                   <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 600 }}>Start Day Split →</span>
                 </button>
               ))}
+            </div>
             </div>
           </div>
         </div>
