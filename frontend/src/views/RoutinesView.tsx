@@ -1,6 +1,6 @@
 // RoutinesView.tsx - Expanded interactive list of routines with section (Workout Day) populating.
-import { useState } from 'react';
-import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet } from '../types';
@@ -18,6 +18,16 @@ export function RoutinesView() {
     exercises: RoutineSectionExercise[];
     sets: RoutineSectionExerciseSet[];
   } | null>(null);
+  const [routineFilter, setRoutineFilter] = useState('');
+
+  const filteredRoutines = useMemo(() => {
+    const needle = routineFilter.trim().toLowerCase();
+    if (!needle) return routines;
+    return routines.filter(r => [
+      r.name,
+      r.notes ?? '',
+    ].join(' ').toLowerCase().includes(needle));
+  }, [routineFilter, routines]);
 
   // Toggle routine card expansion and load details inline
   const handleToggleExpand = async (routineId: string) => {
@@ -86,14 +96,28 @@ export function RoutinesView() {
           </button>
         </div>
 
+        <div className="routine-filter-row">
+          <Search size={16} />
+          <input
+            type="search"
+            placeholder="Filter routines"
+            value={routineFilter}
+            onChange={(e) => setRoutineFilter(e.target.value)}
+          />
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
           {routines.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-secondary-dark)' }}>
               <Bookmark size={32} style={{ opacity: 0.2, marginBottom: '8px', display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
               No routine templates created yet.
             </div>
+          ) : filteredRoutines.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-secondary-dark)', fontSize: '13px' }}>
+              No routine templates match your filter.
+            </div>
           ) : (
-            routines.map(r => {
+            filteredRoutines.map(r => {
               const isExpanded = expandedRoutineId === r.id;
               return (
                 <div
