@@ -1,6 +1,6 @@
 // ExerciseHistoryDrawer.tsx - Per-exercise History / Records / Graph,
 // mirroring FitNotes' exercise detail tabs. Opens when historyExerciseId is set.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, LineChart as ReLineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
@@ -32,6 +32,17 @@ export function ExerciseHistoryDrawer() {
     }));
   }, [logs, userUnit]);
 
+  useEffect(() => {
+    if (!historyExerciseId) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setHistoryExerciseId(null);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [historyExerciseId, setHistoryExerciseId]);
+
   if (!historyExerciseId || !exercise) return null;
 
   const niceDate = (iso: string) =>
@@ -48,11 +59,11 @@ export function ExerciseHistoryDrawer() {
 
   return (
     <>
-      <div className="sidebar-backdrop open" onClick={close} style={{ zIndex: 60 }} />
+      <div className="sidebar-backdrop open" onClick={close} style={{ zIndex: 100000 }} />
       <aside style={{
         position: 'fixed', top: 0, right: 0, height: '100dvh', width: 'min(480px, 100vw)',
         background: 'var(--bg-surface-dark)', borderLeft: '1px solid var(--border-dark)',
-        zIndex: 61, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 24px rgba(0,0,0,0.3)',
+        zIndex: 100001, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 24px rgba(0,0,0,0.3)',
       }}>
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
