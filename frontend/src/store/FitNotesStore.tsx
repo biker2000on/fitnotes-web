@@ -1689,7 +1689,8 @@ export function useFitNotesController() {
 
   // 7 Dynamic Exercise Types formatter
   const formatLogValue = (log: TrainingLog, typeId: number) => {
-    const weightStr = log.metric_weight !== null ? `${displayWeight(log.metric_weight, log.unit)}` : '';
+    const hasWeightValue = log.metric_weight !== null && log.metric_weight > 0;
+    const weightStr = hasWeightValue ? `${displayWeight(log.metric_weight, log.unit)}` : '';
     const repsStr = log.reps !== null ? `${log.reps} reps` : '';
     const distStr = log.distance !== null
       ? (settings.distance_unit === 2 ? `${Math.round((log.distance / 1.60934) * 100) / 100} mi` : `${log.distance} km`)
@@ -1699,6 +1700,7 @@ export function useFitNotesController() {
     switch (typeId) {
       case 0: // Weight & Reps (FitNotes Android)
       case 1: // Weight & Reps
+        if (!hasWeightValue && repsStr) return repsStr;
         return `${weightStr} x ${repsStr}`;
       case 2: // Reps Only
         return `${repsStr}`;

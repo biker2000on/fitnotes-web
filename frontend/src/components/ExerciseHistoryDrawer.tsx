@@ -34,15 +34,6 @@ export function ExerciseHistoryDrawer() {
 
   if (!historyExerciseId || !exercise) return null;
 
-  const normalizeHistoryLog = (log: typeof logs[number]) => {
-    const isWeightless = (log.metric_weight ?? 0) === 0;
-    const reps = log.reps ?? 0;
-    if (isWeightless && reps >= 150 && reps % 10 === 0) {
-      return { ...log, reps: reps / 10 };
-    }
-    return log;
-  };
-
   const niceDate = (iso: string) =>
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const shortDate = (iso: string) =>
@@ -106,18 +97,15 @@ export function ExerciseHistoryDrawer() {
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{s.sets} sets - {displayMetricVolume(s.totalVolume)} vol</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {s.logs.map((l, i) => {
-                    const displayLog = normalizeHistoryLog(l);
-                    return (
-                      <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px', padding: '4px 0' }}>
-                        <span style={{ color: 'var(--text-secondary-dark)' }}>Set {i + 1}</span>
-                        <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
-                          {formatLogValue(displayLog, exercise.exercise_type_id)}
-                          {l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
-                        </span>
-                      </div>
-                    );
-                  })}
+                  {s.logs.map((l, i) => (
+                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px', padding: '4px 0' }}>
+                      <span style={{ color: 'var(--text-secondary-dark)' }}>Set {i + 1}</span>
+                      <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
+                        {formatLogValue(l, exercise.exercise_type_id)}
+                        {l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))
