@@ -11,7 +11,7 @@ import { personalRecords, sessionSummaries, exerciseGraphSeries } from '../lib/s
 type Tab = 'history' | 'records' | 'graph';
 
 export function ExerciseHistoryDrawer() {
-  const { historyExerciseId, setHistoryExerciseId, exercises, allLogs, userUnit } = useFitNotesStore();
+  const { historyExerciseId, setHistoryExerciseId, exercises, allLogs, userUnit, formatLogValue, displayWeight } = useFitNotesStore();
   const [tab, setTab] = useState<Tab>('history');
 
   const exercise = exercises.find(e => e.id === historyExerciseId) ?? null;
@@ -21,9 +21,27 @@ export function ExerciseHistoryDrawer() {
   );
   const summaries = useMemo(() => sessionSummaries(logs), [logs]);
   const records = useMemo(() => personalRecords(logs), [logs]);
-  const graph = useMemo(() => exerciseGraphSeries(logs), [logs]);
+  const graph = useMemo(() => {
+    const raw = exerciseGraphSeries(logs);
+    if (userUnit === 'kg') return raw;
+    return raw.map(p => ({
+      ...p,
+      maxWeight: Math.round(p.maxWeight * 2.20462 * 10) / 10,
+      estimated1RM: Math.round(p.estimated1RM * 2.20462 * 10) / 10,
+      volume: Math.round(p.volume * 2.20462),
+    }));
+  }, [logs, userUnit]);
 
   if (!historyExerciseId || !exercise) return null;
+
+  const normalizeHistoryLog = (log: typeof logs[number]) => {
+    const isWeightless = (log.metric_weight ?? 0) === 0;
+    const reps = log.reps ?? 0;
+    if (isWeightless && reps >= 150 && reps % 10 === 0) {
+      return { ...log, reps: reps / 10 };
+    }
+    return log;
+  };
 
   const niceDate = (iso: string) =>
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -31,21 +49,32 @@ export function ExerciseHistoryDrawer() {
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   const close = () => setHistoryExerciseId(null);
+  const displayMetricWeight = (metricWeight: number) => displayWeight(metricWeight, 1);
+  const displayMetricVolume = (metricVolume: number) => {
+    const converted = userUnit === 'lbs' ? metricVolume * 2.20462 : metricVolume;
+    return `${Math.round(converted)} ${userUnit}`;
+  };
 
   return (
     <>
       <div className="sidebar-backdrop open" onClick={close} style={{ zIndex: 60 }} />
       <aside style={{
-        position: 'fixed', top: 0, right: 0, height: '100vh', width: 'min(480px, 100vw)',
+        position: 'fixed', top: 0, right: 0, height: '100dvh', width: 'min(480px, 100vw)',
         background: 'var(--bg-surface-dark)', borderLeft: '1px solid var(--border-dark)',
         zIndex: 61, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 24px rgba(0,0,0,0.3)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', borderBottom: '1px solid var(--border-dark)' }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '20px', paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
+          borderBottom: '1px solid var(--border-dark)',
+        }}>
           <div>
             <h2 style={{ fontSize: '18px', fontWeight: 800 }}>{exercise.name}</h2>
             <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>{logs.length} sets across {summaries.length} sessions</p>
           </div>
-          <button onClick={close} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary-dark)' }}><X size={22} /></button>
+          <button className="icon-btn" onClick={close} aria-label="Close history">
+            <X size={20} />
+          </button>
         </div>
 
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-dark)' }}>
@@ -66,7 +95,7 @@ export function ExerciseHistoryDrawer() {
           ))}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {tab === 'history' && (
             summaries.length === 0 ? (
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>No history yet.</p>
@@ -74,18 +103,21 @@ export function ExerciseHistoryDrawer() {
               <div key={s.date} className="card" style={{ gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: '13px' }}>{niceDate(s.date)}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{s.sets} sets · {Math.round(s.totalVolume)} {userUnit} vol</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{s.sets} sets - {displayMetricVolume(s.totalVolume)} vol</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  {s.logs.map((l, i) => (
-                    <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '4px 0' }}>
-                      <span style={{ color: 'var(--text-secondary-dark)' }}>Set {i + 1}</span>
-                      <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {l.metric_weight ?? 0} {userUnit} × {l.reps ?? 0}
-                        {l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
-                      </span>
-                    </div>
-                  ))}
+                  {s.logs.map((l, i) => {
+                    const displayLog = normalizeHistoryLog(l);
+                    return (
+                      <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px', padding: '4px 0' }}>
+                        <span style={{ color: 'var(--text-secondary-dark)' }}>Set {i + 1}</span>
+                        <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
+                          {formatLogValue(displayLog, exercise.exercise_type_id)}
+                          {l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))
@@ -95,10 +127,10 @@ export function ExerciseHistoryDrawer() {
             <>
               <div className="card" style={{ gap: '10px' }}>
                 <div style={{ fontWeight: 700, fontSize: '13px' }}>Best Records</div>
-                <Stat label="Max Weight" value={records.maxWeight ? `${records.maxWeight.weight} ${userUnit} × ${records.maxWeight.reps}` : '—'} date={records.maxWeight?.date} />
-                <Stat label="Max Reps" value={records.maxReps ? `${records.maxReps.reps} @ ${records.maxReps.weight} ${userUnit}` : '—'} date={records.maxReps?.date} />
-                <Stat label="Best Est. 1RM" value={records.bestEstimated1RM ? `${Math.round(records.bestEstimated1RM.value * 10) / 10} ${userUnit}` : '—'} date={records.bestEstimated1RM?.date} />
-                <Stat label="Max Set Volume" value={records.maxSetVolume ? `${Math.round(records.maxSetVolume.volume)} ${userUnit}` : '—'} date={records.maxSetVolume?.date} />
+                <Stat label="Max Weight" value={records.maxWeight ? `${displayMetricWeight(records.maxWeight.weight)} x ${records.maxWeight.reps}` : '-'} date={records.maxWeight?.date} />
+                <Stat label="Max Reps" value={records.maxReps ? `${records.maxReps.reps} @ ${displayMetricWeight(records.maxReps.weight)}` : '-'} date={records.maxReps?.date} />
+                <Stat label="Best Est. 1RM" value={records.bestEstimated1RM ? displayMetricWeight(records.bestEstimated1RM.value) : '-'} date={records.bestEstimated1RM?.date} />
+                <Stat label="Max Set Volume" value={records.maxSetVolume ? displayMetricVolume(records.maxSetVolume.volume) : '-'} date={records.maxSetVolume?.date} />
               </div>
               <div className="card" style={{ gap: '6px' }}>
                 <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>Rep Maxes (Actual)</div>
@@ -107,7 +139,7 @@ export function ExerciseHistoryDrawer() {
                 ) : records.byReps.map(r => (
                   <div key={r.reps} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '3px 0' }}>
                     <span style={{ color: 'var(--text-secondary-dark)' }}>{r.reps} RM</span>
-                    <span style={{ fontWeight: 600 }}>{r.weight} {userUnit} <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}>· {shortDate(r.date)}</span></span>
+                    <span style={{ fontWeight: 600 }}>{displayMetricWeight(r.weight)} <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}>- {shortDate(r.date)}</span></span>
                   </div>
                 ))}
               </div>
@@ -143,11 +175,11 @@ export function ExerciseHistoryDrawer() {
 
 function Stat({ label, value, date }: { label: string; value: string; date?: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '3px 0' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px', padding: '3px 0' }}>
       <span style={{ color: 'var(--text-secondary-dark)' }}>{label}</span>
-      <span style={{ fontWeight: 600 }}>
+      <span style={{ fontWeight: 600, textAlign: 'right' }}>
         {value}
-        {date && <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}> · {new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+        {date && <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}> - {new Date(date + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
       </span>
     </div>
   );
