@@ -323,7 +323,7 @@ func WithingsStatusHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// WithingsSyncHandler manually triggers a Withings pull (past 30 days)
+// WithingsSyncHandler manually triggers an all-time Withings repair pull.
 func WithingsSyncHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	userID, err := middleware.GetUserID(r.Context())
@@ -335,7 +335,7 @@ func WithingsSyncHandler(w http.ResponseWriter, r *http.Request) {
 	pool := db.GetDB()
 	ctx := r.Context()
 
-	count, err := PullWithingsWeightsSinceLastUpdate(ctx, pool, userID)
+	count, err := PullWithingsWeightsRange(ctx, pool, userID, 0, time.Now().Unix())
 	if err != nil {
 		log.Printf("Manual Withings pull failed: %v", err)
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusInternalServerError)
@@ -501,106 +501,136 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 		return 0, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://wbsapi.withings.net/measure", strings.NewReader(data.Encode()))
-	if err != nil {
-		return 0, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-
 	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
+	totalCount := 0
+	nextOffset := ""
 
-	var measResp struct {
-		Status int `json:"status"`
-		Body   struct {
-			MeasureGroups []struct {
-				GrpID    int64 `json:"grpid"`
-				Date     int64 `json:"date"`
-				Measures []struct {
-					Value float64 `json:"value"`
-					Type  int     `json:"type"`
-					Unit  int     `json:"unit"`
-				} `json:"measures"`
-			} `json:"measuregrps"`
-		} `json:"body"`
-		Error string `json:"error,omitempty"`
-	}
+	for page := 0; ; page++ {
+		if page > 1000 {
+			return totalCount, fmt.Errorf("withings pagination exceeded safety limit")
+		}
 
-	if err := json.NewDecoder(resp.Body).Decode(&measResp); err != nil {
-		return 0, fmt.Errorf("failed to decode getmeas JSON response: %w", err)
-	}
+		pageData := url.Values{}
+		for key, values := range data {
+			pageData[key] = append([]string(nil), values...)
+		}
+		if nextOffset != "" {
+			pageData.Set("offset", nextOffset)
+		}
 
-	if measResp.Status != 0 {
-		return 0, fmt.Errorf("withings api getmeas status %d: %s", measResp.Status, measResp.Error)
-	}
+		req, err := http.NewRequestWithContext(ctx, "POST", "https://wbsapi.withings.net/measure", strings.NewReader(pageData.Encode()))
+		if err != nil {
+			return totalCount, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	// 4. Persist measurements inside a transaction
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback(ctx)
+		resp, err := client.Do(req)
+		if err != nil {
+			return totalCount, err
+		}
 
-	count := 0
-	for _, group := range measResp.Body.MeasureGroups {
-		var weightVal, fatVal float64
-		hasWeight := false
-		hasFat := false
+		var measResp struct {
+			Status int `json:"status"`
+			Body   struct {
+				MeasureGroups []struct {
+					GrpID    int64 `json:"grpid"`
+					Date     int64 `json:"date"`
+					Measures []struct {
+						Value float64 `json:"value"`
+						Type  int     `json:"type"`
+						Unit  int     `json:"unit"`
+					} `json:"measures"`
+				} `json:"measuregrps"`
+				More   bool `json:"more"`
+				Offset int  `json:"offset"`
+			} `json:"body"`
+			Error string `json:"error,omitempty"`
+		}
 
-		for _, m := range group.Measures {
-			val := m.Value * math.Pow10(m.Unit)
-			if m.Type == 1 { // Weight
-				weightVal = val
-				hasWeight = true
-			} else if m.Type == 6 { // Fat Ratio
-				fatVal = val
-				hasFat = true
+		decodeErr := json.NewDecoder(resp.Body).Decode(&measResp)
+		_ = resp.Body.Close()
+		if decodeErr != nil {
+			return totalCount, fmt.Errorf("failed to decode getmeas JSON response: %w", decodeErr)
+		}
+
+		if measResp.Status != 0 {
+			return totalCount, fmt.Errorf("withings api getmeas status %d: %s", measResp.Status, measResp.Error)
+		}
+
+		// Persist each page in its own transaction so large backfills do not hold
+		// a single transaction open while paging through Withings history.
+		tx, err := pool.Begin(ctx)
+		if err != nil {
+			return totalCount, err
+		}
+
+		pageCount := 0
+		for _, group := range measResp.Body.MeasureGroups {
+			var weightVal, fatVal float64
+			hasWeight := false
+			hasFat := false
+
+			for _, m := range group.Measures {
+				val := m.Value * math.Pow10(m.Unit)
+				if m.Type == 1 { // Weight
+					weightVal = val
+					hasWeight = true
+				} else if m.Type == 6 { // Fat Ratio
+					fatVal = val
+					hasFat = true
+				}
+			}
+
+			// Weight is a NOT NULL database column, so skip groups without it
+			if !hasWeight {
+				continue
+			}
+
+			// Format date as local date string
+			measDate := time.Unix(group.Date, 0).UTC().Format("2006-01-02")
+
+			// Create deterministic UUID based on grpid (prevents duplicates, permits clean updates)
+			recordID := uuid.NewSHA1(withingsNamespace, []byte(fmt.Sprintf("%d", group.GrpID)))
+
+			var bodyFatParam *float64
+			if hasFat {
+				bodyFatParam = &fatVal
+			}
+
+			tag, err := tx.Exec(ctx, `
+				INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
+				VALUES ($1, $2, $3, $4, $5, $6, NOW(), false)
+				ON CONFLICT (id) DO NOTHING
+			`, recordID, userID, measDate, weightVal, bodyFatParam, "Synced from Withings")
+
+			if err != nil {
+				_ = tx.Rollback(ctx)
+				return totalCount, fmt.Errorf("failed to upsert body weight record: %w", err)
+			}
+			if tag.RowsAffected() > 0 {
+				pageCount++
 			}
 		}
 
-		// Weight is a NOT NULL database column, so skip groups without it
-		if !hasWeight {
-			continue
+		if err := tx.Commit(ctx); err != nil {
+			return totalCount, err
 		}
+		totalCount += pageCount
 
-		// Format date as local date string
-		measDate := time.Unix(group.Date, 0).UTC().Format("2006-01-02")
-
-		// Create deterministic UUID based on grpid (prevents duplicates, permits clean updates)
-		recordID := uuid.NewSHA1(withingsNamespace, []byte(fmt.Sprintf("%d", group.GrpID)))
-
-		var bodyFatParam *float64
-		if hasFat {
-			bodyFatParam = &fatVal
+		if !measResp.Body.More {
+			break
 		}
-
-		tag, err := tx.Exec(ctx, `
-			INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
-			VALUES ($1, $2, $3, $4, $5, $6, NOW(), false)
-			ON CONFLICT (id) DO NOTHING
-		`, recordID, userID, measDate, weightVal, bodyFatParam, "Synced from Withings")
-
-		if err != nil {
-			return 0, fmt.Errorf("failed to upsert body weight record: %w", err)
+		nextOffset = strconv.Itoa(measResp.Body.Offset)
+		if nextOffset == "" || nextOffset == "0" {
+			return totalCount, fmt.Errorf("withings response requested another page without a usable offset")
 		}
-		if tag.RowsAffected() > 0 {
-			count++
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, err
 	}
 
 	// Track successful sync and the update cursor used by ongoing repair syncs.
 	_, _ = pool.Exec(ctx, "UPDATE withings_tokens SET updated_at = NOW(), last_update = GREATEST(last_update, $1) WHERE user_id = $2", cursorValue, userID)
 
-	return count, nil
+	return totalCount, nil
 }
 
 func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) (string, error) {
