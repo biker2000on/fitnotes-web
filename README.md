@@ -50,3 +50,5 @@ and Android will reject an unsigned release APK.
 - Android sync uses the native SQLite/Tauri path, not the browser localStorage
   path. Keep Tauri sync payload normalization and `is_deleted = 0` active-view
   filters in sync with the web driver behavior.
+- Body weight chart behavior and Withings historical backfill notes live in
+  `docs/body-weight-and-withings.md`.
