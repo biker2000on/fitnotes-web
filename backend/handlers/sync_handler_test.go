@@ -101,6 +101,35 @@ func TestSyncPayloadRoutinesGoalsMeasurements(t *testing.T) {
 
 func intPtr(i int) *int { return &i }
 
+func TestWithingsBoolUnmarshal(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{`true`, true},
+		{`false`, false},
+		{`1`, true},
+		{`0`, false},
+		{`"1"`, true},
+		{`"0"`, false},
+	}
+
+	for _, tt := range tests {
+		var got withingsBool
+		if err := json.Unmarshal([]byte(tt.input), &got); err != nil {
+			t.Fatalf("json.Unmarshal(%s) returned error: %v", tt.input, err)
+		}
+		if got.Bool() != tt.want {
+			t.Fatalf("json.Unmarshal(%s) = %v, want %v", tt.input, got.Bool(), tt.want)
+		}
+	}
+
+	var invalid withingsBool
+	if err := json.Unmarshal([]byte(`"maybe"`), &invalid); err == nil {
+		t.Fatal("expected invalid Withings boolean to return an error")
+	}
+}
+
 func TestDateParsingLogic(t *testing.T) {
 	testCases := []struct {
 		inputDate string

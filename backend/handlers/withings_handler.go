@@ -38,6 +38,25 @@ type WithingsTokenResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+type withingsBool bool
+
+func (b *withingsBool) UnmarshalJSON(data []byte) error {
+	switch strings.Trim(strings.ToLower(string(data)), `"`) {
+	case "true", "1":
+		*b = true
+		return nil
+	case "false", "0", "", "null":
+		*b = false
+		return nil
+	default:
+		return fmt.Errorf("invalid withings boolean value %s", string(data))
+	}
+}
+
+func (b withingsBool) Bool() bool {
+	return bool(b)
+}
+
 // WithingsAuthURLHandler returns the OAuth URL to redirect the user to
 func WithingsAuthURLHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -542,8 +561,8 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 						Unit  int     `json:"unit"`
 					} `json:"measures"`
 				} `json:"measuregrps"`
-				More   bool `json:"more"`
-				Offset int  `json:"offset"`
+				More   withingsBool `json:"more"`
+				Offset int          `json:"offset"`
 			} `json:"body"`
 			Error string `json:"error,omitempty"`
 		}
@@ -618,7 +637,7 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 		}
 		totalCount += pageCount
 
-		if !measResp.Body.More {
+		if !measResp.Body.More.Bool() {
 			break
 		}
 		nextOffset = strconv.Itoa(measResp.Body.Offset)
