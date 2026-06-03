@@ -5,7 +5,7 @@ import {
   TrendingUp, Calculator, Plus, Check, Trash2, GripVertical, X,
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
@@ -31,6 +31,9 @@ export function WorkoutLogView() {
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const selectedExerciseLogs = selectedExercise ? currentLogs.filter(x => x.exercise_id === selectedExercise.id) : [];
+  const selectInputContents = (event: FocusEvent<HTMLInputElement>) => {
+    event.currentTarget.select();
+  };
 
   useEffect(() => {
     const openComments = () => setShowCommentsModal(true);
@@ -135,7 +138,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Weight ({userUnit})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String(Math.max(0, parseFloat(w) - (userUnit === 'kg' ? 2.5 : 5))))} tabIndex={-1}>-</button>
-                    <input id="log-weight-input" type="number" value={logWeight} onChange={(e) => setLogWeight(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
+                    <input id="log-weight-input" type="number" value={logWeight} onFocus={selectInputContents} onChange={(e) => setLogWeight(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String((parseFloat(w) || 0) + (userUnit === 'kg' ? 2.5 : 5)))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -145,7 +148,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Reps</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String(Math.max(0, parseInt(r) - 1)))} tabIndex={-1}>-</button>
-                    <input id="log-reps-input" type="number" value={logReps} onChange={(e) => setLogReps(e.target.value)} placeholder="0" style={{ textAlign: 'center' }} />
+                    <input id="log-reps-input" type="number" value={logReps} onFocus={selectInputContents} onChange={(e) => setLogReps(e.target.value)} placeholder="0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String((parseInt(r) || 0) + 1))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -155,7 +158,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Distance ({settings.distance_unit === 2 ? 'mi' : 'km'})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String(Math.max(0, parseFloat(d) - 0.5)))} tabIndex={-1}>-</button>
-                    <input id="log-distance-input" type="number" value={logDistance} onChange={(e) => setLogDistance(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
+                    <input id="log-distance-input" type="number" value={logDistance} onFocus={selectInputContents} onChange={(e) => setLogDistance(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String((parseFloat(d) || 0) + 0.5))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -164,12 +167,12 @@ export function WorkoutLogView() {
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Duration (min/sec)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <input id="log-duration-min-input" type="number" placeholder="Min" style={{ flex: 1, textAlign: 'center' }} onChange={(e) => {
+                    <input id="log-duration-min-input" type="number" placeholder="Min" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onChange={(e) => {
                       const m = parseInt(e.target.value) || 0;
                       const s = parseInt(logDuration) % 60 || 0;
                       setLogDuration((m * 60 + s).toString());
                     }} value={Math.floor(parseInt(logDuration) / 60) || ''} />
-                    <input id="log-duration-sec-input" type="number" placeholder="Sec" style={{ flex: 1, textAlign: 'center' }} onChange={(e) => {
+                    <input id="log-duration-sec-input" type="number" placeholder="Sec" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onChange={(e) => {
                       const m = Math.floor(parseInt(logDuration) / 60) || 0;
                       const s = parseInt(e.target.value) || 0;
                       setLogDuration((m * 60 + s).toString());

@@ -3,7 +3,18 @@ import { TrendingUp, FileText } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 
 export function BodyView() {
-  const { userUnit, bodyWeights, newWeight, setNewWeight, newFat, setNewFat, handleAddWeight } = useFitNotesStore();
+  const {
+    userUnit,
+    bodyWeights,
+    newWeight,
+    setNewWeight,
+    newFat,
+    setNewFat,
+    handleAddWeight,
+    withingsConnected,
+    withingsSyncing,
+    syncWithings
+  } = useFitNotesStore();
 
   return (
     <div className="cols-2" style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
@@ -18,9 +29,30 @@ export function BodyView() {
             <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Body Fat % (Optional)</label>
             <input type="number" value={newFat} onChange={(e) => setNewFat(e.target.value)} />
           </div>
-          <button className="btn btn-primary" onClick={handleAddWeight} style={{ marginTop: '8px' }}>
-            Save Record
-          </button>
+          <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            <button className="btn btn-primary" onClick={handleAddWeight} style={{ flex: 1 }}>
+              Save Record
+            </button>
+            {withingsConnected && (
+              <button
+                className="btn"
+                onClick={syncWithings}
+                disabled={withingsSyncing}
+                style={{
+                  flex: 1,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  border: '1px solid var(--border-dark)',
+                  color: 'var(--text-primary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                {withingsSyncing ? 'Syncing...' : 'Sync Scale'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

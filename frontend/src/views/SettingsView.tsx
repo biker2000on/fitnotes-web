@@ -5,7 +5,16 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import type { Settings } from '../types';
 
 export function SettingsView() {
-  const { settings, updateSetting } = useFitNotesStore();
+  const {
+    settings,
+    updateSetting,
+    withingsConnected,
+    withingsLastSync,
+    withingsSyncing,
+    syncWithings,
+    disconnectWithings,
+    connectWithings
+  } = useFitNotesStore();
 
   const Toggle = ({ k, label, hint }: { k: keyof Settings; label: string; hint?: string }) => (
     <Row label={label} hint={hint}>
@@ -93,6 +102,45 @@ export function SettingsView() {
       <Section title="Measurements">
         <Toggle k="measurement_show_in_workout_log" label="Show in Workout Log" />
         <Toggle k="body_weight_show_in_workout_log" label="Show Body Weight in Workout Log" />
+      </Section>
+
+      <Section title="Integrations">
+        <Row
+          label="Withings Weight Sync"
+          hint={
+            withingsConnected
+              ? `Status: Connected (Last sync: ${withingsLastSync ? new Date(withingsLastSync).toLocaleString() : 'Never'})`
+              : "Connect your Withings Smart Scale to pull weight and body fat records automatically."
+          }
+        >
+          {withingsConnected ? (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                className="btn btn-primary"
+                onClick={syncWithings}
+                disabled={withingsSyncing}
+                style={{ padding: '6px 12px', fontSize: '13px' }}
+              >
+                {withingsSyncing ? 'Syncing...' : 'Sync Now'}
+              </button>
+              <button
+                className="btn"
+                onClick={disconnectWithings}
+                style={{ padding: '6px 12px', fontSize: '13px', backgroundColor: 'var(--accent)', color: '#fff', border: 'none' }}
+              >
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              className="btn btn-primary"
+              onClick={connectWithings}
+              style={{ padding: '6px 12px', fontSize: '13px' }}
+            >
+              Connect Scale
+            </button>
+          )}
+        </Row>
       </Section>
 
       <Section title="Keyboard Shortcuts">

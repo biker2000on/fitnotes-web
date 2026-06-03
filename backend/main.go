@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 )
 
@@ -82,6 +83,10 @@ func main() {
 		r.Post("/auth/register", handlers.RegisterHandler)
 		r.Post("/auth/login", handlers.LoginHandler)
 
+		// Public Withings OAuth Callback & Webhook endpoints
+		r.Get("/withings/callback", handlers.WithingsCallbackHandler)
+		r.Post("/withings/webhook", handlers.WithingsWebhookHandler)
+
 		// Authenticated Routes
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthMiddleware)
@@ -91,6 +96,12 @@ func main() {
 			r.Post("/import-fitnotes", handlers.ImportFitNotesHandler)
 			r.Get("/export-fitnotes", handlers.ExportFitNotesHandler)
 			r.Get("/export-csv", handlers.ExportCSVHandler)
+
+			// Authenticated Withings endpoints
+			r.Get("/withings/auth-url", handlers.WithingsAuthURLHandler)
+			r.Get("/withings/status", handlers.WithingsStatusHandler)
+			r.Post("/withings/sync", handlers.WithingsSyncHandler)
+			r.Delete("/withings/disconnect", handlers.WithingsDisconnectHandler)
 		})
 	})
 
@@ -117,6 +128,9 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
+	// Start Withings Daily Ticker Background Sync Loop
+	go startWithingsDailySync(serverCtx)
+
 	go func() {
 		<-sigChan
 		log.Println("Shutting down API server gracefully...")
@@ -140,4 +154,64 @@ func main() {
 	// Wait for graceful shutdown to finish
 	<-serverCtx.Done()
 	log.Println("API server stopped.")
+}
+
+// Background sync worker that runs on startup and once every 24 hours
+func startWithingsDailySync(ctx context.Context) {
+	// Wait a moment for server initialization
+	time.Sleep(10 * time.Second)
+
+	// Run initial sync on startup
+	runDailySync(ctx)
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Withings background sync worker stopped.")
+			return
+		case <-ticker.C:
+			runDailySync(ctx)
+		}
+	}
+}
+
+func runDailySync(ctx context.Context) {
+	log.Println("Withings daily background sync starting...")
+	pool := db.GetDB()
+	if pool == nil {
+		log.Println("Withings daily sync: Database pool is not initialized")
+		return
+	}
+
+	rows, err := pool.Query(ctx, "SELECT user_id FROM withings_tokens")
+	if err != nil {
+		log.Printf("Withings daily sync: Failed to query users: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var userIDs []uuid.UUID
+	for rows.Next() {
+		var uid uuid.UUID
+		if err := rows.Scan(&uid); err == nil {
+			userIDs = append(userIDs, uid)
+		}
+	}
+
+	for _, uid := range userIDs {
+		// Run with timeout to prevent blocking other jobs
+		syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		count, syncErr := handlers.PullWithingsWeightsSinceLastUpdate(syncCtx, pool, uid)
+		cancel()
+
+		if syncErr != nil {
+			log.Printf("Withings daily sync: Failed for user %s: %v", uid.String(), syncErr)
+		} else if count > 0 {
+			log.Printf("Withings daily sync: Successfully synced %d records for user %s", count, uid.String())
+		}
+	}
+	log.Println("Withings daily background sync complete.")
 }
