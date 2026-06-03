@@ -1,6 +1,7 @@
 // BodyView.tsx - Body weight logging + history.
 import { TrendingUp, FileText } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
+import { kgToLbs } from '../lib/units';
 
 export function BodyView() {
   const {
@@ -15,6 +16,10 @@ export function BodyView() {
     withingsSyncing,
     syncWithings
   } = useFitNotesStore();
+  const formatBodyWeight = (metricWeight: number) => {
+    const displayWeight = userUnit === 'lbs' ? kgToLbs(metricWeight) : metricWeight;
+    return `${Math.round(displayWeight * 10) / 10} ${userUnit}`;
+  };
 
   return (
     <div className="cols-2" style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
@@ -65,7 +70,7 @@ export function BodyView() {
             bodyWeights.map(w => (
               <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-dark)', borderRadius: '10px', fontSize: '14px' }}>
                 <span style={{ fontWeight: 600 }}>{w.date}</span>
-                <span style={{ fontWeight: 700 }}>{w.body_weight_metric} {userUnit} <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 400 }}>{w.body_fat ? `(${w.body_fat}% BF)` : ''}</span></span>
+                <span style={{ fontWeight: 700 }}>{formatBodyWeight(w.body_weight_metric)} <span style={{ fontSize: '11px', color: 'var(--accent)', fontWeight: 400 }}>{w.body_fat ? `(${w.body_fat}% BF)` : ''}</span></span>
               </div>
             ))
           )}

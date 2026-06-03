@@ -10,7 +10,7 @@ import { getLocalDateString, addDays } from '../lib/date';
 import { DEFAULT_SETTINGS } from '../lib/settings';
 import { DEFAULT_CATEGORIES, DEFAULT_EXERCISES } from '../lib/defaultData';
 import { beep, vibrate, notify } from '../lib/notify';
-import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { lbsToKg, typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type {
   Category, Exercise, TrainingLog, BodyWeight, WorkoutComment,
   WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
@@ -2593,10 +2593,11 @@ export function useFitNotesController() {
   // Per-exercise history drawer (null = closed)
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
   const handleAddWeight = async () => {
+    const parsedWeight = parseFloat(newWeight);
     const record: BodyWeight = {
       id: uuidv4(),
       date: selectedDate,
-      body_weight_metric: parseFloat(newWeight),
+      body_weight_metric: userUnit === 'lbs' ? lbsToKg(parsedWeight) : parsedWeight,
       body_fat: newFat ? parseFloat(newFat) : null
     };
     await db.execute('INSERT INTO body_weights', [record]);
