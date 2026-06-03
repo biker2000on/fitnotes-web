@@ -208,10 +208,15 @@ export function useFitNotesController() {
 
   const selectedExerciseRef = useRef<Exercise | null>(null);
   const workoutCommentRef = useRef<string>('');
+  const selectedDateRef = useRef<string>(selectedDate);
 
   useEffect(() => {
     selectedExerciseRef.current = selectedExercise;
   }, [selectedExercise]);
+
+  useEffect(() => {
+    selectedDateRef.current = selectedDate;
+  }, [selectedDate]);
 
   useEffect(() => {
     workoutCommentRef.current = workoutComment;
@@ -795,28 +800,47 @@ export function useFitNotesController() {
         await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-3', routine_section_exercise_id: 'rse-2', metric_weight: 50, reps: 8, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
       }
 
-      workoutCommentRef.current = '';
-      setWorkoutComment('');
       await refreshData();
     };
 
     seedAndLoad();
-  }, [selectedDate, token]);
+  }, [token]);
 
-  const refreshData = async () => {
+  const refreshDateData = async (date = selectedDateRef.current) => {
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
+    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [date]);
+    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [date]);
+
+    if (date !== selectedDateRef.current) return;
+
+    setCurrentLogs(logs);
+    setExerciseComments(exComments);
+    setSelectedLogIdsForGroup([]);
+
+    const nextComment = comments.length > 0 ? comments[0].comment : '';
+    workoutCommentRef.current = nextComment;
+    setWorkoutComment(nextComment);
+  };
+
+  useEffect(() => {
+    refreshDateData(selectedDate).catch(e => console.warn('Failed to refresh selected date data:', e));
+  }, [selectedDate]);
+
+  const refreshData = async (date = selectedDateRef.current) => {
     const cats = await db.query<Category>('SELECT * FROM categories');
     const exs = await db.query<Exercise>('SELECT * FROM exercises');
-    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [selectedDate]);
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
     const allLgs = await db.query<TrainingLog>('SELECT * FROM training_logs');
     const weights = await db.query<BodyWeight>('SELECT * FROM body_weights');
-    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
+    const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [date]);
     const rts = await db.query<Routine>('SELECT * FROM routines');
     const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
     const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
     const gls = await db.query<Goal>('SELECT * FROM goals');
     const meas = await db.query<Measurement>('SELECT * FROM measurements');
-    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [selectedDate]);
-    setExerciseComments(exComments);
+    const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [date]);
+    const isVisibleDate = date === selectedDateRef.current;
+    if (isVisibleDate) setExerciseComments(exComments);
     const favs = await db.query<GraphFavourite>('SELECT * FROM graph_favourites');
     setGraphFavourites(favs);
     const cu = await db.query<CustomUnit>('SELECT * FROM custom_units');
@@ -844,7 +868,7 @@ export function useFitNotesController() {
     setGoals(gls);
     setMeasurements(meas);
     setExercises(exs);
-    setCurrentLogs(logs);
+    if (isVisibleDate) setCurrentLogs(logs);
     setAllLogs(allLgs);
     setBodyWeights(weights);
     setRoutines(rts);
@@ -854,6 +878,8 @@ export function useFitNotesController() {
     if (cats.length > 0 && !newExCategory) {
       setNewExCategory(cats[0].id);
     }
+
+    if (!isVisibleDate) return;
 
     if (comments.length > 0) {
       if (!workoutCommentRef.current) {
@@ -1207,8 +1233,12 @@ export function useFitNotesController() {
     };
 
     await db.execute('INSERT INTO training_logs', [newLog]);
+    if (newLog.date === selectedDateRef.current) {
+      setCurrentLogs(prev => [...prev, newLog]);
+    }
+    setAllLogs(prev => [...prev.filter(l => l.id !== newLog.id), newLog]);
     setLogComment('');
-    await refreshData();
+    await refreshData(newLog.date);
     if (pr) triggerToast(`New PR! ${selectedExercise.name}`, 'success');
     if (settings.rest_timer_auto_start) {
       startRestTimer(selectedExercise.default_rest_time || settings.rest_timer_seconds);
@@ -1338,12 +1368,16 @@ export function useFitNotesController() {
   };
 
   const handleDeleteSet = async (id: string) => {
-    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs');
-    const target = logs.find(x => x.id === id);
+    const target = currentLogs.find(x => x.id === id) || allLogs.find(x => x.id === id);
     if (target) {
       const deleted = { ...target, is_deleted: true };
+      if (target.date === selectedDateRef.current) {
+        setCurrentLogs(prev => prev.filter(l => l.id !== id));
+        setSelectedLogIdsForGroup(prev => prev.filter(logId => logId !== id));
+      }
+      setAllLogs(prev => prev.map(l => l.id === id ? deleted : l));
       await db.execute('INSERT INTO training_logs', [deleted]);
-      await refreshData();
+      await refreshDateData(target.date);
     }
   };
 
