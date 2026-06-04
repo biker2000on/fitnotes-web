@@ -186,7 +186,7 @@ export function useFitNotesController() {
   // Exercise creation form
   const [newExName, setNewExName] = useState('');
   const [newExCategory, setNewExCategory] = useState('');
-  const [newExType, setNewExType] = useState('1'); // 1: Weights, 2: Cardio
+  const [newExType, setNewExType] = useState('0'); // 0: Weight & Reps
   const [newExNotes, setNewExNotes] = useState('');
 
   // Category creation form
@@ -1439,6 +1439,47 @@ export function useFitNotesController() {
   };
 
   // Start Routine with Populators
+  const copyRoutineSectionSupersetsToWorkout = async (sectionId: string, sectionExerciseIds: string[]) => {
+    const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+    const links = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+    const templateGroups = groups.filter(g => g.routine_section_id === sectionId && !g.is_deleted);
+    const importedExerciseIds = new Set(sectionExerciseIds);
+
+    for (const templateGroup of templateGroups) {
+      const templateLinks = links.filter(link =>
+        link.workout_group_id === templateGroup.id &&
+        link.routine_section_id === sectionId &&
+        importedExerciseIds.has(link.exercise_id) &&
+        !link.is_deleted
+      );
+
+      if (templateLinks.length < 2) continue;
+
+      const newGroupId = uuidv4();
+      const newGroup: WorkoutGroup = {
+        id: newGroupId,
+        name: templateGroup.name || 'Superset',
+        date: selectedDate,
+        routine_section_id: null,
+        colour: templateGroup.colour,
+        auto_jump_enabled: templateGroup.auto_jump_enabled,
+        rest_timer_auto_start_enabled: templateGroup.rest_timer_auto_start_enabled
+      };
+      await db.execute('INSERT INTO workout_groups', [newGroup]);
+
+      for (const templateLink of templateLinks) {
+        const newLink: WorkoutGroupExercise = {
+          id: uuidv4(),
+          exercise_id: templateLink.exercise_id,
+          date: selectedDate,
+          routine_section_id: null,
+          workout_group_id: newGroupId
+        };
+        await db.execute('INSERT INTO workout_group_exercises', [newLink]);
+      }
+    }
+  };
+
   const handleImportRoutinePopulated = async (
     routineId: string, 
     type: 'template' | 'last_workout' | 'one_rep_max', 
@@ -1446,15 +1487,16 @@ export function useFitNotesController() {
     sectionId?: string
   ) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId));
+    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId) && !s.is_deleted);
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
-      const secExs = exList.filter(x => x.routine_section_id === sec.id);
+      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted);
+      const importedExerciseIds = secExs.map(se => se.exercise_id);
 
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
-        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id);
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted);
 
         if (type === 'template') {
           for (const s of exSets) {
@@ -1558,6 +1600,8 @@ export function useFitNotesController() {
           }
         }
       }
+
+      await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
     }
 
     setShowRoutineImportModal(false);
@@ -1697,16 +1741,18 @@ export function useFitNotesController() {
       ? (settings.distance_unit === 2 ? `${Math.round((log.distance / 1.60934) * 100) / 100} mi` : `${log.distance} km`)
       : '';
     const durStr = log.duration_seconds !== null ? `${Math.floor(log.duration_seconds / 60)}m ${log.duration_seconds % 60}s` : '';
+    const distanceTimeStr = distStr && durStr ? `${distStr} in ${durStr}` : distStr || durStr;
 
     switch (typeId) {
-      case 0: // Weight & Reps (FitNotes Android)
-      case 1: // Weight & Reps
+      case 0: // Weight & Reps
         if (!hasWeightValue && repsStr) return repsStr;
         return `${weightStr} x ${repsStr}`;
+      case 1: // Distance & Time (FitNotes Android/Cardio)
+        return distanceTimeStr;
       case 2: // Reps Only
         return `${repsStr}`;
       case 3: // Distance & Time
-        return `${distStr} in ${durStr}`;
+        return distanceTimeStr;
       case 4: // Distance Only
         return `${distStr}`;
       case 5: // Time Only
@@ -2192,18 +2238,75 @@ export function useFitNotesController() {
     triggerToast('Routine template created successfully!');
   };
 
+  const handleDeleteRoutine = async (routineId: string) => {
+    const target = routines.find(r => r.id === routineId);
+    if (!target) return;
+
+    triggerConfirm(
+      'Delete routine?',
+      `Delete "${target.name}" and all of its workout days, template sets, and routine supersets?`,
+      async () => {
+        const allSections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+        const sectionsToDelete = allSections.filter(section => section.routine_id === routineId);
+        const sectionIds = sectionsToDelete.map(section => section.id);
+
+        const allSectionExercises = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+        const sectionExercisesToDelete = allSectionExercises.filter(se => sectionIds.includes(se.routine_section_id));
+        const sectionExerciseIds = sectionExercisesToDelete.map(se => se.id);
+
+        const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+        const setsToDelete = allSets.filter(set => sectionExerciseIds.includes(set.routine_section_exercise_id));
+
+        const allGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+        const groupsToDelete = allGroups.filter(group => group.routine_section_id && sectionIds.includes(group.routine_section_id));
+        const groupIds = groupsToDelete.map(group => group.id);
+
+        const allGroupExercises = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+        const groupExercisesToDelete = allGroupExercises.filter(link =>
+          groupIds.includes(link.workout_group_id) ||
+          (link.routine_section_id !== undefined && link.routine_section_id !== null && sectionIds.includes(link.routine_section_id))
+        );
+
+        await db.execute('INSERT INTO routines', [{ ...target, is_deleted: true }]);
+        for (const section of sectionsToDelete) {
+          await db.execute('INSERT INTO routine_sections', [{ ...section, is_deleted: true }]);
+        }
+        for (const sectionExercise of sectionExercisesToDelete) {
+          await db.execute('INSERT INTO routine_section_exercises', [{ ...sectionExercise, is_deleted: true }]);
+        }
+        for (const set of setsToDelete) {
+          await db.execute('INSERT INTO routine_section_exercise_sets', [{ ...set, is_deleted: true }]);
+        }
+        for (const group of groupsToDelete) {
+          await db.execute('INSERT INTO workout_groups', [{ ...group, is_deleted: true }]);
+        }
+        for (const groupExercise of groupExercisesToDelete) {
+          await db.execute('INSERT INTO workout_group_exercises', [{ ...groupExercise, is_deleted: true }]);
+        }
+
+        if (editingRoutine?.id === routineId) {
+          setEditingRoutine(null);
+          setActiveTab('routines');
+        }
+        await refreshData();
+        triggerToast('Routine deleted.');
+      }
+    );
+  };
+
   // Import / Load Routine template into current daily logs
   const handleImportRoutine = async (routineId: string) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId);
+    const routineSecs = sections.filter(s => s.routine_id === routineId && !s.is_deleted);
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
-      const secExs = exList.filter(x => x.routine_section_id === sec.id);
+      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted);
+      const importedExerciseIds = secExs.map(se => se.exercise_id);
 
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
-        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id);
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted);
 
         for (const s of exSets) {
           const log: TrainingLog = {
@@ -2221,6 +2324,8 @@ export function useFitNotesController() {
           await db.execute('INSERT INTO training_logs', [log]);
         }
       }
+
+      await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
     }
 
     setShowRoutineImportModal(false);
@@ -2349,14 +2454,13 @@ export function useFitNotesController() {
     triggerToast('Set deleted from template exercise.');
   };
 
-  const handleUpdateTemplateSetValues = async (setId: string, weight: number, reps: number) => {
+  const handleUpdateTemplateSetValues = async (setId: string, values: Partial<Pick<RoutineSectionExerciseSet, 'metric_weight' | 'reps' | 'distance' | 'duration_seconds'>>) => {
     const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
     const target = allSets.find(s => s.id === setId);
     if (target) {
       const updated = {
         ...target,
-        metric_weight: weight,
-        reps: reps
+        ...values
       };
       await db.execute('UPDATE routine_section_exercise_sets', [updated]);
       if (editingRoutine) {
@@ -2394,11 +2498,12 @@ export function useFitNotesController() {
   };
 
   const handleAddAllSectionLogs = async (sectionId: string) => {
-    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId);
+    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId && !se.is_deleted);
+    const importedExerciseIds = secExs.map(se => se.exercise_id);
     let setsLogged = 0;
     
     for (const se of secExs) {
-      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id);
+      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id && !s.is_deleted);
       for (const s of exSets) {
         const log: TrainingLog = {
           id: uuidv4(),
@@ -2416,6 +2521,8 @@ export function useFitNotesController() {
         setsLogged++;
       }
     }
+
+    await copyRoutineSectionSupersetsToWorkout(sectionId, importedExerciseIds);
     
     await refreshData();
     triggerToast(`Logged all ${setsLogged} sets from this day template into today's log.`);
@@ -2753,7 +2860,7 @@ export function useFitNotesController() {
     handleMarkAllComplete, handleMarkExerciseComplete,
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
-    handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleImportRoutine,
+    handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
     loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
     handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdateSectionName, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,

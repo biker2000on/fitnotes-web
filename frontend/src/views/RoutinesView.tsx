@@ -1,14 +1,15 @@
 // RoutinesView.tsx - Expanded interactive list of routines with section (Workout Day) populating.
 import { useMemo, useState } from 'react';
-import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search } from 'lucide-react';
+import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search, Trash2 } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
-import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet } from '../types';
+import { intColorToHex } from '../lib/colors';
+import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise } from '../types';
 
 export function RoutinesView() {
   const {
     routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
-    setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises
+    setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises, handleDeleteRoutine
   } = useFitNotesStore();
 
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
@@ -17,6 +18,8 @@ export function RoutinesView() {
     sections: RoutineSection[];
     exercises: RoutineSectionExercise[];
     sets: RoutineSectionExerciseSet[];
+    groups: WorkoutGroup[];
+    groupExercises: WorkoutGroupExercise[];
   } | null>(null);
   const [routineFilter, setRoutineFilter] = useState('');
 
@@ -43,38 +46,54 @@ export function RoutinesView() {
 
     try {
       // Query sections
-      const secs = await db.query<RoutineSection>(
+      const rawSecs = await db.query<RoutineSection>(
         'SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order ASC',
         [routineId]
       );
+      const secs = rawSecs.filter(sec => !sec.is_deleted);
       
       let rseList: RoutineSectionExercise[] = [];
       let rseSets: RoutineSectionExerciseSet[] = [];
+      let routineGroups: WorkoutGroup[] = [];
+      let routineGroupExercises: WorkoutGroupExercise[] = [];
 
       if (secs.length > 0) {
         const secIds = secs.map(s => s.id);
         const secPlaceholders = secIds.map(() => '?').join(',');
         
-        rseList = await db.query<RoutineSectionExercise>(
-          `SELECT * FROM routine_section_exercises WHERE routine_section_id IN (${secPlaceholders}) ORDER BY sort_order ASC`,
-          secIds
-        );
+          const rawRseList = await db.query<RoutineSectionExercise>(
+            `SELECT * FROM routine_section_exercises WHERE routine_section_id IN (${secPlaceholders}) ORDER BY sort_order ASC`,
+            secIds
+          );
+          rseList = rawRseList.filter(se => !se.is_deleted);
 
-        if (rseList.length > 0) {
-          const rseIds = rseList.map(e => e.id);
-          const rsePlaceholders = rseIds.map(() => '?').join(',');
-          
-          rseSets = await db.query<RoutineSectionExerciseSet>(
+          if (rseList.length > 0) {
+            const rseIds = rseList.map(e => e.id);
+            const rsePlaceholders = rseIds.map(() => '?').join(',');
+            
+          const rawRseSets = await db.query<RoutineSectionExerciseSet>(
             `SELECT * FROM routine_section_exercise_sets WHERE routine_section_exercise_id IN (${rsePlaceholders})`,
             rseIds
           );
+          rseSets = rawRseSets.filter(set => !set.is_deleted);
+        }
+
+        const allGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+        routineGroups = allGroups.filter(g => g.routine_section_id && secIds.includes(g.routine_section_id) && !g.is_deleted);
+
+        if (routineGroups.length > 0) {
+          const groupIds = routineGroups.map(g => g.id);
+          const allGroupExercises = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+          routineGroupExercises = allGroupExercises.filter(ge => groupIds.includes(ge.workout_group_id) && !ge.is_deleted);
         }
       }
 
       setRoutineDetails({
         sections: secs,
         exercises: rseList,
-        sets: rseSets
+        sets: rseSets,
+        groups: routineGroups,
+        groupExercises: routineGroupExercises
       });
     } catch (e) {
       console.error('Failed to load routine sections & exercises:', e);
@@ -164,6 +183,14 @@ export function RoutinesView() {
                       >
                         Edit
                       </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 10px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                        onClick={() => handleDeleteRoutine(r.id)}
+                        title="Delete routine"
+                      >
+                        <Trash2 size={14} /> Delete
+                      </button>
                       <button 
                         className="btn btn-primary" 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }} 
@@ -219,11 +246,19 @@ export function RoutinesView() {
                                         secExs.map(se => {
                                           const exName = exercises.find(x => x.id === se.exercise_id)?.name || 'Unknown Exercise';
                                           const setsCount = routineDetails.sets.filter(s => s.routine_section_exercise_id === se.id).length;
+                                          const linkedGroupEx = routineDetails.groupExercises.find(ge => ge.routine_section_id === sec.id && ge.exercise_id === se.exercise_id);
+                                          const group = linkedGroupEx ? routineDetails.groups.find(g => g.id === linkedGroupEx.workout_group_id) : null;
+                                          const groupColor = group ? intColorToHex(group.colour) : null;
                                           
                                           return (
-                                            <div key={se.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)' }}>
+                                            <div key={se.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)', borderLeft: groupColor ? `3px solid ${groupColor}` : '3px solid transparent', paddingLeft: groupColor ? '6px' : 0 }}>
                                               <Dumbbell size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
                                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{exName}</span>
+                                              {group && (
+                                                <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: groupColor || 'var(--primary)', backgroundColor: groupColor ? `${groupColor}20` : 'rgba(99, 102, 241, 0.12)', borderRadius: '4px', padding: '2px 5px' }}>
+                                                  Superset
+                                                </span>
+                                              )}
                                               <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>({setsCount} {setsCount === 1 ? 'set' : 'sets'})</span>
                                             </div>
                                           );

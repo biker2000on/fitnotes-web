@@ -976,7 +976,7 @@ export default function App() {
                 <div style={{ flex: 1 }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Exercise Type</label>
                   <select value={editExType} onChange={(e) => setEditExType(e.target.value)}>
-                    <option value="1">Weight & Reps</option>
+                    <option value="0">Weight & Reps</option>
                     <option value="2">Reps Only</option>
                     <option value="3">Distance & Time</option>
                     <option value="4">Distance Only</option>
@@ -991,7 +991,7 @@ export default function App() {
                 </div>
               </div>
 
-              {(editExType === '1' || editExType === '6' || editExType === '7') && (
+              {typeHasWeight(parseInt(editExType)) && (
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Default Weight Unit</label>

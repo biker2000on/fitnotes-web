@@ -4,6 +4,7 @@ import { ChevronLeft, Plus, Check, Bookmark, Trash2, GripVertical } from 'lucide
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 
 export function RoutineEditorView() {
   const {
@@ -176,7 +177,10 @@ export function RoutineEditorView() {
                                               ) : (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                                                   {exerciseSets.map((set, setIdx) => {
-                                                    const isWeightedEx = ex.exercise_type_id === 1 || ex.exercise_type_id === 6 || ex.exercise_type_id === 7;
+                                                    const isWeightedEx = typeHasWeight(ex.exercise_type_id);
+                                                    const hasReps = typeHasReps(ex.exercise_type_id);
+                                                    const hasDistance = typeHasDistance(ex.exercise_type_id);
+                                                    const hasDuration = typeHasDuration(ex.exercise_type_id);
 
                                                     return (
                                                       <div key={set.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px' }}>
@@ -185,19 +189,36 @@ export function RoutineEditorView() {
                                                         {isWeightedEx && (
                                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                             <span style={{ color: 'var(--text-secondary-dark)' }}>Weight:</span>
-                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, Math.max(0, (set.metric_weight || 0) - 2.5), set.reps || 10)}>-</button>
-                                                            <input type="number" value={set.metric_weight || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, parseFloat(e.target.value) || 0, set.reps || 10)} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
-                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, (set.metric_weight || 0) + 2.5, set.reps || 10)}>+</button>
+                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: Math.max(0, (set.metric_weight || 0) - 2.5) })}>-</button>
+                                                            <input type="number" value={set.metric_weight || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { metric_weight: parseFloat(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: (set.metric_weight || 0) + 2.5 })}>+</button>
                                                             <span style={{ color: 'var(--text-secondary-dark)', fontSize: '12px' }}>{userUnit}</span>
                                                           </div>
                                                         )}
 
+                                                        {hasReps && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                           <span style={{ color: 'var(--text-secondary-dark)' }}>Reps:</span>
-                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, set.metric_weight || 0, Math.max(0, (set.reps || 0) - 1))}>-</button>
-                                                          <input type="number" value={set.reps || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, set.metric_weight || 0, parseInt(e.target.value) || 0)} style={{ width: '50px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
-                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, set.metric_weight || 0, (set.reps || 0) + 1)}>+</button>
+                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { reps: Math.max(0, (set.reps || 0) - 1) })}>-</button>
+                                                          <input type="number" value={set.reps || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { reps: parseInt(e.target.value) || 0 })} style={{ width: '50px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { reps: (set.reps || 0) + 1 })}>+</button>
                                                         </div>
+                                                        )}
+
+                                                        {hasDistance && (
+                                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ color: 'var(--text-secondary-dark)' }}>Distance:</span>
+                                                            <input type="number" value={set.distance || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { distance: parseFloat(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                          </div>
+                                                        )}
+
+                                                        {hasDuration && (
+                                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ color: 'var(--text-secondary-dark)' }}>Time:</span>
+                                                            <input type="number" value={set.duration_seconds || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { duration_seconds: parseInt(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                            <span style={{ color: 'var(--text-secondary-dark)', fontSize: '12px' }}>sec</span>
+                                                          </div>
+                                                        )}
 
                                                         <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary-dark)', cursor: 'pointer', marginLeft: 'auto', display: 'flex', alignItems: 'center' }} onClick={() => handleDeleteSetFromTemplateExercise(set.id)} title="Delete Set">
                                                           <Trash2 size={14} color="var(--danger)" />

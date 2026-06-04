@@ -35,7 +35,7 @@ export function BodyView() {
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectionEnd, setSelectionEnd] = useState<number | null>(null);
 
-  const chartData = useMemo(() => {
+  const rawBodyData = useMemo(() => {
     return [...bodyWeights]
       .filter(w => !w.is_deleted)
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -50,18 +50,62 @@ export function BodyView() {
       });
   }, [bodyWeights, userUnit]);
 
-  const latest = chartData[chartData.length - 1];
-  const first = chartData[0];
+  const latest = rawBodyData[rawBodyData.length - 1];
+  const first = rawBodyData[0];
   const fullDomain = useMemo<[number, number] | null>(() => {
-    if (chartData.length === 0) return null;
-    return [chartData[0].timestamp, chartData[chartData.length - 1].timestamp];
-  }, [chartData]);
+    if (rawBodyData.length === 0) return null;
+    return [rawBodyData[0].timestamp, rawBodyData[rawBodyData.length - 1].timestamp];
+  }, [rawBodyData]);
   const visibleDomain = xDomain ?? fullDomain;
   const weightDelta = latest && first ? Math.round((latest.weight - first.weight) * 10) / 10 : null;
-  const fatPoints = chartData.filter(d => d.bodyFat != null);
+  const fatPoints = rawBodyData.filter(d => d.bodyFat != null);
   const latestFat = fatPoints[fatPoints.length - 1]?.bodyFat ?? null;
   const minZoomSpan = 1000 * 60 * 60 * 24;
   const visibleSpanDays = visibleDomain ? (visibleDomain[1] - visibleDomain[0]) / minZoomSpan : 0;
+  const useMonthlyAverages = rangePreset === 'ALL' || visibleSpanDays > 730;
+
+  const chartData = useMemo(() => {
+    if (!useMonthlyAverages) return rawBodyData;
+
+    const months = new Map<string, {
+      timestamp: number;
+      date: string;
+      weightTotal: number;
+      weightCount: number;
+      fatTotal: number;
+      fatCount: number;
+    }>();
+
+    for (const row of rawBodyData) {
+      const d = new Date(row.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+      const bucket = months.get(key) ?? {
+        timestamp: monthStart.getTime(),
+        date: monthStart.toISOString().slice(0, 10),
+        weightTotal: 0,
+        weightCount: 0,
+        fatTotal: 0,
+        fatCount: 0,
+      };
+      bucket.weightTotal += row.weight;
+      bucket.weightCount++;
+      if (row.bodyFat != null) {
+        bucket.fatTotal += row.bodyFat;
+        bucket.fatCount++;
+      }
+      months.set(key, bucket);
+    }
+
+    return Array.from(months.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(bucket => ({
+        date: bucket.date,
+        timestamp: bucket.timestamp,
+        weight: Math.round((bucket.weightTotal / bucket.weightCount) * 10) / 10,
+        bodyFat: bucket.fatCount === 0 ? null : Math.round((bucket.fatTotal / bucket.fatCount) * 10) / 10,
+      }));
+  }, [rawBodyData, useMonthlyAverages]);
 
   const shortDate = (date: string) => {
     const d = new Date(`${date}T00:00:00`);
@@ -251,7 +295,7 @@ export function BodyView() {
           <div>
             <div className="card-title"><TrendingUp size={18} color="var(--primary)" /> Body Weight</div>
             <div style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', marginTop: '6px' }}>
-              {chartData.length} historical record{chartData.length === 1 ? '' : 's'}
+              {rawBodyData.length} historical record{rawBodyData.length === 1 ? '' : 's'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -294,7 +338,7 @@ export function BodyView() {
           </div>
         </div>
 
-        {chartData.length === 0 ? (
+        {rawBodyData.length === 0 ? (
           <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '48px 24px' }}>No body weight logs saved yet.</p>
         ) : (
           <>

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"backend/db"
@@ -115,6 +116,7 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 
 	// B. Migrate Categories
 	categoryMap := make(map[int64]uuid.UUID)
+	categoryNameMap := make(map[int64]string)
 	catRows, err := sqliteDB.Query("SELECT _id, name, colour, sort_order FROM Category")
 	if err == nil {
 		defer catRows.Close()
@@ -129,6 +131,7 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			newID := uuid.New()
 			categoryMap[oldID] = newID
+			categoryNameMap[oldID] = name
 
 			_, err = tx.Exec(ctx, `
 				INSERT INTO categories (id, user_id, name, colour, sort_order, last_modified, is_deleted)
@@ -192,21 +195,17 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 				weightUnitVal = int(weightUnit.Int64)
 			}
 
-			// Convert Android FitNotes exercise type ID to Web App exercise type ID
-			webTypeID := 1
+			// FitNotes backup exercise type IDs are already the canonical IDs used
+			// by the web app. Preserve them so duration-only exercises remain time-based.
+			webTypeID := 0
 			switch typeID {
-			case 1, 2, 3:
-				webTypeID = 1 // Weight & Reps
-			case 4:
-				webTypeID = 2 // Reps Only
-			case 5:
-				webTypeID = 3 // Distance & Time
-			case 6:
-				webTypeID = 5 // Time Only
-			case 7:
-				webTypeID = 7 // Weight & Time
+			case 0, 1, 2, 3, 4, 5, 6, 7:
+				webTypeID = typeID
 			default:
-				webTypeID = 1
+				webTypeID = 0
+			}
+			if categoryID.Valid && strings.EqualFold(categoryNameMap[categoryID.Int64], "Stretching") {
+				webTypeID = 5
 			}
 
 			_, err = tx.Exec(ctx, `

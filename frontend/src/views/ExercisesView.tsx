@@ -132,7 +132,7 @@ export function ExercisesView() {
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <select value={newExType} onChange={(e) => setNewExType(e.target.value)}>
-            <option value="1">Weight & Reps</option>
+            <option value="0">Weight & Reps</option>
             <option value="2">Reps Only</option>
             <option value="3">Distance & Time</option>
             <option value="4">Distance Only</option>
