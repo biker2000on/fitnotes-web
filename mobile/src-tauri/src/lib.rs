@@ -377,6 +377,20 @@ fn normalize_bool_value(value: &mut Value) {
     }
 }
 
+fn normalize_signed_int32_value(value: &mut Value) {
+    let n = match value {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => s.parse::<i64>().ok(),
+        _ => None,
+    };
+
+    if let Some(raw) = n {
+        if raw > i32::MAX as i64 {
+            *value = Value::Number((raw - 4_294_967_296_i64).into());
+        }
+    }
+}
+
 fn normalize_sync_item(mut item: Value, uuid_fields: &[&str], bool_fields: &[&str]) -> Value {
     if let Value::Object(ref mut map) = item {
         map.remove("user_id");
@@ -397,9 +411,29 @@ fn normalize_sync_item(mut item: Value, uuid_fields: &[&str], bool_fields: &[&st
                 normalize_bool_value(value);
             }
         }
+
+        if let Some(value) = map.get_mut("colour") {
+            normalize_signed_int32_value(value);
+        }
     }
 
     item
+}
+
+fn purge_builtin_seed_rows(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM categories WHERE id GLOB 'c-[0-9]*'", [])?;
+    conn.execute("DELETE FROM exercises WHERE id LIKE 'e-%'", [])?;
+    conn.execute("DELETE FROM routines WHERE id = 'r-ppl-push'", [])?;
+    conn.execute("DELETE FROM routine_sections WHERE id = 'rs-push'", [])?;
+    conn.execute(
+        "DELETE FROM routine_section_exercises WHERE id LIKE 'rse-%'",
+        [],
+    )?;
+    conn.execute(
+        "DELETE FROM routine_section_exercise_sets WHERE id LIKE 'rses-%'",
+        [],
+    )?;
+    Ok(())
 }
 
 #[derive(Deserialize, Debug)]
@@ -435,6 +469,11 @@ async fn tauri_sync(
     db_state: State<'_, DbConnection>,
 ) -> std::result::Result<(), String> {
     println!("tauri_sync: starting sync to {}", api_base_url);
+    {
+        let conn = db_state.0.lock().unwrap();
+        purge_builtin_seed_rows(&conn).map_err(|e| e.to_string())?;
+    }
+
     // 1. Gather local changes where is_dirty = 1 and build the push payload.
     let payload = {
         let conn = db_state.0.lock().unwrap();
@@ -1113,24 +1152,7 @@ async fn tauri_invalidate_cache(
         }
     }
     if preserve_dirty {
-        tx.execute("DELETE FROM categories WHERE id GLOB 'c-[0-9]*'", [])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM exercises WHERE id LIKE 'e-%'", [])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM routines WHERE id = 'r-ppl-push'", [])
-            .map_err(|e| e.to_string())?;
-        tx.execute("DELETE FROM routine_sections WHERE id = 'rs-push'", [])
-            .map_err(|e| e.to_string())?;
-        tx.execute(
-            "DELETE FROM routine_section_exercises WHERE id LIKE 'rse-%'",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.execute(
-            "DELETE FROM routine_section_exercise_sets WHERE id LIKE 'rses-%'",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
+        purge_builtin_seed_rows(&tx).map_err(|e| e.to_string())?;
     }
 
     tx.execute("DELETE FROM settings WHERE key = 'last_sync_timestamp'", [])

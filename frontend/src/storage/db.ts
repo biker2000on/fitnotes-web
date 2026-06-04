@@ -74,6 +74,11 @@ const normalizeTimestamp = (value: unknown): string => {
   return new Date().toISOString();
 };
 
+const normalizeSignedInt32 = (value: unknown): unknown => {
+  if (typeof value !== 'number') return value;
+  return value > 2147483647 ? value - 4294967296 : value;
+};
+
 const normalizeForSync = (item: any, uuidFields: string[] = []) => {
   const normalized = { ...item };
   delete normalized.user_id;
@@ -83,6 +88,9 @@ const normalizeForSync = (item: any, uuidFields: string[] = []) => {
   uuidFields.forEach(field => {
     normalized[field] = normalizeUuid(normalized[field]);
   });
+  if ('colour' in normalized) {
+    normalized.colour = normalizeSignedInt32(normalized.colour);
+  }
 
   return normalized;
 };

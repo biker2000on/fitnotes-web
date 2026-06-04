@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS } from '../lib/settings';
 import { DEFAULT_CATEGORIES, DEFAULT_EXERCISES } from '../lib/defaultData';
 import { beep, vibrate, notify } from '../lib/notify';
 import { lbsToKg, typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { hexToSignedArgb } from '../lib/colors';
 import type {
   Category, Exercise, TrainingLog, BodyWeight, WorkoutComment,
   WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
@@ -1881,10 +1882,7 @@ export function useFitNotesController() {
   const handleCreateCategory = async () => {
     if (!newCatName) return;
     
-    // Hex to ARGB Int
-    const hex = newCatColor.replace('#', '');
-    const bigint = parseInt(hex, 16);
-    const colourVal = 4278190080 + bigint; // Map to opaque Alpha ARGB integer
+    const colourVal = hexToSignedArgb(newCatColor);
 
     const record: Category = {
       id: uuidv4(),
@@ -1904,9 +1902,7 @@ export function useFitNotesController() {
   const handleUpdateCategory = async () => {
     if (!editingCategory || !editingCatName) return;
     
-    const hex = editingCatColor.replace('#', '');
-    const bigint = parseInt(hex, 16);
-    const colourVal = 4278190080 + bigint; // Map to opaque Alpha ARGB integer
+    const colourVal = hexToSignedArgb(editingCatColor);
 
     const updated = {
       ...editingCategory,
@@ -2016,9 +2012,7 @@ export function useFitNotesController() {
       return;
     }
 
-    const hex = supersetColor.replace('#', '');
-    const bigint = parseInt(hex, 16);
-    const colourVal = 4278190080 + bigint;
+    const colourVal = hexToSignedArgb(supersetColor);
 
     let groupId = targetSupersetGroupId;
 
@@ -2084,7 +2078,7 @@ export function useFitNotesController() {
       id: groupId,
       name: 'Superset Group',
       date: selectedDate,
-      colour: 4293926400, // Red ARGB default
+      colour: hexToSignedArgb('#ef4444'),
       auto_jump_enabled: false,
       rest_timer_auto_start_enabled: false
     };
@@ -2133,9 +2127,7 @@ export function useFitNotesController() {
       return;
     }
 
-    const hex = supersetColor.replace('#', '');
-    const bigint = parseInt(hex, 16);
-    const colourVal = 4278190080 + bigint;
+    const colourVal = hexToSignedArgb(supersetColor);
 
     const groupId = uuidv4();
     const newGroup: WorkoutGroup = {

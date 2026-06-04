@@ -7,3 +7,8 @@ export const intColorToHex = (num: number): string => {
   const b = num & 0xff;
   return `rgb(${r}, ${g}, ${b})`;
 };
+
+export const hexToSignedArgb = (hexColor: string): number => {
+  const rgb = parseInt(hexColor.replace('#', ''), 16);
+  return (0xff000000 | rgb) << 0;
+};
