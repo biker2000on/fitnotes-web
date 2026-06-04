@@ -565,7 +565,7 @@ class BrowserLocalDriver implements DBDriver {
       const key = `fn_${table}`;
       if (preserveDirty) {
         const store = this.getStore(table);
-        const dirty = store.filter(x => x.is_dirty === 1);
+        const dirty = store.filter(x => x.is_dirty === 1 && !isBuiltInSeedRow(table, x));
         localStorage.setItem(key, JSON.stringify(dirty));
       } else {
         localStorage.removeItem(key);
@@ -588,6 +588,17 @@ class BrowserLocalDriver implements DBDriver {
       }
     }
   }
+}
+
+function isBuiltInSeedRow(table: string, row: any): boolean {
+  const id = String(row?.id ?? '');
+  if (table === 'categories') return /^c-\d+$/.test(id);
+  if (table === 'exercises') return id.startsWith('e-');
+  if (table === 'routines') return id === 'r-ppl-push';
+  if (table === 'routine_sections') return id === 'rs-push';
+  if (table === 'routine_section_exercises') return id.startsWith('rse-');
+  if (table === 'routine_section_exercise_sets') return id.startsWith('rses-');
+  return false;
 }
 
 // Tauri native sqlite driver implementation that makes IPC calls to Rust side

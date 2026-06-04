@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -37,6 +38,11 @@ type SyncRequest struct {
 	CustomUnits                []models.CustomUnit                `json:"custom_units"`
 	GraphFavourites            []models.GraphFavourite            `json:"graph_favourites"`
 	Settings                   *models.Settings                   `json:"settings"`
+}
+
+func syncHTTPError(w http.ResponseWriter, label string, err error) {
+	log.Printf("sync error: %s: %v", label, err)
+	http.Error(w, `{"error":"`+label+`: `+err.Error()+`"}`, http.StatusInternalServerError)
 }
 
 type SyncResponse struct {
@@ -92,91 +98,91 @@ func SyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Process Incoming Client Data (PUSH)
 	if err := pushCategories(ctx, tx, userID, req.Categories); err != nil {
-		http.Error(w, `{"error":"failed to sync categories: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync categories", err)
 		return
 	}
 	if err := pushExercises(ctx, tx, userID, req.Exercises); err != nil {
-		http.Error(w, `{"error":"failed to sync exercises: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync exercises", err)
 		return
 	}
 	// Routine templates - parents before children so FKs resolve, and before
 	// workout_groups (whose routine_section_id references routine_sections).
 	if err := pushRoutines(ctx, tx, userID, req.Routines); err != nil {
-		http.Error(w, `{"error":"failed to sync routines: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync routines", err)
 		return
 	}
 	if err := pushRoutineSections(ctx, tx, req.RoutineSections); err != nil {
-		http.Error(w, `{"error":"failed to sync routine sections: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync routine sections", err)
 		return
 	}
 	if err := pushRoutineSectionExercises(ctx, tx, req.RoutineSectionExercises); err != nil {
-		http.Error(w, `{"error":"failed to sync routine section exercises: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync routine section exercises", err)
 		return
 	}
 	if err := pushRoutineSectionExerciseSets(ctx, tx, req.RoutineSectionExerciseSets); err != nil {
-		http.Error(w, `{"error":"failed to sync routine section exercise sets: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync routine section exercise sets", err)
 		return
 	}
 	if err := pushTrainingLogs(ctx, tx, userID, req.TrainingLogs); err != nil {
-		http.Error(w, `{"error":"failed to sync training logs: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync training logs", err)
 		return
 	}
 	if err := pushBodyWeights(ctx, tx, userID, req.BodyWeights); err != nil {
-		http.Error(w, `{"error":"failed to sync body weights: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync body weights", err)
 		return
 	}
 	if err := pushPlates(ctx, tx, userID, req.Plates); err != nil {
-		http.Error(w, `{"error":"failed to sync plates: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync plates", err)
 		return
 	}
 	if err := pushBarbells(ctx, tx, userID, req.Barbells); err != nil {
-		http.Error(w, `{"error":"failed to sync barbells: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync barbells", err)
 		return
 	}
 	if err := pushWorkoutComments(ctx, tx, userID, req.WorkoutComments); err != nil {
-		http.Error(w, `{"error":"failed to sync workout comments: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync workout comments", err)
 		return
 	}
 	if err := pushWorkoutGroups(ctx, tx, userID, req.WorkoutGroups); err != nil {
-		http.Error(w, `{"error":"failed to sync workout groups: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync workout groups", err)
 		return
 	}
 	if err := pushWorkoutGroupExercises(ctx, tx, userID, req.WorkoutGroupExercises); err != nil {
-		http.Error(w, `{"error":"failed to sync workout group exercises: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync workout group exercises", err)
 		return
 	}
 	if err := pushGoals(ctx, tx, userID, req.Goals); err != nil {
-		http.Error(w, `{"error":"failed to sync goals: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync goals", err)
 		return
 	}
 	// Measurements before measurement_records (FK).
 	if err := pushMeasurements(ctx, tx, userID, req.Measurements); err != nil {
-		http.Error(w, `{"error":"failed to sync measurements: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync measurements", err)
 		return
 	}
 	if err := pushMeasurementRecords(ctx, tx, userID, req.MeasurementRecords); err != nil {
-		http.Error(w, `{"error":"failed to sync measurement records: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync measurement records", err)
 		return
 	}
 	if err := pushExerciseComments(ctx, tx, userID, req.ExerciseComments); err != nil {
-		http.Error(w, `{"error":"failed to sync exercise comments: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync exercise comments", err)
 		return
 	}
 	if err := pushWorkoutTimes(ctx, tx, userID, req.WorkoutTimes); err != nil {
-		http.Error(w, `{"error":"failed to sync workout times: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync workout times", err)
 		return
 	}
 	if err := pushCustomUnits(ctx, tx, userID, req.CustomUnits); err != nil {
-		http.Error(w, `{"error":"failed to sync custom units: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync custom units", err)
 		return
 	}
 	if err := pushGraphFavourites(ctx, tx, userID, req.GraphFavourites); err != nil {
-		http.Error(w, `{"error":"failed to sync graph favourites: `+err.Error()+`"}`, http.StatusInternalServerError)
+		syncHTTPError(w, "failed to sync graph favourites", err)
 		return
 	}
 	if req.Settings != nil {
 		if err := pushSettings(ctx, tx, userID, req.Settings); err != nil {
-			http.Error(w, `{"error":"failed to sync settings: `+err.Error()+`"}`, http.StatusInternalServerError)
+			syncHTTPError(w, "failed to sync settings", err)
 			return
 		}
 	}

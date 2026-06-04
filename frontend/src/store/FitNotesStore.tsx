@@ -759,6 +759,18 @@ export function useFitNotesController() {
       }
 
       if (isAuthenticated) {
+        if (isTauri()) {
+          try {
+            setSyncStatus('syncing');
+            await db.sync(token, getApiBaseUrl());
+            setSyncStatus('success');
+            setTimeout(() => setSyncStatus('idle'), 3000);
+          } catch (e) {
+            console.warn('Android startup sync failed:', e);
+            setSyncStatus('error');
+            setTimeout(() => setSyncStatus('idle'), 3000);
+          }
+        }
         workoutCommentRef.current = '';
         setWorkoutComment('');
         await refreshData();

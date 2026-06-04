@@ -1112,6 +1112,26 @@ async fn tauri_invalidate_cache(
                 .map_err(|e| e.to_string())?;
         }
     }
+    if preserve_dirty {
+        tx.execute("DELETE FROM categories WHERE id GLOB 'c-[0-9]*'", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM exercises WHERE id LIKE 'e-%'", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM routines WHERE id = 'r-ppl-push'", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM routine_sections WHERE id = 'rs-push'", [])
+            .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM routine_section_exercises WHERE id LIKE 'rse-%'",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM routine_section_exercise_sets WHERE id LIKE 'rses-%'",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
 
     tx.execute("DELETE FROM settings WHERE key = 'last_sync_timestamp'", [])
         .map_err(|e| e.to_string())?;
