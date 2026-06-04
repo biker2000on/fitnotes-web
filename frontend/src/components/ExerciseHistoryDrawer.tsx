@@ -32,6 +32,7 @@ export function ExerciseHistoryDrawer() {
     const raw = exerciseGraphSeries(logs);
     return raw.map(p => ({
       ...p,
+      dateMs: new Date(p.date + 'T00:00:00').getTime(),
       maxWeight: userUnit === 'lbs' ? Math.round(p.maxWeight * 2.20462 * 10) / 10 : p.maxWeight,
       estimated1RM: userUnit === 'lbs' ? Math.round(p.estimated1RM * 2.20462 * 10) / 10 : p.estimated1RM,
       volume: userUnit === 'lbs' ? Math.round(p.volume * 2.20462) : p.volume,
@@ -59,6 +60,10 @@ export function ExerciseHistoryDrawer() {
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   const shortDate = (iso: string) =>
     new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const chartDate = (value: number | string) => {
+    const date = typeof value === 'number' ? new Date(value) : new Date(value + 'T00:00:00');
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   const close = () => setHistoryExerciseId(null);
   const displayMetricWeight = (metricWeight: number) => displayWeight(metricWeight, 1);
@@ -232,9 +237,17 @@ export function ExerciseHistoryDrawer() {
                   <ResponsiveContainer width="100%" height="100%">
                     <ReLineChart data={graph} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="date" tickFormatter={shortDate} stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
+                      <XAxis
+                        dataKey="dateMs"
+                        type="number"
+                        scale="time"
+                        domain={['dataMin', 'dataMax']}
+                        tickFormatter={chartDate}
+                        stroke="var(--text-secondary-dark)"
+                        style={{ fontSize: '11px' }}
+                      />
                       <YAxis stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
-                      <Tooltip labelFormatter={shortDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
+                      <Tooltip labelFormatter={chartDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
                       {hasWeight && hasReps && <Line type="monotone" dataKey="estimated1RM" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Est. 1RM" />}
                       {hasWeight && <Line type="monotone" dataKey="maxWeight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 2 }} name="Max Weight" />}
                       {hasReps && !hasWeight && <Line type="monotone" dataKey="totalReps" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Reps" />}
