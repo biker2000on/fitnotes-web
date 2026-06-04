@@ -7,14 +7,21 @@ import {
 import { X, Trophy, History as HistoryIcon, LineChart } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { personalRecords, sessionSummaries, exerciseGraphSeries } from '../lib/stats';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import type { TrainingLog } from '../types';
 
 type Tab = 'history' | 'records' | 'graph';
 
 export function ExerciseHistoryDrawer() {
-  const { historyExerciseId, setHistoryExerciseId, exercises, allLogs, userUnit, formatLogValue, displayWeight } = useFitNotesStore();
+  const { historyExerciseId, setHistoryExerciseId, exercises, allLogs, userUnit, settings, formatLogValue, displayWeight } = useFitNotesStore();
   const [tab, setTab] = useState<Tab>('history');
 
   const exercise = exercises.find(e => e.id === historyExerciseId) ?? null;
+  const exerciseTypeId = exercise?.exercise_type_id ?? 0;
+  const hasWeight = typeHasWeight(exerciseTypeId);
+  const hasReps = typeHasReps(exerciseTypeId);
+  const hasDistance = typeHasDistance(exerciseTypeId);
+  const hasDuration = typeHasDuration(exerciseTypeId);
   const logs = useMemo(
     () => allLogs.filter(l => l.exercise_id === historyExerciseId && !l.is_deleted),
     [allLogs, historyExerciseId],
@@ -23,14 +30,17 @@ export function ExerciseHistoryDrawer() {
   const records = useMemo(() => personalRecords(logs), [logs]);
   const graph = useMemo(() => {
     const raw = exerciseGraphSeries(logs);
-    if (userUnit === 'kg') return raw;
     return raw.map(p => ({
       ...p,
-      maxWeight: Math.round(p.maxWeight * 2.20462 * 10) / 10,
-      estimated1RM: Math.round(p.estimated1RM * 2.20462 * 10) / 10,
-      volume: Math.round(p.volume * 2.20462),
+      maxWeight: userUnit === 'lbs' ? Math.round(p.maxWeight * 2.20462 * 10) / 10 : p.maxWeight,
+      estimated1RM: userUnit === 'lbs' ? Math.round(p.estimated1RM * 2.20462 * 10) / 10 : p.estimated1RM,
+      volume: userUnit === 'lbs' ? Math.round(p.volume * 2.20462) : p.volume,
+      maxDistance: settings.distance_unit === 2 ? Math.round((p.maxDistance / 1.60934) * 100) / 100 : p.maxDistance,
+      totalDistance: settings.distance_unit === 2 ? Math.round((p.totalDistance / 1.60934) * 100) / 100 : p.totalDistance,
+      maxDuration: Math.round((p.maxDuration / 60) * 10) / 10,
+      totalDuration: Math.round((p.totalDuration / 60) * 10) / 10,
     }));
-  }, [logs, userUnit]);
+  }, [logs, settings.distance_unit, userUnit]);
 
   useEffect(() => {
     if (!historyExerciseId) return;
@@ -56,6 +66,46 @@ export function ExerciseHistoryDrawer() {
     const converted = userUnit === 'lbs' ? metricVolume * 2.20462 : metricVolume;
     return `${Math.round(converted)} ${userUnit}`;
   };
+  const displayDistance = (km: number) => {
+    if (settings.distance_unit === 2) return `${Math.round((km / 1.60934) * 100) / 100} mi`;
+    return `${Math.round(km * 100) / 100} km`;
+  };
+  const displayDuration = (seconds: number) => {
+    if (seconds <= 0) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return secs > 0 ? `${minutes}m ${secs}s` : `${minutes}m`;
+    return `${secs}s`;
+  };
+  const summarizeSession = (sessionLogs: TrainingLog[], totalVolume: number, totalReps: number) => {
+    const parts = [`${sessionLogs.length} set${sessionLogs.length === 1 ? '' : 's'}`];
+    const totalDistance = sessionLogs.reduce((sum, log) => sum + (log.distance ?? 0), 0);
+    const totalDuration = sessionLogs.reduce((sum, log) => sum + (log.duration_seconds ?? 0), 0);
+
+    if (hasWeight && hasReps) parts.push(`${displayMetricVolume(totalVolume)} vol`);
+    else if (hasReps) parts.push(`${totalReps} reps`);
+
+    if (hasDistance && totalDistance > 0) parts.push(displayDistance(totalDistance));
+    if (hasDuration && totalDuration > 0) parts.push(displayDuration(totalDuration));
+
+    return parts.join(' - ');
+  };
+  const maxDistanceLog = logs.reduce<TrainingLog | null>((best, log) => ((log.distance ?? 0) > (best?.distance ?? 0) ? log : best), null);
+  const maxDurationLog = logs.reduce<TrainingLog | null>((best, log) => ((log.duration_seconds ?? 0) > (best?.duration_seconds ?? 0) ? log : best), null);
+  const maxRepsLog = logs.reduce<TrainingLog | null>((best, log) => ((log.reps ?? 0) > (best?.reps ?? 0) ? log : best), null);
+  const maxWeightLog = logs.reduce<TrainingLog | null>((best, log) => ((log.metric_weight ?? 0) > (best?.metric_weight ?? 0) ? log : best), null);
+  const totalDistance = logs.reduce((sum, log) => sum + (log.distance ?? 0), 0);
+  const totalDuration = logs.reduce((sum, log) => sum + (log.duration_seconds ?? 0), 0);
+  const totalReps = logs.reduce((sum, log) => sum + (log.reps ?? 0), 0);
+  const graphTitle = hasWeight && hasReps
+    ? 'Estimated 1RM Progression'
+    : hasDistance
+      ? 'Distance Progression'
+      : hasDuration
+        ? 'Duration Progression'
+        : 'Rep Progression';
 
   return (
     <>
@@ -105,7 +155,7 @@ export function ExerciseHistoryDrawer() {
               <div key={s.date} className="card" style={{ gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontWeight: 700, fontSize: '13px' }}>{niceDate(s.date)}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{s.sets} sets - {displayMetricVolume(s.totalVolume)} vol</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{summarizeSession(s.logs, s.totalVolume, s.totalReps)}</span>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   {s.logs.map((l, i) => (
@@ -126,22 +176,49 @@ export function ExerciseHistoryDrawer() {
             <>
               <div className="card" style={{ gap: '10px' }}>
                 <div style={{ fontWeight: 700, fontSize: '13px' }}>Best Records</div>
-                <Stat label="Max Weight" value={records.maxWeight ? `${displayMetricWeight(records.maxWeight.weight)} x ${records.maxWeight.reps}` : '-'} date={records.maxWeight?.date} />
-                <Stat label="Max Reps" value={records.maxReps ? `${records.maxReps.reps} @ ${displayMetricWeight(records.maxReps.weight)}` : '-'} date={records.maxReps?.date} />
-                <Stat label="Best Est. 1RM" value={records.bestEstimated1RM ? displayMetricWeight(records.bestEstimated1RM.value) : '-'} date={records.bestEstimated1RM?.date} />
-                <Stat label="Max Set Volume" value={records.maxSetVolume ? displayMetricVolume(records.maxSetVolume.volume) : '-'} date={records.maxSetVolume?.date} />
+                {hasWeight && hasReps && (
+                  <>
+                    <Stat label="Max Weight" value={records.maxWeight ? `${displayMetricWeight(records.maxWeight.weight)} x ${records.maxWeight.reps}` : '-'} date={records.maxWeight?.date} />
+                    <Stat label="Max Reps" value={records.maxReps ? `${records.maxReps.reps} @ ${displayMetricWeight(records.maxReps.weight)}` : '-'} date={records.maxReps?.date} />
+                    <Stat label="Best Est. 1RM" value={records.bestEstimated1RM ? displayMetricWeight(records.bestEstimated1RM.value) : '-'} date={records.bestEstimated1RM?.date} />
+                    <Stat label="Max Set Volume" value={records.maxSetVolume ? displayMetricVolume(records.maxSetVolume.volume) : '-'} date={records.maxSetVolume?.date} />
+                  </>
+                )}
+                {hasWeight && !hasReps && (
+                  <Stat label="Max Weight" value={maxWeightLog?.metric_weight ? displayMetricWeight(maxWeightLog.metric_weight) : '-'} date={maxWeightLog?.date} />
+                )}
+                {hasReps && !hasWeight && (
+                  <>
+                    <Stat label="Max Reps" value={maxRepsLog?.reps ? `${maxRepsLog.reps} reps` : '-'} date={maxRepsLog?.date} />
+                    <Stat label="Total Reps" value={totalReps ? `${totalReps} reps` : '-'} />
+                  </>
+                )}
+                {hasDistance && (
+                  <>
+                    <Stat label="Max Distance" value={maxDistanceLog?.distance ? displayDistance(maxDistanceLog.distance) : '-'} date={maxDistanceLog?.date} />
+                    <Stat label="Total Distance" value={totalDistance ? displayDistance(totalDistance) : '-'} />
+                  </>
+                )}
+                {hasDuration && (
+                  <>
+                    <Stat label="Max Duration" value={maxDurationLog?.duration_seconds ? displayDuration(maxDurationLog.duration_seconds) : '-'} date={maxDurationLog?.date} />
+                    <Stat label="Total Duration" value={totalDuration ? displayDuration(totalDuration) : '-'} />
+                  </>
+                )}
               </div>
-              <div className="card" style={{ gap: '6px' }}>
-                <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>Rep Maxes (Actual)</div>
-                {records.byReps.length === 0 ? (
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>No records yet.</p>
-                ) : records.byReps.map(r => (
-                  <div key={r.reps} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '3px 0' }}>
-                    <span style={{ color: 'var(--text-secondary-dark)' }}>{r.reps} RM</span>
-                    <span style={{ fontWeight: 600 }}>{displayMetricWeight(r.weight)} <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}>- {shortDate(r.date)}</span></span>
-                  </div>
-                ))}
-              </div>
+              {hasWeight && hasReps && (
+                <div className="card" style={{ gap: '6px' }}>
+                  <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '4px' }}>Rep Maxes (Actual)</div>
+                  {records.byReps.length === 0 ? (
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>No records yet.</p>
+                  ) : records.byReps.map(r => (
+                    <div key={r.reps} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '3px 0' }}>
+                      <span style={{ color: 'var(--text-secondary-dark)' }}>{r.reps} RM</span>
+                      <span style={{ fontWeight: 600 }}>{displayMetricWeight(r.weight)} <span style={{ color: 'var(--text-secondary-dark)', fontWeight: 400, fontSize: '11px' }}>- {shortDate(r.date)}</span></span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
 
@@ -150,7 +227,7 @@ export function ExerciseHistoryDrawer() {
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>No data to graph.</p>
             ) : (
               <div className="card">
-                <div className="card-title">Estimated 1RM Progression</div>
+                <div className="card-title">{graphTitle}</div>
                 <div style={{ width: '100%', height: 260 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <ReLineChart data={graph} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
@@ -158,8 +235,11 @@ export function ExerciseHistoryDrawer() {
                       <XAxis dataKey="date" tickFormatter={shortDate} stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
                       <YAxis stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
                       <Tooltip labelFormatter={shortDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
-                      <Line type="monotone" dataKey="estimated1RM" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Est. 1RM" />
-                      <Line type="monotone" dataKey="maxWeight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 2 }} name="Max Weight" />
+                      {hasWeight && hasReps && <Line type="monotone" dataKey="estimated1RM" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Est. 1RM" />}
+                      {hasWeight && <Line type="monotone" dataKey="maxWeight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 2 }} name="Max Weight" />}
+                      {hasReps && !hasWeight && <Line type="monotone" dataKey="totalReps" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Reps" />}
+                      {hasDistance && <Line type="monotone" dataKey="totalDistance" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Distance" />}
+                      {hasDuration && !hasDistance && <Line type="monotone" dataKey="totalDuration" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Duration" />}
                     </ReLineChart>
                   </ResponsiveContainer>
                 </div>

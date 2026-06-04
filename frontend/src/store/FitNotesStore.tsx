@@ -1182,13 +1182,23 @@ export function useFitNotesController() {
   };
 
   // Log Mutators
-  // Is this weight a new PR for its rep count vs prior logs for the exercise?
-  const isNewPR = (exerciseId: string, weight: number | null, reps: number | null): boolean => {
-    if (!settings.track_personal_records || !weight || !reps) return false;
-    const priorBest = allLogs
-      .filter(l => l.exercise_id === exerciseId && !l.is_deleted && l.reps === reps && (l.metric_weight ?? 0) > 0)
-      .reduce((m, l) => Math.max(m, l.metric_weight as number), 0);
-    return weight > priorBest;
+  // Weighted sets PR by heavier weight at the same reps; bodyweight sets PR by max reps.
+  const isNewPR = (exerciseId: string, typeId: number, weight: number | null, reps: number | null): boolean => {
+    if (!settings.track_personal_records || !reps) return false;
+    const isWeightedSet = typeHasWeight(typeId) && (weight ?? 0) > 0;
+
+    if (isWeightedSet) {
+      const priorBest = allLogs
+        .filter(l => l.exercise_id === exerciseId && !l.is_deleted && l.reps === reps && (l.metric_weight ?? 0) > 0)
+        .reduce((m, l) => Math.max(m, l.metric_weight as number), 0);
+      return (weight as number) > priorBest;
+    }
+
+    if (!typeHasReps(typeId)) return false;
+    const priorBestReps = allLogs
+      .filter(l => l.exercise_id === exerciseId && !l.is_deleted && (l.metric_weight ?? 0) <= 0)
+      .reduce((m, l) => Math.max(m, l.reps ?? 0), 0);
+    return reps > priorBestReps;
   };
 
   const handleAddSet = async () => {
@@ -1198,7 +1208,7 @@ export function useFitNotesController() {
     const reps = typeHasReps(t) ? (parseInt(logReps) || null) : null;
     const distance = typeHasDistance(t) ? (logDistance ? (parseFloat(logDistance) * (settings.distance_unit === 2 ? 1.60934 : 1)) : null) : null;
     const duration = typeHasDuration(t) ? (parseInt(logDuration) || null) : null;
-    const pr = isNewPR(selectedExercise.id, weight, reps);
+    const pr = isNewPR(selectedExercise.id, t, weight, reps);
 
     if (editingLog) {
       const updatedLog: TrainingLog = {
