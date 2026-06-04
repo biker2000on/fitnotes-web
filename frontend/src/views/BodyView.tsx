@@ -61,11 +61,68 @@ export function BodyView() {
   const fatPoints = chartData.filter(d => d.bodyFat != null);
   const latestFat = fatPoints[fatPoints.length - 1]?.bodyFat ?? null;
   const minZoomSpan = 1000 * 60 * 60 * 24;
+  const visibleSpanDays = visibleDomain ? (visibleDomain[1] - visibleDomain[0]) / minZoomSpan : 0;
 
   const shortDate = (date: string) => {
     const d = new Date(`${date}T00:00:00`);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
   };
+
+  const axisDate = (timestamp: number) => new Date(timestamp);
+
+  const formatAxisTick = (timestamp: number) => {
+    const d = axisDate(timestamp);
+    if (rangePreset === 'ALL' || visibleSpanDays > 730) {
+      return d.toLocaleDateString(undefined, { year: 'numeric' });
+    }
+    if (visibleSpanDays > 120) {
+      return d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' });
+    }
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const axisTicks = useMemo(() => {
+    if (!visibleDomain) return undefined;
+    const [start, end] = visibleDomain;
+    if (end <= start) return undefined;
+
+    const ticks: number[] = [];
+    const pushTick = (date: Date) => {
+      const ts = date.getTime();
+      if (ts >= start && ts <= end) ticks.push(ts);
+    };
+
+    if (rangePreset === 'ALL' || visibleSpanDays > 730) {
+      const startYear = new Date(start).getFullYear();
+      const endYear = new Date(end).getFullYear();
+      pushTick(new Date(start));
+      for (let year = startYear; year <= endYear; year++) {
+        pushTick(new Date(year, 0, 1));
+      }
+      return Array.from(new Set(ticks)).sort((a, b) => a - b);
+    }
+
+    if (visibleSpanDays > 120) {
+      const cursor = new Date(start);
+      cursor.setDate(1);
+      cursor.setHours(0, 0, 0, 0);
+      if (cursor.getTime() < start) cursor.setMonth(cursor.getMonth() + 1);
+      while (cursor.getTime() <= end) {
+        pushTick(cursor);
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      return ticks.length > 0 ? ticks : undefined;
+    }
+
+    const intervalDays = visibleSpanDays > 45 ? 14 : visibleSpanDays > 14 ? 7 : 2;
+    const cursor = new Date(start);
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor.getTime() <= end) {
+      pushTick(cursor);
+      cursor.setDate(cursor.getDate() + intervalDays);
+    }
+    return ticks.length > 0 ? ticks : undefined;
+  }, [rangePreset, visibleDomain, visibleSpanDays]);
 
   const clampDomain = (start: number, end: number): [number, number] | null => {
     if (!fullDomain) return null;
@@ -280,7 +337,8 @@ export function BodyView() {
                       scale="time"
                       domain={visibleDomain ?? ['dataMin', 'dataMax']}
                       allowDataOverflow
-                      tickFormatter={(value) => shortDate(new Date(value).toISOString().slice(0, 10))}
+                      ticks={axisTicks}
+                      tickFormatter={formatAxisTick}
                       minTickGap={28}
                       tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }}
                     />
@@ -321,7 +379,8 @@ export function BodyView() {
                       scale="time"
                       domain={visibleDomain ?? ['dataMin', 'dataMax']}
                       allowDataOverflow
-                      tickFormatter={(value) => shortDate(new Date(value).toISOString().slice(0, 10))}
+                      ticks={axisTicks}
+                      tickFormatter={formatAxisTick}
                       minTickGap={28}
                       tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }}
                     />
