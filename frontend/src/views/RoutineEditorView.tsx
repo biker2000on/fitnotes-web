@@ -6,6 +6,8 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 
+const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
+
 export function RoutineEditorView() {
   const {
     editingRoutine, setActiveTab, setEditingRoutine,
@@ -60,7 +62,7 @@ export function RoutineEditorView() {
                 </div>
               ) : (
                 editorSections.map((section, sectionIndex) => {
-                  const sectionExercises = editorSectionExercises.filter(se => se.routine_section_id === section.id);
+                  const sectionExercises = editorSectionExercises.filter(se => se.routine_section_id === section.id).sort(bySortOrder);
 
                   return (
                     <Draggable key={section.id} draggableId={section.id} index={sectionIndex}>
@@ -120,7 +122,7 @@ export function RoutineEditorView() {
                                     const group = linkedGroupEx ? workoutGroups.find(g => g.id === linkedGroupEx.workout_group_id && !g.is_deleted) : null;
                                     const groupColor = group ? intColorToHex(group.colour) : null;
 
-                                    const exerciseSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id);
+                                    const exerciseSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id).sort(bySortOrder);
 
                                     return (
                                       <Draggable key={se.id} draggableId={se.id} index={index}>

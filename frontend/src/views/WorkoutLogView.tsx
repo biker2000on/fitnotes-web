@@ -11,6 +11,8 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 
+const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
+
 export function WorkoutLogView() {
   const {
     selectedExercise, setSelectedExercise, userUnit,
@@ -471,11 +473,18 @@ export function WorkoutLogView() {
 
               // Sort ascending by sortIndex
               const sortedItems = items.sort((a, b) => a.sortIndex - b.sortIndex);
+              const groupLabelById = new Map<string, string>();
+              for (const item of sortedItems) {
+                if (item.type === 'superset' && isGenericSupersetName(item.group.name) && !groupLabelById.has(item.group.id)) {
+                  groupLabelById.set(item.group.id, `Superset ${groupLabelById.size + 1}`);
+                }
+              }
 
               return sortedItems.map((item) => {
                 if (item.type === 'superset') {
                   const wg = item.group;
                   const color = intColorToHex(wg.colour);
+                  const groupLabel = groupLabelById.get(wg.id) || wg.name || 'Superset Group';
                   
                   // Sort exercises inside the superset chronologically based on their first logged set
                   const sortedExIds = [...item.exerciseIds].sort((a, b) => {
@@ -488,7 +497,7 @@ export function WorkoutLogView() {
                     <div key={wg.id} className="superset-container-panel" style={{ borderLeft: `6px solid ${color}`, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255, 255, 255, 0.01)', borderRadius: '0 12px 12px 0', border: '1px solid var(--border-dark)', borderLeftWidth: '6px', padding: '12px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{wg.name || 'Superset Group'}</span>
+                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{groupLabel}</span>
                           {wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
                         </div>
                         <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }} onClick={() => handleClearGroup(wg.id)}>

@@ -6,6 +6,9 @@ import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise } from '../types';
 
+const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
+const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
+
 export function RoutinesView() {
   const {
     routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
@@ -50,7 +53,7 @@ export function RoutinesView() {
         'SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order ASC',
         [routineId]
       );
-      const secs = rawSecs.filter(sec => !sec.is_deleted);
+      const secs = rawSecs.filter(sec => !sec.is_deleted).sort(bySortOrder);
       
       let rseList: RoutineSectionExercise[] = [];
       let rseSets: RoutineSectionExerciseSet[] = [];
@@ -65,7 +68,7 @@ export function RoutinesView() {
             `SELECT * FROM routine_section_exercises WHERE routine_section_id IN (${secPlaceholders}) ORDER BY sort_order ASC`,
             secIds
           );
-          rseList = rawRseList.filter(se => !se.is_deleted);
+          rseList = rawRseList.filter(se => !se.is_deleted).sort(bySortOrder);
 
           if (rseList.length > 0) {
             const rseIds = rseList.map(e => e.id);
@@ -75,7 +78,7 @@ export function RoutinesView() {
             `SELECT * FROM routine_section_exercise_sets WHERE routine_section_exercise_id IN (${rsePlaceholders})`,
             rseIds
           );
-          rseSets = rawRseSets.filter(set => !set.is_deleted);
+          rseSets = rawRseSets.filter(set => !set.is_deleted).sort(bySortOrder);
         }
 
         const allGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
@@ -214,7 +217,15 @@ export function RoutinesView() {
                           
                           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
                             {routineDetails.sections.map(sec => {
-                              const secExs = routineDetails.exercises.filter(x => x.routine_section_id === sec.id);
+                              const secExs = routineDetails.exercises.filter(x => x.routine_section_id === sec.id).sort(bySortOrder);
+                              const groupLabelById = new Map<string, string>();
+                              for (const se of secExs) {
+                                const linked = routineDetails.groupExercises.find(ge => ge.routine_section_id === sec.id && ge.exercise_id === se.exercise_id);
+                                const group = linked ? routineDetails.groups.find(g => g.id === linked.workout_group_id) : null;
+                                if (group && isGenericSupersetName(group.name) && !groupLabelById.has(group.id)) {
+                                  groupLabelById.set(group.id, `Superset ${groupLabelById.size + 1}`);
+                                }
+                              }
                               
                               return (
                                 <div 
@@ -249,6 +260,7 @@ export function RoutinesView() {
                                           const linkedGroupEx = routineDetails.groupExercises.find(ge => ge.routine_section_id === sec.id && ge.exercise_id === se.exercise_id);
                                           const group = linkedGroupEx ? routineDetails.groups.find(g => g.id === linkedGroupEx.workout_group_id) : null;
                                           const groupColor = group ? intColorToHex(group.colour) : null;
+                                          const groupLabel = group ? (groupLabelById.get(group.id) || group.name) : null;
                                           
                                           return (
                                             <div key={se.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)', borderLeft: groupColor ? `3px solid ${groupColor}` : '3px solid transparent', paddingLeft: groupColor ? '6px' : 0 }}>
@@ -256,7 +268,7 @@ export function RoutinesView() {
                                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{exName}</span>
                                               {group && (
                                                 <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: groupColor || 'var(--primary)', backgroundColor: groupColor ? `${groupColor}20` : 'rgba(99, 102, 241, 0.12)', borderRadius: '4px', padding: '2px 5px' }}>
-                                                  Superset
+                                                  {groupLabel}
                                                 </span>
                                               )}
                                               <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>({setsCount} {setsCount === 1 ? 'set' : 'sets'})</span>

@@ -19,6 +19,42 @@ import type {
   Goal, Measurement, MeasurementRecord, Settings, ExerciseComment, GraphFavourite, CustomUnit,
 } from '../types';
 
+const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
+
+const sortLogsByRoutineTemplate = (
+  logs: TrainingLog[],
+  sections: RoutineSection[],
+  sectionExercises: RoutineSectionExercise[],
+  exerciseSets: RoutineSectionExerciseSet[],
+): TrainingLog[] => {
+  const sectionOrderById = new Map(sections.map(section => [section.id, section.sort_order]));
+  const sectionExerciseById = new Map(sectionExercises.map(sectionExercise => [sectionExercise.id, sectionExercise]));
+  const setOrderById = new Map<string, number>();
+
+  for (const set of exerciseSets) {
+    const sectionExercise = sectionExerciseById.get(set.routine_section_exercise_id);
+    if (!sectionExercise) continue;
+    const sectionOrder = sectionOrderById.get(sectionExercise.routine_section_id) ?? 0;
+    setOrderById.set(set.id, sectionOrder * 1_000_000 + sectionExercise.sort_order * 1_000 + set.sort_order);
+  }
+
+  const fallbackTime = (log: TrainingLog) => Date.parse((log as TrainingLog & { last_modified?: string }).last_modified ?? '') || 0;
+
+  return [...logs].sort((a, b) => {
+    const aOrder = a.routine_section_exercise_set_id ? setOrderById.get(a.routine_section_exercise_set_id) : undefined;
+    const bOrder = b.routine_section_exercise_set_id ? setOrderById.get(b.routine_section_exercise_set_id) : undefined;
+
+    if (aOrder !== undefined || bOrder !== undefined) {
+      const diff = (aOrder ?? Number.POSITIVE_INFINITY) - (bOrder ?? Number.POSITIVE_INFINITY);
+      if (diff !== 0) return diff;
+    }
+
+    const timeDiff = fallbackTime(a) - fallbackTime(b);
+    if (timeDiff !== 0) return timeDiff;
+    return a.id.localeCompare(b.id);
+  });
+};
+
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined') {
     const custom = localStorage.getItem('fn_api_base_url');
@@ -843,8 +879,17 @@ export function useFitNotesController() {
   const refreshData = async (date = selectedDateRef.current) => {
     const cats = await db.query<Category>('SELECT * FROM categories');
     const exs = await db.query<Exercise>('SELECT * FROM exercises');
-    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
+    const rawLogs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
     const allLgs = await db.query<TrainingLog>('SELECT * FROM training_logs');
+    const routineSections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+    const routineSectionExercises = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+    const routineExerciseSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+    const logs = sortLogsByRoutineTemplate(
+      rawLogs,
+      routineSections.filter(section => !section.is_deleted),
+      routineSectionExercises.filter(sectionExercise => !sectionExercise.is_deleted),
+      routineExerciseSets.filter(set => !set.is_deleted),
+    );
     const weights = await db.query<BodyWeight>('SELECT * FROM body_weights');
     const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [date]);
     const rts = await db.query<Routine>('SELECT * FROM routines');
@@ -1510,16 +1555,16 @@ export function useFitNotesController() {
     sectionId?: string
   ) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId) && !s.is_deleted);
+    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId) && !s.is_deleted).sort(bySortOrder);
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
-      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted);
+      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted).sort(bySortOrder);
       const importedExerciseIds = secExs.map(se => se.exercise_id);
 
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
-        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted);
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted).sort(bySortOrder);
 
         if (type === 'template') {
           for (const s of exSets) {
@@ -2311,16 +2356,16 @@ export function useFitNotesController() {
   // Import / Load Routine template into current daily logs
   const handleImportRoutine = async (routineId: string) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId && !s.is_deleted);
+    const routineSecs = sections.filter(s => s.routine_id === routineId && !s.is_deleted).sort(bySortOrder);
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
-      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted);
+      const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted).sort(bySortOrder);
       const importedExerciseIds = secExs.map(se => se.exercise_id);
 
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
-        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted);
+        const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted).sort(bySortOrder);
 
         for (const s of exSets) {
           const log: TrainingLog = {
@@ -2350,16 +2395,17 @@ export function useFitNotesController() {
   // Routine Day Editor loaders and mutators
   const loadEditorData = async (routineId: string) => {
     const allSections = await db.query<RoutineSection>('SELECT * FROM routine_sections WHERE routine_id = ? ORDER BY sort_order', [routineId]);
-    setEditorSections(allSections);
+    const activeSections = allSections.filter(section => !section.is_deleted).sort(bySortOrder);
+    setEditorSections(activeSections);
 
     const allSecExs = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises ORDER BY sort_order');
-    const activeSecIds = allSections.map(s => s.id);
-    const filteredSecExs = allSecExs.filter(se => activeSecIds.includes(se.routine_section_id));
+    const activeSecIds = activeSections.map(s => s.id);
+    const filteredSecExs = allSecExs.filter(se => activeSecIds.includes(se.routine_section_id) && !se.is_deleted).sort(bySortOrder);
     setEditorSectionExercises(filteredSecExs);
 
     const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets ORDER BY sort_order');
     const activeSecExIds = filteredSecExs.map(se => se.id);
-    const filteredSets = allSets.filter(s => activeSecExIds.includes(s.routine_section_exercise_id));
+    const filteredSets = allSets.filter(s => activeSecExIds.includes(s.routine_section_exercise_id) && !s.is_deleted).sort(bySortOrder);
     setEditorExerciseSets(filteredSets);
   };
 
@@ -2512,12 +2558,12 @@ export function useFitNotesController() {
   };
 
   const handleAddAllSectionLogs = async (sectionId: string) => {
-    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId && !se.is_deleted);
+    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId && !se.is_deleted).sort(bySortOrder);
     const importedExerciseIds = secExs.map(se => se.exercise_id);
     let setsLogged = 0;
     
     for (const se of secExs) {
-      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id && !s.is_deleted);
+      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id && !s.is_deleted).sort(bySortOrder);
       for (const s of exSets) {
         const log: TrainingLog = {
           id: uuidv4(),
