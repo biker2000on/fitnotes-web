@@ -22,6 +22,10 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Copy custom Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# This helper only rewrites the stock port-80 config for IPv6. FitNotes uses a
+# custom port-3000 config and the helper can stall on some Docker/ZFS hosts.
+RUN rm -f /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+
 EXPOSE 3000
 
 CMD ["nginx", "-g", "daemon off;"]
