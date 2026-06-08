@@ -4,6 +4,7 @@
 import {
   TrendingUp, Calculator, Plus, Check, Trash2, GripVertical, X,
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
+  RefreshCw, WifiOff,
 } from 'lucide-react';
 import { useEffect, useState, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -12,6 +13,77 @@ import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
+
+const formatSyncAge = (timestamp: string): string => {
+  if (!timestamp) return 'Never synced';
+  const parsed = Date.parse(timestamp);
+  if (Number.isNaN(parsed)) return 'Never synced';
+
+  const diffSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
+  if (diffSec < 10) return 'Synced just now';
+  if (diffSec < 60) return `Synced ${diffSec}s ago`;
+
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `Synced ${diffMin}m ago`;
+
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `Synced ${diffHour}h ago`;
+
+  return `Synced ${new Date(parsed).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+};
+
+function WorkoutSyncIndicator() {
+  const { token, syncStatus, lastSyncTime, triggerSync } = useFitNotesStore();
+  const [, setTick] = useState(0);
+  const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+  const isSyncing = syncStatus === 'syncing';
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  let label = token ? 'Auto-sync ready' : 'Not signed in';
+  let detail = token ? formatSyncAge(lastSyncTime) : 'Cloud sync off';
+  let tone = 'ready';
+
+  if (!isOnline) {
+    label = 'Offline';
+    detail = 'Changes will sync on reconnect';
+    tone = 'offline';
+  } else if (isSyncing) {
+    label = 'Syncing';
+    detail = 'Pushing workout changes';
+    tone = 'syncing';
+  } else if (syncStatus === 'success') {
+    label = 'Synced';
+    detail = formatSyncAge(lastSyncTime);
+    tone = 'success';
+  } else if (syncStatus === 'error') {
+    label = 'Sync failed';
+    detail = 'Tap to retry';
+    tone = 'error';
+  }
+
+  return (
+    <button
+      type="button"
+      className={`workout-sync-pill workout-sync-${tone}`}
+      onClick={triggerSync}
+      disabled={!token || isSyncing}
+      aria-label={token ? 'Sync workout data' : 'Cloud sync is off'}
+      title={token ? 'Sync workout data' : 'Cloud sync is off'}
+    >
+      <span className="workout-sync-icon">
+        {!isOnline ? <WifiOff size={16} /> : <RefreshCw size={16} className={isSyncing ? 'spin-animation' : ''} />}
+      </span>
+      <span className="workout-sync-copy">
+        <span>{label}</span>
+        <small>{detail}</small>
+      </span>
+    </button>
+  );
+}
 
 export function WorkoutLogView() {
   const {
@@ -69,6 +141,9 @@ export function WorkoutLogView() {
 
   return (
     <div className="workout-grid">
+      <div className="workout-mobile-sync-row">
+        <WorkoutSyncIndicator />
+      </div>
       {/* Left: Active set Logger & comments */}
       <div className="workout-log-input-column">
         {selectedExercise ? (
@@ -345,13 +420,13 @@ export function WorkoutLogView() {
       </div>
 
       {/* Right: Today's Workout Summary side panel */}
-      <div className="card" style={{ gap: '16px', height: 'fit-content' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+      <div className="card workout-summary-card" style={{ gap: '16px', height: 'fit-content' }}>
+        <div className="workout-summary-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
           <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Layers size={18} color="var(--primary)" />
             <span>Today's Workout Summary</span>
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="workout-summary-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {currentLogs.length > 0 && (
               <button className="btn btn-primary complete-all-icon-btn summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete} title="Complete All" aria-label="Complete All">
                 ✓ Complete All
@@ -392,7 +467,7 @@ export function WorkoutLogView() {
         )}
 
         {currentLogs.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div className="workout-empty-state" style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
             <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', margin: 0 }}>
               No sets logged for today yet. Use the logger or copy a past session.
             </p>

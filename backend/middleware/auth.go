@@ -18,6 +18,9 @@ const UserIDKey contextKey = "user_id"
 
 var jwtSecret = []byte(getJWTSecret())
 
+const tokenLifetime = 7 * 24 * time.Hour
+const MobileTokenLifetime = 180 * 24 * time.Hour
+
 func getJWTSecret() string {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
@@ -28,9 +31,13 @@ func getJWTSecret() string {
 
 // GenerateToken generates a JWT token for a given user UUID
 func GenerateToken(userID uuid.UUID) (string, error) {
+	return GenerateTokenWithLifetime(userID, tokenLifetime)
+}
+
+func GenerateTokenWithLifetime(userID uuid.UUID, lifetime time.Duration) (string, error) {
 	claims := jwt.MapClaims{
 		"sub": userID.String(),
-		"exp": time.Now().Add(24 * 7 * time.Hour).Unix(), // Valid for 1 week
+		"exp": time.Now().Add(lifetime).Unix(),
 		"iat": time.Now().Unix(),
 	}
 

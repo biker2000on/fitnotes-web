@@ -4,7 +4,7 @@
 // via context; view components consume their slice through useFitNotesStore().
 import React, { useState, useEffect, useRef, createContext, useContext, type ReactNode } from 'react';
 import type { DropResult } from '@hello-pangea/dnd';
-import { db, isTauri } from '../storage/db';
+import { AuthExpiredError, db, isTauri } from '../storage/db';
 import { uuidv4 } from '../lib/uuid';
 import { getLocalDateString, addDays } from '../lib/date';
 import { DEFAULT_SETTINGS } from '../lib/settings';
@@ -20,6 +20,12 @@ import type {
 } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
+
+const isAuthExpiredError = (error: unknown): boolean => {
+  if (error instanceof AuthExpiredError) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b401\b|unauthorized|invalid or expired token|session expired/i.test(message);
+};
 
 const sortLogsByRoutineTemplate = (
   logs: TrainingLog[],
@@ -74,6 +80,8 @@ const getApiBaseUrl = () => {
 
   return origin;
 };
+
+const getClientType = () => (isTauri() ? 'mobile' : 'web');
 
 let lastKeyPressed = '';
 let lastKeyPressTime = 0;
@@ -782,12 +790,17 @@ export function useFitNotesController() {
         if (syncRows.length === 0 && localCats.length === 0 && localExs.length === 0 && localRoutines.length === 0) {
           try {
             setSyncStatus('syncing');
-            await db.sync(token, getApiBaseUrl());
+            const refreshedToken = await refreshAuthToken(token);
+            await db.sync(refreshedToken, getApiBaseUrl());
             setSyncStatus('success');
             await refreshData();
             setTimeout(() => setSyncStatus('idle'), 3000);
             return;
           } catch (e) {
+            if (isAuthExpiredError(e)) {
+              handleAuthExpired();
+              return;
+            }
             console.warn('Initial Android sync failed:', e);
             setSyncStatus('error');
             setTimeout(() => setSyncStatus('idle'), 3000);
@@ -799,13 +812,27 @@ export function useFitNotesController() {
         if (isTauri()) {
           try {
             setSyncStatus('syncing');
-            await db.sync(token, getApiBaseUrl());
+            const refreshedToken = await refreshAuthToken(token);
+            await db.sync(refreshedToken, getApiBaseUrl());
             setSyncStatus('success');
             setTimeout(() => setSyncStatus('idle'), 3000);
           } catch (e) {
+            if (isAuthExpiredError(e)) {
+              handleAuthExpired();
+              return;
+            }
             console.warn('Android startup sync failed:', e);
             setSyncStatus('error');
             setTimeout(() => setSyncStatus('idle'), 3000);
+          }
+        } else {
+          try {
+            await refreshAuthToken(token);
+          } catch (e) {
+            if (isAuthExpiredError(e)) {
+              handleAuthExpired();
+              return;
+            }
           }
         }
         workoutCommentRef.current = '';
@@ -973,6 +1000,54 @@ export function useFitNotesController() {
 
   // Debounced Auto-Sync Setup
   const syncTimeoutRef = useRef<any>(null);
+  const syncInFlightRef = useRef(false);
+  const syncAgainAfterCurrentRef = useRef(false);
+  const tokenRef = useRef(token);
+
+  useEffect(() => {
+    tokenRef.current = token;
+  }, [token]);
+
+  const refreshAuthToken = async (currentToken = tokenRef.current): Promise<string> => {
+    if (!currentToken) return '';
+
+    try {
+      const refreshUrl = new URL(`${getApiBaseUrl()}/api/auth/refresh`);
+      refreshUrl.searchParams.set('client', getClientType());
+
+      const res = await fetch(refreshUrl.toString(), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${currentToken}`,
+        },
+      });
+
+      if (res.status === 401) {
+        throw new AuthExpiredError();
+      }
+
+      if (!res.ok) {
+        return currentToken;
+      }
+
+      const data = await res.json();
+      if (data?.token) {
+        tokenRef.current = data.token;
+        setToken(data.token);
+        localStorage.setItem('fn_token', data.token);
+      }
+      if (data?.user?.email) {
+        setUserEmail(data.user.email);
+        localStorage.setItem('fn_user_email', data.user.email);
+      }
+
+      return data?.token || currentToken;
+    } catch (e) {
+      if (isAuthExpiredError(e)) throw e;
+      console.warn('Token refresh skipped:', e);
+      return currentToken;
+    }
+  };
 
   const triggerDebouncedSync = () => {
     if (!token) return;
@@ -1011,15 +1086,26 @@ export function useFitNotesController() {
       triggerSync();
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log("App became visible. Initiating sync...");
+        triggerSync();
+      }
+    };
+
     if (typeof window !== 'undefined') {
       window.addEventListener('online', handleOnline);
       window.addEventListener('focus', handleFocus);
+      window.addEventListener('pageshow', handleFocus);
+      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('focus', handleFocus);
+        window.removeEventListener('pageshow', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
   }, [token]);
@@ -1046,8 +1132,14 @@ export function useFitNotesController() {
 
       const res = await fetch(`${apiBaseUrl}/api/auth/${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, password: authPassword })
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: authEmail,
+          password: authPassword,
+          client_type: getClientType(),
+        })
       });
 
       const data = await res.json();
@@ -1088,29 +1180,63 @@ export function useFitNotesController() {
     }
   };
 
-  const handleLogout = () => {
+  const clearSession = (preserveDirty: boolean) => {
     setToken('');
+    tokenRef.current = '';
     setUserEmail('');
     localStorage.removeItem('fn_token');
     localStorage.removeItem('fn_user_email');
     localStorage.removeItem('fn_last_sync_timestamp');
-    db.invalidateCache(false).catch(e => console.warn("Failed to clear database on logout:", e));
+    db.invalidateCache(preserveDirty).catch(e => console.warn("Failed to clear database on logout:", e));
+  };
+
+  const handleLogout = () => {
+    clearSession(false);
+  };
+
+  const handleAuthExpired = () => {
+    clearSession(true);
+    setSyncStatus('error');
+    triggerToast('Session expired. Sign in again to continue syncing.', 'error');
+    setActiveTab('sync');
   };
 
   // Synchronize
   const triggerSync = async () => {
-    if (!token) return;
+    const activeToken = tokenRef.current;
+    if (!activeToken) return;
+
+    if (syncInFlightRef.current) {
+      syncAgainAfterCurrentRef.current = true;
+      return;
+    }
+
+    syncInFlightRef.current = true;
     setSyncStatus('syncing');
     try {
       const apiBaseUrl = getApiBaseUrl();
+      const refreshedToken = await refreshAuthToken(activeToken);
 
-      await db.sync(token, apiBaseUrl);
+      await db.sync(refreshedToken, apiBaseUrl);
       setSyncStatus('success');
       await refreshData();
       setTimeout(() => setSyncStatus('idle'), 3000);
     } catch (e) {
+      if (isAuthExpiredError(e)) {
+        handleAuthExpired();
+        return;
+      }
       setSyncStatus('error');
       setTimeout(() => setSyncStatus('idle'), 3000);
+    } finally {
+      syncInFlightRef.current = false;
+      if (syncAgainAfterCurrentRef.current && tokenRef.current) {
+        syncAgainAfterCurrentRef.current = false;
+        if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = setTimeout(() => {
+          triggerSync();
+        }, typeof navigator !== 'undefined' && navigator.onLine === false ? 5000 : 250);
+      }
     }
   };
 

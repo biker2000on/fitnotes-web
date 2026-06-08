@@ -10,6 +10,13 @@ export interface DBDriver {
   onChange(listener: () => void): () => void;
 }
 
+export class AuthExpiredError extends Error {
+  constructor(message = 'Session expired. Please sign in again.') {
+    super(message);
+    this.name = 'AuthExpiredError';
+  }
+}
+
 // Check if running inside Tauri WebView
 const isTauri = () => {
   return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
@@ -478,7 +485,14 @@ class BrowserLocalDriver implements DBDriver {
         body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error('Sync failed on server');
+      if (res.status === 401) {
+        throw new AuthExpiredError();
+      }
+
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        throw new Error(body || 'Sync failed on server');
+      }
 
       const serverData = await res.json();
 
@@ -748,7 +762,15 @@ class TauriNativeDriver implements DBDriver {
   }
 
   async sync(apiToken: string, apiBaseUrl: string): Promise<void> {
-    await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
+    try {
+      await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (/\b401\b|unauthorized|invalid or expired token/i.test(message)) {
+        throw new AuthExpiredError();
+      }
+      throw e;
+    }
   }
 
   async invalidateCache(preserveDirty: boolean): Promise<void> {

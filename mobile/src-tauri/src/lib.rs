@@ -3,11 +3,32 @@
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::error::Error;
 use std::fs;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{Manager, State};
 
 struct DbConnection(Mutex<Connection>);
+
+fn error_chain(error: &dyn Error) -> String {
+    let mut message = error.to_string();
+    let mut current = error.source();
+    while let Some(source) = current {
+        message.push_str(": ");
+        message.push_str(&source.to_string());
+        current = source.source();
+    }
+    message
+}
+
+fn sync_http_client() -> std::result::Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", error_chain(&e)))
+}
 
 #[tauri::command]
 fn tauri_query(
@@ -600,7 +621,8 @@ async fn tauri_sync(
     };
 
     // 3. Dispatch HTTP Post Sync request to Go API
-    let client = reqwest::Client::new();
+    println!("tauri_sync: posting sync payload");
+    let client = sync_http_client()?;
     let res = client
         .post(format!("{}/api/sync", api_base_url))
         .header("Authorization", format!("Bearer {}", api_token))
@@ -608,7 +630,7 @@ async fn tauri_sync(
         .send()
         .await
         .map_err(|e| {
-            let message = format!("HTTP request failed: {}", e);
+            let message = format!("HTTP request failed: {}", error_chain(&e));
             eprintln!("tauri_sync: {}", message);
             message
         })?;

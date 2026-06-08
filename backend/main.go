@@ -71,7 +71,7 @@ func main() {
 			return false
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Origin"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Origin", "X-FitNotes-Client"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300, // Maximum value of Access-Control-Max-Age
@@ -92,6 +92,7 @@ func main() {
 			r.Use(middleware.AuthMiddleware)
 
 			r.Get("/auth/me", handlers.MeHandler)
+			r.Post("/auth/refresh", handlers.RefreshTokenHandler)
 			r.Post("/sync", handlers.SyncHandler)
 			r.Post("/import-fitnotes", handlers.ImportFitNotesHandler)
 			r.Get("/export-fitnotes", handlers.ExportFitNotesHandler)
