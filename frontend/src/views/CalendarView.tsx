@@ -18,8 +18,8 @@ export function CalendarView() {
 
   const styleTag = (
     <style>{`
-      .calendar-dashboard { display: flex; gap: 24px; width: 100%; max-width: 1200px; margin: 0 auto; padding: 4px; }
-      .calendar-left-pane { flex: 1.3; min-width: 0; }
+      .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; max-width: 1200px; margin: 0 auto; padding: 4px; }
+      .calendar-left-pane { flex: 1.3; min-width: 0; align-self: flex-start; }
       .calendar-right-pane {
         flex: 0.7; min-width: 320px; background: rgba(30, 41, 59, 0.4);
         backdrop-filter: blur(16px); border: 1px solid var(--border-dark); border-radius: 16px;
@@ -62,7 +62,8 @@ export function CalendarView() {
       }
       @media (max-width: 768px) {
         .calendar-dashboard { flex-direction: column; }
-        .calendar-right-pane { position: static; width: 100%; }
+        .calendar-left-pane { flex: 0 0 auto; width: 100%; align-self: stretch; }
+        .calendar-right-pane { flex: 0 0 auto; position: static; width: 100%; }
       }
     `}</style>
   );
