@@ -83,6 +83,29 @@ const getApiBaseUrl = () => {
 
 const getClientType = () => (isTauri() ? 'mobile' : 'web');
 
+const SYNC_TABLES = [
+  'categories',
+  'exercises',
+  'training_logs',
+  'body_weights',
+  'plates',
+  'barbells',
+  'workout_comments',
+  'routines',
+  'routine_sections',
+  'routine_section_exercises',
+  'routine_section_exercise_sets',
+  'workout_groups',
+  'workout_group_exercises',
+  'goals',
+  'measurements',
+  'measurement_records',
+  'exercise_comments',
+  'workout_times',
+  'custom_units',
+  'graph_favourites',
+] as const;
+
 let lastKeyPressed = '';
 let lastKeyPressTime = 0;
 
@@ -793,6 +816,8 @@ export function useFitNotesController() {
             setSyncStatus('syncing');
             const refreshedToken = await refreshAuthToken(token);
             await db.sync(refreshedToken, getApiBaseUrl());
+            hasLocalChangesRef.current = false;
+            localChangeVersionRef.current = 0;
             setSyncStatus('success');
             await refreshData();
             setTimeout(() => setSyncStatus('idle'), 3000);
@@ -815,6 +840,8 @@ export function useFitNotesController() {
             setSyncStatus('syncing');
             const refreshedToken = await refreshAuthToken(token);
             await db.sync(refreshedToken, getApiBaseUrl());
+            hasLocalChangesRef.current = false;
+            localChangeVersionRef.current = 0;
             setSyncStatus('success');
             setTimeout(() => setSyncStatus('idle'), 3000);
           } catch (e) {
@@ -1004,6 +1031,9 @@ export function useFitNotesController() {
   const syncInFlightRef = useRef(false);
   const syncAgainAfterCurrentRef = useRef(false);
   const tokenRef = useRef(token);
+  const hasLocalChangesRef = useRef(false);
+  const localChangeVersionRef = useRef(0);
+  const lastAutoSyncAttemptRef = useRef(0);
 
   useEffect(() => {
     tokenRef.current = token;
@@ -1050,12 +1080,40 @@ export function useFitNotesController() {
     }
   };
 
-  const triggerDebouncedSync = () => {
-    if (!token) return;
+  const hasPendingLocalChanges = async () => {
+    if (hasLocalChangesRef.current) return true;
+    for (const table of SYNC_TABLES) {
+      const rows = await db.query<any>(`SELECT * FROM ${table}`);
+      if (rows.some(row => row?.is_dirty === 1 || row?.is_dirty === true)) {
+        hasLocalChangesRef.current = true;
+        return true;
+      }
+    }
+    const settingsRows = await db.query<any>('SELECT * FROM settings');
+    if (settingsRows.some(row => row?.is_dirty === 1 || row?.is_dirty === true)) {
+      hasLocalChangesRef.current = true;
+      return true;
+    }
+    return false;
+  };
+
+  const triggerAutoSync = async (options: { debounceMs?: number; ignoreInterval?: boolean } = {}) => {
+    const activeToken = tokenRef.current;
+    if (!activeToken) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    const now = Date.now();
+    if (!options.ignoreInterval && now - lastAutoSyncAttemptRef.current < 10_000) {
+      return;
+    }
+
+    if (!(await hasPendingLocalChanges())) return;
+    lastAutoSyncAttemptRef.current = now;
+
     if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
     syncTimeoutRef.current = setTimeout(() => {
       triggerSync();
-    }, 2500); // 2.5 seconds debounce
+    }, options.debounceMs ?? 5000);
   };
 
   useEffect(() => {
@@ -1068,45 +1126,29 @@ export function useFitNotesController() {
   useEffect(() => {
     if (!token) return;
     const unsubscribe = db.onChange(() => {
-      triggerDebouncedSync();
+      hasLocalChangesRef.current = true;
+      localChangeVersionRef.current += 1;
+      triggerAutoSync();
     });
     return unsubscribe;
   }, [token]);
 
-  // Sync on Reconnection or App Focus
+  // Sync pending local edits on reconnection. App focus/date navigation should
+  // stay snappy and must not pull the full remote payload unless data changed.
   useEffect(() => {
     if (!token) return;
 
     const handleOnline = () => {
-      console.log("Network online event triggered. Initiating sync...");
-      triggerSync();
-    };
-
-    const handleFocus = () => {
-      console.log("App gained focus. Initiating sync...");
-      triggerSync();
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log("App became visible. Initiating sync...");
-        triggerSync();
-      }
+      triggerAutoSync({ debounceMs: 1000, ignoreInterval: true });
     };
 
     if (typeof window !== 'undefined') {
       window.addEventListener('online', handleOnline);
-      window.addEventListener('focus', handleFocus);
-      window.addEventListener('pageshow', handleFocus);
-      document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 
     return () => {
       if (typeof window !== 'undefined') {
         window.removeEventListener('online', handleOnline);
-        window.removeEventListener('focus', handleFocus);
-        window.removeEventListener('pageshow', handleFocus);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
   }, [token]);
@@ -1165,6 +1207,8 @@ export function useFitNotesController() {
       // users can see progress while a large account dataset is loading.
       setSyncStatus('syncing');
       await db.sync(data.token, apiBaseUrl);
+      hasLocalChangesRef.current = false;
+      localChangeVersionRef.current = 0;
       setSyncStatus('success');
       await refreshData();
       setActiveTab('log');
@@ -1211,12 +1255,16 @@ export function useFitNotesController() {
     }
 
     syncInFlightRef.current = true;
+    const syncedChangeVersion = localChangeVersionRef.current;
     setSyncStatus('syncing');
     try {
       const apiBaseUrl = getApiBaseUrl();
       const refreshedToken = await refreshAuthToken(activeToken);
 
       await db.sync(refreshedToken, apiBaseUrl);
+      if (localChangeVersionRef.current === syncedChangeVersion) {
+        hasLocalChangesRef.current = false;
+      }
       setSyncStatus('success');
       await refreshData();
       setTimeout(() => setSyncStatus('idle'), 3000);
@@ -1295,6 +1343,8 @@ export function useFitNotesController() {
       // Perform full-history synchronization to pull all migrated records from server
       setSyncStatus('syncing');
       await db.sync(token, apiBaseUrl);
+      hasLocalChangesRef.current = false;
+      localChangeVersionRef.current = 0;
       setSyncStatus('success');
       await refreshData();
       setTimeout(() => setSyncStatus('idle'), 3000);
