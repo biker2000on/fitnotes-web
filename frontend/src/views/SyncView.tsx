@@ -7,7 +7,7 @@ export function SyncView() {
   const {
     token, userEmail, syncStatus, triggerSync,
     importStatus, handleBackupUpload, exporting, handleBackupDownload,
-    authError, authEmail, setAuthEmail, authPassword, setAuthPassword, handleAuth, handleCsvDownload,
+    authError, authLoading, authEmail, setAuthEmail, authPassword, setAuthPassword, handleAuth, handleCsvDownload,
     customApiUrl, updateCustomApiUrl, getApiBaseUrl,
   } = useFitNotesStore();
 
@@ -208,7 +208,7 @@ export function SyncView() {
           >
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Email Address</label>
-              <input type="email" placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} />
+              <input type="email" placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} disabled={authLoading} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Password</label>
@@ -216,8 +216,10 @@ export function SyncView() {
             </div>
 
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-              <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Sign In</button>
-              <button type="button" className="btn btn-secondary" onClick={() => handleAuth('register')} style={{ flex: 1 }}>Create Account</button>
+              <button type="submit" className={`btn btn-primary ${authLoading ? 'loading' : ''}`} disabled={authLoading} style={{ flex: 1 }}>
+                {authLoading && syncStatus === 'syncing' ? 'Loading Data...' : authLoading ? 'Signing In...' : 'Sign In'}
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => handleAuth('register')} disabled={authLoading} style={{ flex: 1 }}>Create Account</button>
             </div>
           </form>
         </div>

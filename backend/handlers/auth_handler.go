@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"backend/db"
 	"backend/middleware"
@@ -157,9 +156,6 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
 		return
 	}
-
-	// Update user's updated_at (optional)
-	_, _ = pool.Exec(ctx, "UPDATE users SET updated_at = $1 WHERE id = $2", time.Now(), user.ID)
 
 	token, err := generateTokenForRequest(r, user.ID, req.ClientType)
 	if err != nil {

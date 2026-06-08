@@ -201,6 +201,7 @@ export function useFitNotesController() {
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'success' | 'error'>('idle');
@@ -1126,6 +1127,7 @@ export function useFitNotesController() {
       return;
     }
 
+    setAuthLoading(true);
     try {
       const endpoint = mode === 'login' ? 'login' : 'register';
       const apiBaseUrl = getApiBaseUrl();
@@ -1158,25 +1160,22 @@ export function useFitNotesController() {
 
       setAuthEmail('');
       setAuthPassword('');
-      setActiveTab('log');
 
-      // Trigger immediate background PostgreSQL sync
+      // Complete the first cloud sync before leaving the auth screen so mobile
+      // users can see progress while a large account dataset is loading.
       setSyncStatus('syncing');
-      db.sync(data.token, apiBaseUrl)
-        .then(async () => {
-          setSyncStatus('success');
-          await refreshData();
-          setTimeout(() => setSyncStatus('idle'), 3000);
-        })
-        .catch(e => {
-          console.error("Post-login sync failed:", e);
-          setSyncStatus('error');
-          triggerToast('Post-login sync failed: ' + (e?.message || String(e)), 'error');
-          setTimeout(() => setSyncStatus('idle'), 3000);
-        });
+      await db.sync(data.token, apiBaseUrl);
+      setSyncStatus('success');
+      await refreshData();
+      setActiveTab('log');
+      setTimeout(() => setSyncStatus('idle'), 3000);
     } catch (e: any) {
       console.error("Authentication failed:", e);
+      setSyncStatus('error');
       setAuthError('Connection to API server failed: ' + (e?.message || String(e)));
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -2998,7 +2997,7 @@ export function useFitNotesController() {
     editingRoutine, setEditingRoutine, editorSections, setEditorSections, editorSectionExercises, setEditorSectionExercises,
     editorExerciseSets, setEditorExerciseSets, userUnit, setUserUnit, token, setToken, userEmail, setUserEmail,
     customApiUrl, updateCustomApiUrl, getApiBaseUrl,
-    authEmail, setAuthEmail, authPassword, setAuthPassword, authError, setAuthError, syncStatus, setSyncStatus,
+    authEmail, setAuthEmail, authPassword, setAuthPassword, authError, setAuthError, authLoading, setAuthLoading, syncStatus, setSyncStatus,
     lastSyncTime, setLastSyncTime,
     importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
     currentLogs, setCurrentLogs, bodyWeights, setBodyWeights, workoutComment, setWorkoutComment, routines, setRoutines,
