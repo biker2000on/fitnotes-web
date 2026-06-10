@@ -86,6 +86,10 @@ func main() {
 		// Public Withings OAuth Callback & Webhook endpoints
 		r.Get("/withings/callback", handlers.WithingsCallbackHandler)
 		r.Post("/withings/webhook", handlers.WithingsWebhookHandler)
+		// Withings probes the callback URL with HEAD/GET during notify
+		// subscribe and requires a 200 before it will create the subscription.
+		r.Head("/withings/webhook", handlers.WithingsWebhookProbeHandler)
+		r.Get("/withings/webhook", handlers.WithingsWebhookProbeHandler)
 
 		// Authenticated Routes
 		r.Group(func(r chi.Router) {
@@ -206,13 +210,18 @@ func runDailySync(ctx context.Context) {
 		// Run with timeout to prevent blocking other jobs
 		syncCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		count, syncErr := handlers.PullWithingsWeightsSinceLastUpdate(syncCtx, pool, uid)
-		cancel()
 
 		if syncErr != nil {
 			log.Printf("Withings daily sync: Failed for user %s: %v", uid.String(), syncErr)
 		} else if count > 0 {
 			log.Printf("Withings daily sync: Successfully synced %d records for user %s", count, uid.String())
 		}
+
+		// Keep the real-time weigh-in webhook alive (idempotent re-subscribe).
+		if whErr := handlers.EnsureWithingsWebhook(syncCtx, pool, uid); whErr != nil {
+			log.Printf("Withings daily sync: webhook re-subscribe failed for user %s: %v", uid.String(), whErr)
+		}
+		cancel()
 	}
 	log.Println("Withings daily background sync complete.")
 }

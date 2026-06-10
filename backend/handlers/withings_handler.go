@@ -226,6 +226,33 @@ func WithingsCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, frontendURL+"/settings?withings_connected=true", http.StatusTemporaryRedirect)
 }
 
+// WithingsWebhookProbeHandler answers the HEAD/GET verification probe that
+// Withings sends to the callback URL during notify subscribe. The subscribe
+// call fails outright if this probe does not return 200.
+func WithingsWebhookProbeHandler(w http.ResponseWriter, r *http.Request) {
+	if !validWithingsWebhookSecret(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+// EnsureWithingsWebhook (re)subscribes the notification callback for a user.
+// Subscriptions on the Withings side can lapse (e.g. after repeated callback
+// failures), and subscribing again is idempotent, so this runs on every daily
+// sync to keep real-time weigh-in pushes alive.
+func EnsureWithingsWebhook(ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID) error {
+	webhookURL := os.Getenv("WITHINGS_WEBHOOK_URL")
+	if webhookURL == "" {
+		return nil
+	}
+	accessToken, err := getValidWithingsAccessToken(ctx, pool, userID)
+	if err != nil {
+		return err
+	}
+	return subscribeWebhook(accessToken, webhookURL)
+}
+
 // WithingsWebhookHandler handles incoming webhook POST requests from Withings
 func WithingsWebhookHandler(w http.ResponseWriter, r *http.Request) {
 	if !validWithingsWebhookSecret(r) {
@@ -678,11 +705,18 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 		return accessToken, nil
 	}
 
-	newAccess, newRefresh, newExpiresAt, err := refreshWithingsToken(refreshToken)
+	newAccess, newRefresh, newExpiresAt, status, err := refreshWithingsToken(refreshToken)
 	if err != nil {
-		_, _ = tx.Exec(ctx, "DELETE FROM withings_tokens WHERE user_id = $1 AND refresh_token = $2", userID, refreshToken)
-		_ = tx.Commit(ctx)
-		return "", fmt.Errorf("revoked/invalid refresh token: %w", err)
+		// Drop the stored connection only when Withings definitively rejects
+		// the refresh token. Transient failures (network errors, 5xx, rate
+		// limits) must keep the credentials so the next sync can retry -
+		// deleting here is what silently reverted users to "Connect Scale".
+		if isWithingsAuthRejection(status) {
+			_, _ = tx.Exec(ctx, "DELETE FROM withings_tokens WHERE user_id = $1 AND refresh_token = $2", userID, refreshToken)
+			_ = tx.Commit(ctx)
+			return "", fmt.Errorf("revoked/invalid refresh token: %w", err)
+		}
+		return "", fmt.Errorf("transient withings token refresh failure (status %d): %w", status, err)
 	}
 
 	_, err = tx.Exec(ctx, `
@@ -700,8 +734,21 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 	return newAccess, nil
 }
 
-// refreshWithingsToken exchanges a refresh token for new credentials
-func refreshWithingsToken(refreshToken string) (string, string, time.Time, error) {
+// isWithingsAuthRejection reports whether a Withings OAuth status code means
+// the credentials are definitively invalid (as opposed to a transient error).
+// 100-102 are authentication failures, 401 is an invalid/expired token.
+func isWithingsAuthRejection(status int) bool {
+	switch status {
+	case 100, 101, 102, 401:
+		return true
+	}
+	return false
+}
+
+// refreshWithingsToken exchanges a refresh token for new credentials. The
+// returned status is the Withings API status code (-1 when the request never
+// produced a parseable response, i.e. a transport-level failure).
+func refreshWithingsToken(refreshToken string) (string, string, time.Time, int, error) {
 	clientID := os.Getenv("WITHINGS_CLIENT_ID")
 	clientSecret := os.Getenv("WITHINGS_CLIENT_SECRET")
 
@@ -717,21 +764,21 @@ func refreshWithingsToken(refreshToken string) (string, string, time.Time, error
 
 	resp, err := postWithingsOAuthForm(ctx, tokenData)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return "", "", time.Time{}, -1, err
 	}
 	defer resp.Body.Close()
 
 	var tokResp WithingsTokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokResp); err != nil {
-		return "", "", time.Time{}, err
+		return "", "", time.Time{}, -1, err
 	}
 
 	if tokResp.Status != 0 {
-		return "", "", time.Time{}, fmt.Errorf("refresh failed with status %d: %s", tokResp.Status, tokResp.Error)
+		return "", "", time.Time{}, tokResp.Status, fmt.Errorf("refresh failed with status %d: %s", tokResp.Status, tokResp.Error)
 	}
 
 	expiresAt := time.Now().Add(time.Duration(tokResp.Body.ExpiresIn) * time.Second)
-	return tokResp.Body.AccessToken, tokResp.Body.RefreshToken, expiresAt, nil
+	return tokResp.Body.AccessToken, tokResp.Body.RefreshToken, expiresAt, 0, nil
 }
 
 func postWithingsOAuthForm(ctx context.Context, data url.Values) (*http.Response, error) {
