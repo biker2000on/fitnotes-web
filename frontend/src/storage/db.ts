@@ -5,7 +5,9 @@ import { DEFAULT_SETTINGS } from '../lib/settings';
 export interface DBDriver {
   query<T>(sql: string, params?: any[]): Promise<T[]>;
   execute(sql: string, params?: any[]): Promise<void>;
-  sync(apiToken: string, apiBaseUrl: string): Promise<void>;
+  // Resolves with the number of rows pulled from the server, or null when the
+  // driver cannot tell (lets callers skip UI refreshes after no-op syncs).
+  sync(apiToken: string, apiBaseUrl: string): Promise<number | null>;
   invalidateCache(preserveDirty: boolean): Promise<void>;
   onChange(listener: () => void): () => void;
 }
@@ -422,8 +424,8 @@ class BrowserLocalDriver implements DBDriver {
   }
 
   // Frontend synchronization implementation when operating directly in browser mode
-  async sync(apiToken: string, apiBaseUrl: string): Promise<void> {
-    if (!apiToken) return;
+  async sync(apiToken: string, apiBaseUrl: string): Promise<number | null> {
+    if (!apiToken) return 0;
 
     const rawLastSync = localStorage.getItem('fn_last_sync_timestamp');
     const lastSync = rawLastSync && !Number.isNaN(Date.parse(rawLastSync))
@@ -495,9 +497,11 @@ class BrowserLocalDriver implements DBDriver {
       }
 
       const serverData = await res.json();
+      let pulledCount = 0;
 
       // Upsert server updates and clear dirty markers
       const applyUpdates = (table: string, serverItems: any[]) => {
+        pulledCount += serverItems.length;
         const localItems = this.getStore(table);
         
         // 1. Clear dirty state for successfully pushed items
@@ -547,11 +551,13 @@ class BrowserLocalDriver implements DBDriver {
         localStorage.setItem('fn_settings', JSON.stringify({ ...localSettings, is_dirty: 0 }));
       }
       if (serverData.settings) {
+        pulledCount += 1;
         localStorage.setItem('fn_settings', JSON.stringify({ ...serverData.settings, is_dirty: 0 }));
       }
 
       localStorage.setItem('fn_last_sync_timestamp', serverData.server_time);
       console.log('Synchronization complete at server time:', serverData.server_time);
+      return pulledCount;
     } catch (e) {
       console.error('Error during synchronization:', e);
       throw e;
@@ -761,9 +767,11 @@ class TauriNativeDriver implements DBDriver {
     this.notifyListeners();
   }
 
-  async sync(apiToken: string, apiBaseUrl: string): Promise<void> {
+  async sync(apiToken: string, apiBaseUrl: string): Promise<number | null> {
     try {
-      await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
+      const pulled = await (invoke as any)('tauri_sync', { apiToken, apiBaseUrl });
+      // Older mobile binaries return no payload; treat that as "unknown".
+      return typeof pulled === 'number' ? pulled : null;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (/\b401\b|unauthorized|invalid or expired token/i.test(message)) {

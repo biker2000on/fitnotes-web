@@ -800,11 +800,13 @@ export function useFitNotesController() {
     setSidebarOpen(false);
   }, [activeTab]);
 
-  // Initial Boot Database seed & data loading
+  // Initial Boot Database seed & data loading.
+  // Keyed on auth *presence*, not the token value: every token refresh mints a
+  // new JWT, and re-running this effect per refresh created a perpetual
+  // refresh -> sync -> setToken -> re-run loop.
+  const isAuthenticated = Boolean(token);
   useEffect(() => {
     const seedAndLoad = async () => {
-      const isAuthenticated = Boolean(token);
-
       if (isTauri() && isAuthenticated) {
         const syncRows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
         const localCats = await db.query<Category>('SELECT * FROM categories');
@@ -812,12 +814,15 @@ export function useFitNotesController() {
         const localRoutines = await db.query<Routine>('SELECT * FROM routines');
 
         if (syncRows.length === 0 && localCats.length === 0 && localExs.length === 0 && localRoutines.length === 0) {
+          // First launch after sign-in: nothing local to render, so a visible
+          // blocking sync is the right call here.
           try {
             setSyncStatus('syncing');
             const refreshedToken = await refreshAuthToken(token);
             await db.sync(refreshedToken, getApiBaseUrl());
             hasLocalChangesRef.current = false;
             localChangeVersionRef.current = 0;
+            lastPullAtRef.current = Date.now();
             setSyncStatus('success');
             await refreshData();
             setTimeout(() => setSyncStatus('idle'), 3000);
@@ -835,38 +840,13 @@ export function useFitNotesController() {
       }
 
       if (isAuthenticated) {
-        if (isTauri()) {
-          try {
-            setSyncStatus('syncing');
-            const refreshedToken = await refreshAuthToken(token);
-            await db.sync(refreshedToken, getApiBaseUrl());
-            hasLocalChangesRef.current = false;
-            localChangeVersionRef.current = 0;
-            setSyncStatus('success');
-            setTimeout(() => setSyncStatus('idle'), 3000);
-          } catch (e) {
-            if (isAuthExpiredError(e)) {
-              handleAuthExpired();
-              return;
-            }
-            console.warn('Android startup sync failed:', e);
-            setSyncStatus('error');
-            setTimeout(() => setSyncStatus('idle'), 3000);
-          }
-        } else {
-          try {
-            await refreshAuthToken(token);
-          } catch (e) {
-            if (isAuthExpiredError(e)) {
-              handleAuthExpired();
-              return;
-            }
-          }
-        }
         workoutCommentRef.current = '';
         setWorkoutComment('');
+        // Paint local data immediately, then pull from the server in the
+        // background; the UI refreshes again only if the pull brought changes.
         await refreshData();
         fetchWithingsStatus();
+        triggerPullSync(15_000);
         return;
       }
 
@@ -1011,7 +991,10 @@ export function useFitNotesController() {
       setSelectedExForRoutine(exs[0].id);
     }
 
-    // Load last sync time
+    await loadLastSyncTime();
+  };
+
+  const loadLastSyncTime = async () => {
     if (isTauri()) {
       try {
         const rows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
@@ -1034,13 +1017,23 @@ export function useFitNotesController() {
   const hasLocalChangesRef = useRef(false);
   const localChangeVersionRef = useRef(0);
   const lastAutoSyncAttemptRef = useRef(0);
+  const lastPullAtRef = useRef(0);
+  const lastTokenRefreshAtRef = useRef(0);
 
   useEffect(() => {
     tokenRef.current = token;
   }, [token]);
 
-  const refreshAuthToken = async (currentToken = tokenRef.current): Promise<string> => {
+  const refreshAuthToken = async (currentToken = tokenRef.current, opts: { force?: boolean } = {}): Promise<string> => {
     if (!currentToken) return '';
+
+    // Tokens live for days (7d web / 180d mobile); don't burn a network round
+    // trip on every background sync. A stale token still gets one forced
+    // refresh-and-retry inside triggerSync before the session is declared dead.
+    const now = Date.now();
+    if (!opts.force && now - lastTokenRefreshAtRef.current < 10 * 60_000) {
+      return currentToken;
+    }
 
     try {
       const refreshUrl = new URL(`${getApiBaseUrl()}/api/auth/refresh`);
@@ -1062,6 +1055,7 @@ export function useFitNotesController() {
       }
 
       const data = await res.json();
+      lastTokenRefreshAtRef.current = now;
       if (data?.token) {
         tokenRef.current = data.token;
         setToken(data.token);
@@ -1116,6 +1110,17 @@ export function useFitNotesController() {
     }, options.debounceMs ?? 5000);
   };
 
+  // Background pull: keeps this device current with edits made on other
+  // devices. The protocol is a delta sync (changes since last_sync_timestamp),
+  // so these calls are cheap; the throttle just avoids hammering on rapid
+  // focus/visibility events. Runs silently - no spinner, no error flash.
+  const triggerPullSync = (minIntervalMs = 60_000) => {
+    if (!tokenRef.current) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    if (Date.now() - lastPullAtRef.current < minIntervalMs) return;
+    triggerSync({ background: true });
+  };
+
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
@@ -1133,25 +1138,45 @@ export function useFitNotesController() {
     return unsubscribe;
   }, [token]);
 
-  // Sync pending local edits on reconnection. App focus/date navigation should
-  // stay snappy and must not pull the full remote payload unless data changed.
+  // Keep devices in step without manual syncing, while staying snappy:
+  // - reconnect: push pending edits and pull whatever happened while offline
+  // - focus/visibility: throttled background pull when returning to the app
+  // - interval: slow heartbeat pull while the app stays open
+  // All pulls are silent delta syncs and never block interaction.
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
+    if (typeof window === 'undefined') return;
 
     const handleOnline = () => {
       triggerAutoSync({ debounceMs: 1000, ignoreInterval: true });
+      triggerPullSync(5_000);
     };
 
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', handleOnline);
-    }
+    const handleFocus = () => {
+      triggerPullSync(60_000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') triggerPullSync(60_000);
+    };
+
+    const heartbeat = setInterval(() => {
+      if (document.visibilityState === 'visible') triggerPullSync(150_000);
+    }, 180_000);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('pageshow', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('online', handleOnline);
-      }
+      clearInterval(heartbeat);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('pageshow', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   // Theme Toggle
   const toggleTheme = () => {
@@ -1209,6 +1234,7 @@ export function useFitNotesController() {
       await db.sync(data.token, apiBaseUrl);
       hasLocalChangesRef.current = false;
       localChangeVersionRef.current = 0;
+      lastPullAtRef.current = Date.now();
       setSyncStatus('success');
       await refreshData();
       setActiveTab('log');
@@ -1244,8 +1270,9 @@ export function useFitNotesController() {
     setActiveTab('sync');
   };
 
-  // Synchronize
-  const triggerSync = async () => {
+  // Synchronize. Background mode runs silently (no spinner, no error flash)
+  // and skips the post-sync UI refresh when the server had nothing new.
+  const triggerSync = async (options: { background?: boolean } = {}) => {
     const activeToken = tokenRef.current;
     if (!activeToken) return;
 
@@ -1255,26 +1282,46 @@ export function useFitNotesController() {
     }
 
     syncInFlightRef.current = true;
+    const background = options.background === true;
     const syncedChangeVersion = localChangeVersionRef.current;
-    setSyncStatus('syncing');
+    if (!background) setSyncStatus('syncing');
     try {
       const apiBaseUrl = getApiBaseUrl();
       const refreshedToken = await refreshAuthToken(activeToken);
 
-      await db.sync(refreshedToken, apiBaseUrl);
+      let pulled: number | null = null;
+      try {
+        pulled = await db.sync(refreshedToken, apiBaseUrl);
+      } catch (e) {
+        if (!isAuthExpiredError(e)) throw e;
+        // The throttled token may have gone stale; force one refresh and
+        // retry before treating the session as expired.
+        const forcedToken = await refreshAuthToken(tokenRef.current, { force: true });
+        pulled = await db.sync(forcedToken, apiBaseUrl);
+      }
+
       if (localChangeVersionRef.current === syncedChangeVersion) {
         hasLocalChangesRef.current = false;
       }
-      setSyncStatus('success');
-      await refreshData();
-      setTimeout(() => setSyncStatus('idle'), 3000);
+      lastPullAtRef.current = Date.now();
+      if (!background) setSyncStatus('success');
+      if (pulled !== 0) {
+        await refreshData();
+      } else {
+        await loadLastSyncTime();
+      }
+      if (!background) setTimeout(() => setSyncStatus('idle'), 3000);
     } catch (e) {
       if (isAuthExpiredError(e)) {
         handleAuthExpired();
         return;
       }
-      setSyncStatus('error');
-      setTimeout(() => setSyncStatus('idle'), 3000);
+      if (background) {
+        console.warn('Background sync failed:', e);
+      } else {
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }
     } finally {
       syncInFlightRef.current = false;
       if (syncAgainAfterCurrentRef.current && tokenRef.current) {
@@ -1345,6 +1392,7 @@ export function useFitNotesController() {
       await db.sync(token, apiBaseUrl);
       hasLocalChangesRef.current = false;
       localChangeVersionRef.current = 0;
+      lastPullAtRef.current = Date.now();
       setSyncStatus('success');
       await refreshData();
       setTimeout(() => setSyncStatus('idle'), 3000);

@@ -488,7 +488,7 @@ async fn tauri_sync(
     api_token: &str,
     api_base_url: &str,
     db_state: State<'_, DbConnection>,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<u32, String> {
     println!("tauri_sync: starting sync to {}", api_base_url);
     {
         let conn = db_state.0.lock().unwrap();
@@ -651,6 +651,35 @@ async fn tauri_sync(
         eprintln!("tauri_sync: {}", message);
         message
     })?;
+
+    // Rows pulled from the server; the frontend uses this to skip UI refreshes
+    // after no-op background syncs.
+    let pulled_count: u32 = [
+        &sync_res.categories,
+        &sync_res.exercises,
+        &sync_res.routines,
+        &sync_res.routine_sections,
+        &sync_res.routine_section_exercises,
+        &sync_res.routine_section_exercise_sets,
+        &sync_res.training_logs,
+        &sync_res.body_weights,
+        &sync_res.plates,
+        &sync_res.barbells,
+        &sync_res.workout_comments,
+        &sync_res.workout_groups,
+        &sync_res.workout_group_exercises,
+        &sync_res.goals,
+        &sync_res.measurements,
+        &sync_res.measurement_records,
+        &sync_res.exercise_comments,
+        &sync_res.workout_times,
+        &sync_res.custom_units,
+        &sync_res.graph_favourites,
+    ]
+    .iter()
+    .map(|t| t.as_ref().map_or(0, Vec::len))
+    .sum::<usize>() as u32
+        + sync_res.settings.is_some() as u32;
 
     // 4. Ingest server updates (PULL) inside a local SQLite transaction
     {
@@ -1130,7 +1159,7 @@ async fn tauri_sync(
         tx.commit().map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    Ok(pulled_count)
 }
 
 #[tauri::command]

@@ -89,7 +89,7 @@ export function SyncView() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <button
                 className={`btn btn-primary ${syncStatus === 'syncing' ? 'loading' : ''}`}
-                onClick={triggerSync}
+                onClick={() => triggerSync()}
                 style={{ width: '100%', height: '46px' }}
                 disabled={syncStatus === 'syncing'}
               >

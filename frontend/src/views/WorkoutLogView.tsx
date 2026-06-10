@@ -69,7 +69,7 @@ function WorkoutSyncIndicator() {
     <button
       type="button"
       className={`workout-sync-pill workout-sync-${tone}`}
-      onClick={triggerSync}
+      onClick={() => triggerSync()}
       disabled={!token || isSyncing}
       aria-label={token ? 'Sync workout data' : 'Cloud sync is off'}
       title={token ? 'Sync workout data' : 'Cloud sync is off'}

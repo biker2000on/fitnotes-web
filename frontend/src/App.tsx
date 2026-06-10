@@ -117,7 +117,7 @@ function SyncStatusIndicator() {
     }} className="sync-indicator-container">
       <button 
         className={`btn-sync-spin ${isSpinning ? 'spin-animation' : ''}`}
-        onClick={triggerSync}
+        onClick={() => triggerSync()}
         style={{
           background: 'none',
           border: 'none',
