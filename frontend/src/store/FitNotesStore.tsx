@@ -1169,8 +1169,24 @@ export function useFitNotesController() {
     window.addEventListener('pageshow', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    // Android delivers no focus/visibilitychange to the WebView on activity
+    // resume; the Tauri shell emits this from the native Resumed event.
+    let unlistenResume: (() => void) | undefined;
+    let disposed = false;
+    if (isTauri()) {
+      import('@tauri-apps/api/event')
+        .then(({ listen }) => listen('app-resumed', () => triggerPullSync(30_000)))
+        .then((unlisten) => {
+          if (disposed) unlisten();
+          else unlistenResume = unlisten;
+        })
+        .catch((e) => console.warn('Failed to attach app-resumed listener:', e));
+    }
+
     return () => {
+      disposed = true;
       clearInterval(heartbeat);
+      if (unlistenResume) unlistenResume();
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('pageshow', handleFocus);

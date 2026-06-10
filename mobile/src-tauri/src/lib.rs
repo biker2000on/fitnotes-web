@@ -1503,6 +1503,15 @@ pub fn run() {
             tauri_sync,
             tauri_invalidate_cache
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // Android does not reliably deliver focus/visibilitychange to the
+            // WebView when the activity returns to the foreground; surface the
+            // native resume so the frontend can run its background pull-sync.
+            if matches!(event, tauri::RunEvent::Resumed) {
+                use tauri::Emitter;
+                let _ = app_handle.emit("app-resumed", ());
+            }
+        });
 }
