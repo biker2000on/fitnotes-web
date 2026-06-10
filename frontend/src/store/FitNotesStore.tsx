@@ -1160,9 +1160,20 @@ export function useFitNotesController() {
       if (document.visibilityState === 'visible') triggerPullSync(60_000);
     };
 
+    // Heartbeat doubles as resume detection: Android freezes the app (and its
+    // timers) in the background, so a tick that arrives far later than
+    // scheduled means the app just returned to the foreground - pull promptly.
+    const HEARTBEAT_MS = 20_000;
+    let lastTickAt = Date.now();
     const heartbeat = setInterval(() => {
-      if (document.visibilityState === 'visible') triggerPullSync(150_000);
-    }, 180_000);
+      const now = Date.now();
+      const wasSuspended = now - lastTickAt > HEARTBEAT_MS * 3;
+      lastTickAt = now;
+      // Tauri's Android WebView reports document.visibilityState as 'hidden'
+      // even while foregrounded; rely on suspension detection there instead.
+      if (!isTauri() && document.visibilityState !== 'visible') return;
+      triggerPullSync(wasSuspended ? 30_000 : 150_000);
+    }, HEARTBEAT_MS);
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('focus', handleFocus);

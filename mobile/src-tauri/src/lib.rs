@@ -1159,6 +1159,7 @@ async fn tauri_sync(
         tx.commit().map_err(|e| e.to_string())?;
     }
 
+    println!("tauri_sync: complete, pulled {} rows", pulled_count);
     Ok(pulled_count)
 }
 
@@ -1509,9 +1510,19 @@ pub fn run() {
             // Android does not reliably deliver focus/visibilitychange to the
             // WebView when the activity returns to the foreground; surface the
             // native resume so the frontend can run its background pull-sync.
-            if matches!(event, tauri::RunEvent::Resumed) {
+            let resumed = match &event {
+                tauri::RunEvent::Resumed => true,
+                tauri::RunEvent::WindowEvent {
+                    event: tauri::WindowEvent::Focused(true),
+                    ..
+                } => true,
+                _ => false,
+            };
+            if resumed {
                 use tauri::Emitter;
-                let _ = app_handle.emit("app-resumed", ());
+                if let Err(e) = app_handle.emit("app-resumed", ()) {
+                    eprintln!("lifecycle: failed to emit app-resumed: {}", e);
+                }
             }
         });
 }
