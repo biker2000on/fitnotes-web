@@ -129,6 +129,18 @@ failed to resolve module specifier @tauri/apps/api/core
 - First builds are slow because Cargo and Gradle compile and cache everything.
   Later debug builds are much faster unless native dependencies, `target/`, or
   Gradle caches are changed.
+- When the phone is PIN-locked or the screen is off, Android blocks the app's
+  network (`dumpsys netpolicy` shows `blocked=APP_BACKGROUND`) and in-app DNS
+  fails with "No address associated with hostname" even though `adb shell ping`
+  resolves fine. This is not an app bug; unlock the phone before judging sync
+  behavior. `wm dismiss-keyguard` cannot bypass a PIN.
+- The Android WebView reports `document.visibilityState` as `hidden` even while
+  the app is foregrounded, and Tauri's `RunEvent::Resumed`/`Focused` never reach
+  the `.run()` callback on Android. Foreground/resume detection is done with a
+  JS heartbeat that notices late timer ticks (the process is frozen while
+  backgrounded). See the sync listeners in `frontend/src/store/FitNotesStore.tsx`.
+- JS `event.listen` requires `capabilities/default.json` granting `core:default`;
+  without it the listener is rejected with "event.listen not allowed".
 - If ADB temporarily loses the phone, restart ADB or wait for the USB debugging
   session to reconnect:
 
