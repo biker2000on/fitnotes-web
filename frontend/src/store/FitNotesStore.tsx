@@ -108,11 +108,21 @@ const SYNC_TABLES = [
   'graph_favourites',
 ] as const;
 
+const VALID_TABS = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'] as const;
+type TabId = typeof VALID_TABS[number];
+
 let lastKeyPressed = '';
 let lastKeyPressTime = 0;
 
 export function useFitNotesController() {
-  const [activeTab, setActiveTab] = useState<'log' | 'calendar' | 'exercises' | 'routines' | 'routine-editor' | 'body' | 'measurements' | 'goals' | 'analysis' | 'tools' | 'history' | 'settings' | 'sync'>('log');
+  // Seed the tab from the URL hash so a reload stays on the current route.
+  // Starting at 'log' unconditionally made the tab->hash sync effect rewrite
+  // the URL to #/log before the hash router could read it.
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (typeof window === 'undefined') return 'log';
+    const hash = window.location.hash.replace(/^#\//, '');
+    return (VALID_TABS as readonly string[]).includes(hash) ? (hash as TabId) : 'log';
+  });
   const [isLightTheme, setIsLightTheme] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(getLocalDateString());
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -792,22 +802,18 @@ export function useFitNotesController() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash.replace(/^#\//, '');
-      const validTabs = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'];
-      if (validTabs.includes(hash)) {
-        setActiveTab(hash as any);
+      if ((VALID_TABS as readonly string[]).includes(hash)) {
+        setActiveTab(hash as TabId);
       } else {
         setActiveTab('log');
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
-    
-    // Check initial hash on mount
+
+    // Normalize an invalid/missing hash on mount (state already seeded from it).
     const hash = window.location.hash.replace(/^#\//, '');
-    const validTabs = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'];
-    if (validTabs.includes(hash)) {
-      setActiveTab(hash as any);
-    } else {
+    if (!(VALID_TABS as readonly string[]).includes(hash)) {
       window.location.hash = '#/log';
     }
 
