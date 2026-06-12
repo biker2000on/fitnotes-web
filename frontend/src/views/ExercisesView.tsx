@@ -191,7 +191,8 @@ export function ExercisesView() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <input type="checkbox" checked={selected} readOnly style={{ pointerEvents: 'none' }} />
+            {/* Global CSS sizes inputs at 100% width; pin the checkbox so the name stays visible. */}
+            <input type="checkbox" checked={selected} readOnly style={{ pointerEvents: 'none', width: '16px', height: '16px', padding: 0, flexShrink: 0, accentColor: 'var(--primary)' }} />
             <div className="exercise-catalog-name">{ex.name}</div>
           </div>
           <div className="exercise-catalog-meta-row">
