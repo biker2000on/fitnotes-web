@@ -406,7 +406,7 @@ export function ExercisesView() {
               }
             }}
             disabled={bulkBusy}
-            style={{ padding: '6px', fontSize: '12px', borderRadius: '8px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '8px', width: 'auto', maxWidth: '180px' }}
           >
             <option value="">Set Category...</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -423,7 +423,7 @@ export function ExercisesView() {
               }
             }}
             disabled={bulkBusy}
-            style={{ padding: '6px', fontSize: '12px', borderRadius: '8px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '8px', width: 'auto', maxWidth: '180px' }}
           >
             <option value="">Set Type...</option>
             <option value="0">Weight & Reps</option>
