@@ -1,20 +1,30 @@
 // CalendarView.tsx - Responsive calendar dashboard with workout history and
 // a selected-day summary that preserves supersets.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
+import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { getLocalDateString } from '../lib/date';
+import type { RoutineSection } from '../types';
 
 export function CalendarView() {
   const {
     calendarYear, calendarMonth, handlePrevMonth, handleNextMonth,
     allLogs, selectedDate, setSelectedDate, settings, exercises, categories,
     workoutComment, setActiveTab, formatLogValue, handleSelectLogForEdit,
-    workoutGroups, groupExercises,
+    workoutGroups, groupExercises, routines, workoutRoutines,
   } = useFitNotesStore();
   const [view, setView] = useState<'month' | 'list'>('month');
   const [filter, setFilter] = useState('');
+  const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
+
+  // Routine day-splits for the filter dropdown (not kept in global store state).
+  useEffect(() => {
+    db.query<RoutineSection>('SELECT * FROM routine_sections')
+      .then(secs => setRoutineSections(secs.filter(s => !s.is_deleted)))
+      .catch(e => console.warn('Failed to load routine sections for filter:', e));
+  }, [routines]);
 
   const styleTag = (
     <style>{`
@@ -68,21 +78,41 @@ export function CalendarView() {
     `}</style>
   );
 
-  const matchesFilter = (l: { exercise_id: string }): boolean => {
-    if (!filter) return true;
+  // Day-level filtering: a day matches when it contains the chosen exercise /
+  // category, or when the chosen routine (or day split) was completed on it.
+  // Matching days still render their ENTIRE log; null = no filter active.
+  const matchingDates = useMemo<Set<string> | null>(() => {
+    if (!filter) return null;
     const [kind, id] = filter.split(':');
-    if (kind === 'ex') return l.exercise_id === id;
-    if (kind === 'cat') return exercises.find(e => e.id === l.exercise_id)?.category_id === id;
-    return true;
-  };
+    const dates = new Set<string>();
+    if (kind === 'ex' || kind === 'cat') {
+      for (const l of allLogs) {
+        if (l.is_deleted) continue;
+        if (kind === 'ex' && l.exercise_id !== id) continue;
+        if (kind === 'cat' && exercises.find(e => e.id === l.exercise_id)?.category_id !== id) continue;
+        dates.add(l.date);
+      }
+    } else if (kind === 'rt' || kind === 'rts') {
+      for (const wr of workoutRoutines) {
+        if (wr.is_deleted) continue;
+        if (kind === 'rt' && wr.routine_id !== id) continue;
+        if (kind === 'rts' && wr.routine_section_id !== id) continue;
+        dates.add(wr.date);
+      }
+    }
+    return dates;
+  }, [filter, allLogs, exercises, workoutRoutines]);
+
+  const dayMatches = (dateStr: string): boolean => matchingDates === null || matchingDates.has(dateStr);
 
   const dotColoursFor = (dateStr: string): string[] => {
+    if (!dayMatches(dateStr)) return [];
     if (!settings.calendar_category_dots_visible) {
-      return allLogs.some(l => l.date === dateStr && !l.is_deleted && matchesFilter(l)) ? ['var(--primary)'] : [];
+      return allLogs.some(l => l.date === dateStr && !l.is_deleted) ? ['var(--primary)'] : [];
     }
     const colours = new Set<string>();
     for (const l of allLogs) {
-      if (l.date !== dateStr || l.is_deleted || !matchesFilter(l)) continue;
+      if (l.date !== dateStr || l.is_deleted) continue;
       const ex = exercises.find(e => e.id === l.exercise_id);
       const cat = ex ? categories.find(c => c.id === ex.category_id) : undefined;
       colours.add(cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)');
@@ -97,7 +127,7 @@ export function CalendarView() {
   const historyDays = useMemo(() => {
     const byDate: Record<string, { sets: number; exercises: Set<string> }> = {};
     for (const l of allLogs) {
-      if (l.is_deleted || !matchesFilter(l)) continue;
+      if (l.is_deleted || (matchingDates !== null && !matchingDates.has(l.date))) continue;
       const e = byDate[l.date] || (byDate[l.date] = { sets: 0, exercises: new Set() });
       e.sets += 1;
       e.exercises.add(l.exercise_id);
@@ -105,7 +135,7 @@ export function CalendarView() {
     return Object.entries(byDate)
       .map(([date, v]) => ({ date, sets: v.sets, exercises: v.exercises.size }))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [allLogs, filter, exercises]);
+  }, [allLogs, matchingDates]);
 
   const formattedSelectedDate = useMemo(() => {
     try {
@@ -207,8 +237,18 @@ export function CalendarView() {
           <button className={`btn ${view === 'list' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setView('list')}>
             <List size={14} /> History
           </button>
-          <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px', marginLeft: 'auto', maxWidth: '200px', borderRadius: '8px', border: '1px solid var(--border-dark)' }}>
-            <option value="">All exercises</option>
+          <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px', marginLeft: 'auto', maxWidth: '220px', borderRadius: '8px', border: '1px solid var(--border-dark)' }}>
+            <option value="">All workouts</option>
+            <optgroup label="Routines">
+              {routines.map(r => <option key={r.id} value={`rt:${r.id}`}>{r.name}</option>)}
+            </optgroup>
+            <optgroup label="Routine Days">
+              {routineSections.map(sec => {
+                const parent = routines.find(r => r.id === sec.routine_id);
+                if (!parent) return null;
+                return <option key={sec.id} value={`rts:${sec.id}`}>{parent.name} - {sec.name}</option>;
+              })}
+            </optgroup>
             <optgroup label="Categories">
               {categories.map(c => <option key={c.id} value={`cat:${c.id}`}>{c.name}</option>)}
             </optgroup>

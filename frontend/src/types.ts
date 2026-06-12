@@ -119,6 +119,17 @@ export interface WorkoutGroupExercise {
   is_dirty?: number;
 }
 
+// Links a calendar date to the routine (and workout-day split) that was loaded
+// onto it, so routine completion history is queryable.
+export interface WorkoutRoutine {
+  id: string;
+  date: string;
+  routine_id: string;
+  routine_section_id?: string | null;
+  is_deleted?: boolean;
+  is_dirty?: number;
+}
+
 export interface Routine {
   id: string;
   name: string;

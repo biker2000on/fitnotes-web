@@ -66,3 +66,33 @@ CREATE TABLE IF NOT EXISTS withings_tokens (
 );
 
 ALTER TABLE withings_tokens ADD COLUMN IF NOT EXISTS last_update BIGINT DEFAULT 0 NOT NULL;
+
+-- Routine completion links: records which routine (and which workout-day split)
+-- was loaded onto a calendar date, so "how many times did I do X day" is answerable.
+CREATE TABLE IF NOT EXISTS workout_routines (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    routine_id UUID NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+    routine_section_id UUID REFERENCES routine_sections(id) ON DELETE CASCADE,
+    last_modified TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE NOT NULL
+);
+
+-- OIDC single sign-on (Pocket ID): identity columns on users + transaction state.
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_subject VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_issuer VARCHAR(500);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_method VARCHAR(20) DEFAULT 'password' NOT NULL; -- password | oidc | both
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS users_oidc_identity_idx ON users (oidc_issuer, oidc_subject) WHERE oidc_subject IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS oidc_states (
+    state VARCHAR(255) PRIMARY KEY,
+    code_verifier TEXT NOT NULL,
+    nonce VARCHAR(255) NOT NULL,
+    link_user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    redirect_to TEXT,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+);

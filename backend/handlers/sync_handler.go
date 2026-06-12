@@ -30,6 +30,7 @@ type SyncRequest struct {
 	WorkoutComments            []models.WorkoutComment            `json:"workout_comments"`
 	WorkoutGroups              []models.WorkoutGroup              `json:"workout_groups"`
 	WorkoutGroupExercises      []models.WorkoutGroupExercise      `json:"workout_group_exercises"`
+	WorkoutRoutines            []models.WorkoutRoutine            `json:"workout_routines"`
 	Goals                      []models.Goal                      `json:"goals"`
 	Measurements               []models.Measurement               `json:"measurements"`
 	MeasurementRecords         []models.MeasurementRecord         `json:"measurement_records"`
@@ -60,6 +61,7 @@ type SyncResponse struct {
 	WorkoutComments            []models.WorkoutComment            `json:"workout_comments"`
 	WorkoutGroups              []models.WorkoutGroup              `json:"workout_groups"`
 	WorkoutGroupExercises      []models.WorkoutGroupExercise      `json:"workout_group_exercises"`
+	WorkoutRoutines            []models.WorkoutRoutine            `json:"workout_routines"`
 	Goals                      []models.Goal                      `json:"goals"`
 	Measurements               []models.Measurement               `json:"measurements"`
 	MeasurementRecords         []models.MeasurementRecord         `json:"measurement_records"`
@@ -149,6 +151,10 @@ func SyncHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := pushWorkoutGroupExercises(ctx, tx, userID, req.WorkoutGroupExercises); err != nil {
 		syncHTTPError(w, "failed to sync workout group exercises", err)
+		return
+	}
+	if err := pushWorkoutRoutines(ctx, tx, userID, req.WorkoutRoutines); err != nil {
+		syncHTTPError(w, "failed to sync workout routines", err)
 		return
 	}
 	if err := pushGoals(ctx, tx, userID, req.Goals); err != nil {
@@ -242,6 +248,10 @@ func SyncHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if resp.WorkoutGroupExercises, err = pullWorkoutGroupExercises(ctx, tx, userID, req.LastSyncTimestamp); err != nil {
 		http.Error(w, `{"error":"failed to fetch workout group exercise updates"}`, http.StatusInternalServerError)
+		return
+	}
+	if resp.WorkoutRoutines, err = pullWorkoutRoutines(ctx, tx, userID, req.LastSyncTimestamp); err != nil {
+		http.Error(w, `{"error":"failed to fetch workout routine updates"}`, http.StatusInternalServerError)
 		return
 	}
 	if resp.Goals, err = pullGoals(ctx, tx, userID, req.LastSyncTimestamp); err != nil {
@@ -827,6 +837,58 @@ func pullWorkoutGroups(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since t
 		} else {
 			item.Date = dateVal.Format("2006-01-02")
 		}
+		list = append(list, item)
+	}
+	return list, nil
+}
+
+// --- WORKOUT ROUTINES SYNC ---
+
+func pushWorkoutRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.WorkoutRoutine) error {
+	query := `
+		INSERT INTO workout_routines (id, user_id, date, routine_id, routine_section_id, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (id) DO UPDATE SET
+			date = EXCLUDED.date,
+			routine_id = EXCLUDED.routine_id,
+			routine_section_id = EXCLUDED.routine_section_id,
+			last_modified = EXCLUDED.last_modified,
+			is_deleted = EXCLUDED.is_deleted
+		WHERE workout_routines.user_id = EXCLUDED.user_id
+		  AND workout_routines.last_modified < EXCLUDED.last_modified
+	`
+	for _, item := range items {
+		parsedDate, err := time.Parse("2006-01-02", item.Date)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, query, item.ID, userID, parsedDate, item.RoutineID, item.RoutineSectionID, item.LastModified, item.IsDeleted)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func pullWorkoutRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.WorkoutRoutine, error) {
+	rows, err := tx.Query(ctx,
+		"SELECT id, user_id, date, routine_id, routine_section_id, last_modified, is_deleted FROM workout_routines WHERE user_id = $1 AND last_modified > $2",
+		userID, since,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []models.WorkoutRoutine
+	for rows.Next() {
+		var item models.WorkoutRoutine
+		var dateVal time.Time
+		err := rows.Scan(&item.ID, &item.UserID, &dateVal, &item.RoutineID, &item.RoutineSectionID, &item.LastModified, &item.IsDeleted)
+		if err != nil {
+			return nil, err
+		}
+		item.Date = dateVal.Format("2006-01-02")
 		list = append(list, item)
 	}
 	return list, nil

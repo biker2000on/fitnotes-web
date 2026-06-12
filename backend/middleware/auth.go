@@ -45,6 +45,30 @@ func GenerateTokenWithLifetime(userID uuid.UUID, lifetime time.Duration) (string
 	return token.SignedString(jwtSecret)
 }
 
+// ParseUserIDFromToken validates a raw JWT string and returns its subject.
+// Used by flows that carry the token outside the Authorization header
+// (e.g. the OIDC account-link redirect).
+func ParseUserIDFromToken(tokenStr string) (uuid.UUID, error) {
+	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, errors.New("invalid or expired token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return uuid.Nil, errors.New("invalid claims")
+	}
+	subStr, err := claims.GetSubject()
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.Parse(subStr)
+}
+
 // AuthMiddleware validates the JWT token in Authorization header and injects the user_id in the context
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -2,19 +2,25 @@
 // mirroring FitNotes' exercise detail tabs. Opens when historyExerciseId is set.
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ResponsiveContainer, LineChart as ReLineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, LineChart as ReLineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceArea,
 } from 'recharts';
-import { X, Trophy, History as HistoryIcon, LineChart } from 'lucide-react';
+import { X, Trophy, History as HistoryIcon, LineChart, ZoomOut } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { personalRecords, sessionSummaries, exerciseGraphSeries } from '../lib/stats';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type { TrainingLog } from '../types';
 
 type Tab = 'history' | 'records' | 'graph';
+type GraphRange = '1M' | '1Y' | 'ALL';
 
 export function ExerciseHistoryDrawer() {
   const { historyExerciseId, setHistoryExerciseId, exercises, allLogs, userUnit, settings, formatLogValue, displayWeight } = useFitNotesStore();
   const [tab, setTab] = useState<Tab>('history');
+  const [graphRange, setGraphRange] = useState<GraphRange>('1Y');
+  // Click-and-drag zoom window over the time axis (ms timestamps); null = no zoom.
+  const [zoomDomain, setZoomDomain] = useState<[number, number] | null>(null);
+  const [dragStart, setDragStart] = useState<number | null>(null);
+  const [dragCurrent, setDragCurrent] = useState<number | null>(null);
 
   const exercise = exercises.find(e => e.id === historyExerciseId) ?? null;
   const exerciseTypeId = exercise?.exercise_type_id ?? 0;
@@ -42,6 +48,25 @@ export function ExerciseHistoryDrawer() {
       totalDuration: Math.round((p.totalDuration / 60) * 10) / 10,
     }));
   }, [logs, settings.distance_unit, userUnit]);
+
+  // Reset zoom whenever the exercise or the selected range changes.
+  useEffect(() => {
+    setZoomDomain(null);
+    setDragStart(null);
+    setDragCurrent(null);
+  }, [historyExerciseId, graphRange]);
+
+  const visibleGraph = useMemo(() => {
+    if (graph.length === 0) return graph;
+    if (zoomDomain) {
+      const [lo, hi] = zoomDomain;
+      return graph.filter(p => p.dateMs >= lo && p.dateMs <= hi);
+    }
+    if (graphRange === 'ALL') return graph;
+    const days = graphRange === '1M' ? 30 : 365;
+    const cutoff = Date.now() - days * 86400000;
+    return graph.filter(p => p.dateMs >= cutoff);
+  }, [graph, graphRange, zoomDomain]);
 
   useEffect(() => {
     if (!historyExerciseId) return;
@@ -232,30 +257,103 @@ export function ExerciseHistoryDrawer() {
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>No data to graph.</p>
             ) : (
               <div className="card">
-                <div className="card-title">{graphTitle}</div>
-                <div style={{ width: '100%', height: 260 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ReLineChart data={graph} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis
-                        dataKey="dateMs"
-                        type="number"
-                        scale="time"
-                        domain={['dataMin', 'dataMax']}
-                        tickFormatter={chartDate}
-                        stroke="var(--text-secondary-dark)"
-                        style={{ fontSize: '11px' }}
-                      />
-                      <YAxis stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
-                      <Tooltip labelFormatter={chartDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
-                      {hasWeight && hasReps && <Line type="monotone" dataKey="estimated1RM" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Est. 1RM" />}
-                      {hasWeight && <Line type="monotone" dataKey="maxWeight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 2 }} name="Max Weight" />}
-                      {hasReps && !hasWeight && <Line type="monotone" dataKey="totalReps" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Reps" />}
-                      {hasDistance && <Line type="monotone" dataKey="totalDistance" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Distance" />}
-                      {hasDuration && !hasDistance && <Line type="monotone" dataKey="totalDuration" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Duration" />}
-                    </ReLineChart>
-                  </ResponsiveContainer>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div className="card-title" style={{ margin: 0 }}>{graphTitle}</div>
+                  <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    {(['1M', '1Y', 'ALL'] as const).map(r => (
+                      <button
+                        key={r}
+                        onClick={() => { setGraphRange(r); setZoomDomain(null); }}
+                        style={{
+                          padding: '4px 10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                          borderRadius: '6px', border: '1px solid var(--border-dark)',
+                          background: graphRange === r && !zoomDomain ? 'var(--primary)' : 'transparent',
+                          color: graphRange === r && !zoomDomain ? '#fff' : 'var(--text-secondary-dark)',
+                        }}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                    {zoomDomain && (
+                      <button
+                        onClick={() => setZoomDomain(null)}
+                        title="Reset zoom"
+                        style={{
+                          padding: '4px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
+                          borderRadius: '6px', border: '1px solid var(--primary)',
+                          background: 'var(--primary)', color: '#fff',
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                        }}
+                      >
+                        <ZoomOut size={12} /> Reset
+                      </button>
+                    )}
+                  </div>
                 </div>
+                <p style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', margin: '4px 0 0 0' }}>
+                  Drag across the chart to zoom into a time window.
+                </p>
+                {visibleGraph.length === 0 ? (
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>
+                    No data in this time window.
+                  </p>
+                ) : (
+                  <div style={{ width: '100%', height: 260, userSelect: 'none' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ReLineChart
+                        data={visibleGraph}
+                        margin={{ top: 10, right: 16, left: 0, bottom: 0 }}
+                        onMouseDown={(e: any) => {
+                          if (e?.activeLabel != null) {
+                            setDragStart(Number(e.activeLabel));
+                            setDragCurrent(Number(e.activeLabel));
+                          }
+                        }}
+                        onMouseMove={(e: any) => {
+                          if (dragStart !== null && e?.activeLabel != null) setDragCurrent(Number(e.activeLabel));
+                        }}
+                        onMouseUp={() => {
+                          if (dragStart !== null && dragCurrent !== null && dragStart !== dragCurrent) {
+                            setZoomDomain([Math.min(dragStart, dragCurrent), Math.max(dragStart, dragCurrent)]);
+                          }
+                          setDragStart(null);
+                          setDragCurrent(null);
+                        }}
+                        onMouseLeave={() => {
+                          setDragStart(null);
+                          setDragCurrent(null);
+                        }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis
+                          dataKey="dateMs"
+                          type="number"
+                          scale="time"
+                          domain={['dataMin', 'dataMax']}
+                          tickFormatter={chartDate}
+                          stroke="var(--text-secondary-dark)"
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} domain={['auto', 'auto']} />
+                        <Tooltip labelFormatter={chartDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
+                        {hasWeight && hasReps && <Line type="monotone" dataKey="estimated1RM" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Est. 1RM" />}
+                        {hasWeight && <Line type="monotone" dataKey="maxWeight" stroke="var(--accent)" strokeWidth={2} dot={{ r: 2 }} name="Max Weight" />}
+                        {hasReps && !hasWeight && <Line type="monotone" dataKey="totalReps" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Reps" />}
+                        {hasDistance && <Line type="monotone" dataKey="totalDistance" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Distance" />}
+                        {hasDuration && !hasDistance && <Line type="monotone" dataKey="totalDuration" stroke="var(--primary)" strokeWidth={2} dot={{ r: 2 }} name="Total Duration" />}
+                        {dragStart !== null && dragCurrent !== null && dragStart !== dragCurrent && (
+                          <ReferenceArea
+                            x1={Math.min(dragStart, dragCurrent)}
+                            x2={Math.max(dragStart, dragCurrent)}
+                            strokeOpacity={0.3}
+                            fill="var(--primary)"
+                            fillOpacity={0.15}
+                          />
+                        )}
+                      </ReLineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )
           )}

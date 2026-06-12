@@ -17,6 +17,7 @@ import type {
   WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
   RoutineSectionExercise, RoutineSectionExerciseSet,
   Goal, Measurement, MeasurementRecord, Settings, ExerciseComment, GraphFavourite, CustomUnit,
+  WorkoutRoutine,
 } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
@@ -97,6 +98,7 @@ const SYNC_TABLES = [
   'routine_section_exercise_sets',
   'workout_groups',
   'workout_group_exercises',
+  'workout_routines',
   'goals',
   'measurements',
   'measurement_records',
@@ -250,6 +252,8 @@ export function useFitNotesController() {
   // Supersets / Workout Groups State
   const [workoutGroups, setWorkoutGroups] = useState<WorkoutGroup[]>([]);
   const [groupExercises, setGroupExercises] = useState<WorkoutGroupExercise[]>([]);
+  // Routine-to-day completion links
+  const [workoutRoutines, setWorkoutRoutines] = useState<WorkoutRoutine[]>([]);
   const [selectedLogIdsForGroup, setSelectedLogIdsForGroup] = useState<string[]>([]);
   
   // Exercise creation form
@@ -930,6 +934,7 @@ export function useFitNotesController() {
     const rts = await db.query<Routine>('SELECT * FROM routines');
     const wGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
     const wGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+    const wRoutines = await db.query<WorkoutRoutine>('SELECT * FROM workout_routines');
     const gls = await db.query<Goal>('SELECT * FROM goals');
     const meas = await db.query<Measurement>('SELECT * FROM measurements');
     const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [date]);
@@ -968,6 +973,7 @@ export function useFitNotesController() {
     setRoutines(rts);
     setWorkoutGroups(wGroups);
     setGroupExercises(wGroupExs);
+    setWorkoutRoutines(wRoutines.filter(wr => !wr.is_deleted));
 
     if (cats.length > 0 && !newExCategory) {
       setNewExCategory(cats[0].id);
@@ -1404,6 +1410,7 @@ export function useFitNotesController() {
         'fn_workout_comments',
         'fn_workout_groups',
         'fn_workout_group_exercises',
+        'fn_workout_routines',
         'fn_routines',
         'fn_routine_sections',
         'fn_routine_section_exercises',
@@ -1798,6 +1805,25 @@ export function useFitNotesController() {
     }
   };
 
+  // Record that a routine (and optionally a specific workout-day split) was
+  // loaded onto a date. Skips duplicates so re-importing the same split on the
+  // same day doesn't inflate completion counts.
+  const recordWorkoutRoutine = async (routineId: string, sectionId: string | null, date = selectedDateRef.current) => {
+    const existing = await db.query<WorkoutRoutine>('SELECT * FROM workout_routines WHERE date = ?', [date]);
+    const dup = existing.some(wr =>
+      !wr.is_deleted && wr.routine_id === routineId && (wr.routine_section_id ?? null) === (sectionId ?? null)
+    );
+    if (dup) return;
+    const link: WorkoutRoutine = {
+      id: uuidv4(),
+      date,
+      routine_id: routineId,
+      routine_section_id: sectionId,
+    };
+    await db.execute('INSERT INTO workout_routines', [link]);
+    setWorkoutRoutines(prev => [...prev, link]);
+  };
+
   const handleImportRoutinePopulated = async (
     routineId: string, 
     type: 'template' | 'last_workout' | 'one_rep_max', 
@@ -1920,6 +1946,7 @@ export function useFitNotesController() {
       }
 
       await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
+      await recordWorkoutRoutine(routineId, sec.id);
     }
 
     setShowRoutineImportModal(false);
@@ -2635,6 +2662,7 @@ export function useFitNotesController() {
       }
 
       await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
+      await recordWorkoutRoutine(routineId, sec.id);
     }
 
     setShowRoutineImportModal(false);
@@ -2833,7 +2861,10 @@ export function useFitNotesController() {
     }
 
     await copyRoutineSectionSupersetsToWorkout(sectionId, importedExerciseIds);
-    
+    if (editingRoutine) {
+      await recordWorkoutRoutine(editingRoutine.id, sectionId);
+    }
+
     await refreshData();
     triggerToast(`Logged all ${setsLogged} sets from this day template into today's log.`);
     setActiveTab('log');
@@ -2998,6 +3029,56 @@ export function useFitNotesController() {
     }
   }, [token]);
 
+  // OIDC return: /api/auth/oidc/callback redirects back to the SPA with a
+  // fresh JWT (or an error) in the query string, mirroring the Withings flow.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oidcToken = params.get('oidc_token');
+    const oidcError = params.get('oidc_error');
+    const oidcLinked = params.get('oidc') === 'linked';
+    if (!oidcToken && !oidcError && !oidcLinked) return;
+
+    const newUrl = window.location.pathname + window.location.hash;
+    window.history.replaceState({}, document.title, newUrl);
+
+    if (oidcError) {
+      triggerToast(`Single sign-on failed: ${oidcError}`, 'error');
+      return;
+    }
+    if (oidcLinked) {
+      triggerToast('Single sign-on identity linked to your account!');
+      return;
+    }
+    if (oidcToken) {
+      const email = params.get('oidc_email') || '';
+      (async () => {
+        tokenRef.current = oidcToken;
+        setToken(oidcToken);
+        localStorage.setItem('fn_token', oidcToken);
+        if (email) {
+          setUserEmail(email);
+          localStorage.setItem('fn_user_email', email);
+        }
+        await db.invalidateCache(true);
+        try {
+          setSyncStatus('syncing');
+          await db.sync(oidcToken, getApiBaseUrl());
+          hasLocalChangesRef.current = false;
+          localChangeVersionRef.current = 0;
+          lastPullAtRef.current = Date.now();
+          setSyncStatus('success');
+          await refreshData();
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        } catch (e) {
+          console.warn('OIDC initial sync failed:', e);
+          setSyncStatus('error');
+          setTimeout(() => setSyncStatus('idle'), 3000);
+        }
+        triggerToast('Signed in with single sign-on!');
+      })();
+    }
+  }, []);
+
   // Bodyweight Logger
   const [newWeight, setNewWeight] = useState('75');
   const [newFat, setNewFat] = useState('15');
@@ -3130,6 +3211,7 @@ export function useFitNotesController() {
     showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     pastLoggedDates, setPastLoggedDates, workoutGroups, setWorkoutGroups, groupExercises, setGroupExercises,
+    workoutRoutines, setWorkoutRoutines, recordWorkoutRoutine,
     selectedLogIdsForGroup, setSelectedLogIdsForGroup, newExName, setNewExName, newExCategory, setNewExCategory,
     newExType, setNewExType, newExNotes, setNewExNotes, showCatModal, setShowCatModal, newCatName, setNewCatName,
     newCatColor, setNewCatColor, selectedExercise, setSelectedExercise, logWeight, setLogWeight, logReps, setLogReps,

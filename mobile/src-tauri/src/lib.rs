@@ -158,6 +158,7 @@ struct SyncPayload {
     workout_comments: Vec<Value>,
     workout_groups: Vec<Value>,
     workout_group_exercises: Vec<Value>,
+    workout_routines: Vec<Value>,
     goals: Vec<Value>,
     measurements: Vec<Value>,
     measurement_records: Vec<Value>,
@@ -473,6 +474,7 @@ struct SyncResponse {
     workout_comments: Option<Vec<Value>>,
     workout_groups: Option<Vec<Value>>,
     workout_group_exercises: Option<Vec<Value>>,
+    workout_routines: Option<Vec<Value>>,
     goals: Option<Vec<Value>>,
     measurements: Option<Vec<Value>>,
     measurement_records: Option<Vec<Value>>,
@@ -597,6 +599,12 @@ async fn tauri_sync(
                 &["is_deleted"],
             )
             .unwrap_or_default(),
+            workout_routines: extract_dirty(
+                "workout_routines",
+                &["routine_id", "routine_section_id"],
+                &["is_deleted"],
+            )
+            .unwrap_or_default(),
             goals: extract_dirty("goals", &["exercise_id"], &["is_deleted"]).unwrap_or_default(),
             measurements: extract_dirty("measurements", &[], &["custom", "enabled", "is_deleted"])
                 .unwrap_or_default(),
@@ -668,6 +676,7 @@ async fn tauri_sync(
         &sync_res.workout_comments,
         &sync_res.workout_groups,
         &sync_res.workout_group_exercises,
+        &sync_res.workout_routines,
         &sync_res.goals,
         &sync_res.measurements,
         &sync_res.measurement_records,
@@ -1050,6 +1059,21 @@ async fn tauri_sync(
                 payload.workout_times.as_slice(),
             )?;
         }
+        if let Some(items) = sync_res.workout_routines {
+            upsert_table(
+                "workout_routines",
+                items.as_slice(),
+                &[
+                    "id",
+                    "date",
+                    "routine_id",
+                    "routine_section_id",
+                    "last_modified",
+                    "is_deleted",
+                ],
+                payload.workout_routines.as_slice(),
+            )?;
+        }
         if let Some(items) = sync_res.custom_units {
             upsert_table(
                 "custom_units",
@@ -1185,6 +1209,7 @@ async fn tauri_invalidate_cache(
         "workout_comments",
         "workout_groups",
         "workout_group_exercises",
+        "workout_routines",
         "goals",
         "measurements",
         "measurement_records",
@@ -1481,6 +1506,15 @@ pub fn run() {
                     graph_type INTEGER NOT NULL,
                     time_period INTEGER NOT NULL,
                     rep_filter TEXT,
+                    last_modified TEXT NOT NULL,
+                    is_deleted INTEGER DEFAULT 0 NOT NULL,
+                    is_dirty INTEGER DEFAULT 0 NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS workout_routines (
+                    id TEXT PRIMARY KEY,
+                    date TEXT NOT NULL,
+                    routine_id TEXT NOT NULL,
+                    routine_section_id TEXT,
                     last_modified TEXT NOT NULL,
                     is_deleted INTEGER DEFAULT 0 NOT NULL,
                     is_dirty INTEGER DEFAULT 0 NOT NULL

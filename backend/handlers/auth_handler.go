@@ -135,7 +135,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var user models.User
-	var passwordHash string
+	var passwordHash *string
 
 	err := pool.QueryRow(ctx,
 		"SELECT id, email, password_hash, created_at, updated_at FROM users WHERE email = $1",
@@ -151,7 +151,13 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
+	// OIDC-only accounts have no password to compare against.
+	if passwordHash == nil || *passwordHash == "" {
+		http.Error(w, `{"error":"this account uses single sign-on - use the SSO button to sign in"}`, http.StatusUnauthorized)
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(*passwordHash), []byte(req.Password))
 	if err != nil {
 		http.Error(w, `{"error":"invalid email or password"}`, http.StatusUnauthorized)
 		return
@@ -219,10 +225,11 @@ func MeHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	var user models.User
+	var passwordHash *string
 	err = pool.QueryRow(ctx,
-		"SELECT id, email, created_at, updated_at FROM users WHERE id = $1",
+		"SELECT id, email, password_hash, auth_method, oidc_subject, display_name, avatar_url, created_at, updated_at FROM users WHERE id = $1",
 		userID,
-	).Scan(&user.ID, &user.Email, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Email, &passwordHash, &user.AuthMethod, &user.OidcSubject, &user.DisplayName, &user.AvatarURL, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -233,5 +240,17 @@ func MeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(user)
+	resp := map[string]any{
+		"id":            user.ID,
+		"email":         user.Email,
+		"created_at":    user.CreatedAt,
+		"updated_at":    user.UpdatedAt,
+		"auth_method":   user.AuthMethod,
+		"display_name":  user.DisplayName,
+		"avatar_url":    user.AvatarURL,
+		"has_password":  passwordHash != nil && *passwordHash != "",
+		"oidc_linked":   user.OidcSubject != nil,
+		"oidc_provider": oidcProviderName(),
+	}
+	json.NewEncoder(w).Encode(resp)
 }

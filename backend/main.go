@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -68,6 +69,22 @@ func main() {
 				origin == "http://tauri.localhost" {
 				return true
 			}
+			// Private-LAN origins (dev/self-hosted: phone or another machine
+			// hitting the API over the local network).
+			if host := strings.TrimPrefix(origin, "http://"); host != origin {
+				hostname := strings.Split(host, ":")[0]
+				if strings.HasPrefix(hostname, "192.168.") || strings.HasPrefix(hostname, "10.") {
+					return true
+				}
+				if strings.HasPrefix(hostname, "172.") {
+					parts := strings.Split(hostname, ".")
+					if len(parts) == 4 {
+						if n, err := strconv.Atoi(parts[1]); err == nil && n >= 16 && n <= 31 {
+							return true
+						}
+					}
+				}
+			}
 			return false
 		},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -82,6 +99,9 @@ func main() {
 		// Public Auth Endpoints
 		r.Post("/auth/register", handlers.RegisterHandler)
 		r.Post("/auth/login", handlers.LoginHandler)
+		r.Get("/auth/providers", handlers.ProvidersHandler)
+		r.Get("/auth/oidc/login", handlers.OidcLoginHandler)
+		r.Get("/auth/oidc/callback", handlers.OidcCallbackHandler)
 
 		// Public Withings OAuth Callback & Webhook endpoints
 		r.Get("/withings/callback", handlers.WithingsCallbackHandler)
@@ -97,6 +117,7 @@ func main() {
 
 			r.Get("/auth/me", handlers.MeHandler)
 			r.Post("/auth/refresh", handlers.RefreshTokenHandler)
+			r.Post("/auth/oidc/unlink", handlers.OidcUnlinkHandler)
 			r.Post("/sync", handlers.SyncHandler)
 			r.Post("/import-fitnotes", handlers.ImportFitNotesHandler)
 			r.Get("/export-fitnotes", handlers.ExportFitNotesHandler)

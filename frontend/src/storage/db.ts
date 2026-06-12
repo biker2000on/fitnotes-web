@@ -287,6 +287,15 @@ class BrowserLocalDriver implements DBDriver {
       return items as T[];
     }
 
+    if (normalized.startsWith('select * from workout_routines')) {
+      const items = this.getStore('workout_routines').filter(x => !x.is_deleted);
+      if (normalized.includes('date =')) {
+        const date = params[0];
+        return items.filter(x => x.date === date) as T[];
+      }
+      return items as T[];
+    }
+
     if (normalized.startsWith('select * from workout_group_exercises')) {
       const items = this.getStore('workout_group_exercises').filter(x => !x.is_deleted);
       if (normalized.includes('date =')) {
@@ -384,6 +393,10 @@ class BrowserLocalDriver implements DBDriver {
       insertOrReplace('workout_group_exercises', params[0]);
     }
 
+    else if (normalized.startsWith('insert into workout_routines') || normalized.startsWith('update workout_routines') || normalized.startsWith('replace into workout_routines')) {
+      insertOrReplace('workout_routines', params[0]);
+    }
+
     else if (normalized.startsWith('insert into goals') || normalized.startsWith('update goals') || normalized.startsWith('replace into goals')) {
       insertOrReplace('goals', params[0]);
     }
@@ -467,6 +480,7 @@ class BrowserLocalDriver implements DBDriver {
       workout_comments: getDirty('workout_comments'),
       workout_groups: getDirty('workout_groups', ['routine_section_id']),
       workout_group_exercises: getDirty('workout_group_exercises', ['exercise_id', 'routine_section_id', 'workout_group_id']),
+      workout_routines: getDirty('workout_routines', ['routine_id', 'routine_section_id']),
       goals: getDirty('goals', ['exercise_id']),
       measurements: getDirty('measurements'),
       measurement_records: getDirty('measurement_records', ['measurement_id']),
@@ -537,6 +551,7 @@ class BrowserLocalDriver implements DBDriver {
       applyUpdates('workout_comments', serverData.workout_comments || []);
       applyUpdates('workout_groups', serverData.workout_groups || []);
       applyUpdates('workout_group_exercises', serverData.workout_group_exercises || []);
+      applyUpdates('workout_routines', serverData.workout_routines || []);
       applyUpdates('goals', serverData.goals || []);
       applyUpdates('measurements', serverData.measurements || []);
       applyUpdates('measurement_records', serverData.measurement_records || []);
@@ -576,6 +591,7 @@ class BrowserLocalDriver implements DBDriver {
       'workout_comments',
       'workout_groups',
       'workout_group_exercises',
+      'workout_routines',
       'routines',
       'routine_sections',
       'routine_section_exercises',
@@ -733,6 +749,7 @@ class TauriNativeDriver implements DBDriver {
         routine_section_exercise_sets: ["id", "routine_section_exercise_id", "metric_weight", "reps", "sort_order", "distance", "duration_seconds", "unit", "last_modified", "is_deleted", "is_dirty"],
         workout_groups: ["id", "name", "date", "colour", "routine_section_id", "auto_jump_enabled", "rest_timer_auto_start_enabled", "last_modified", "is_deleted", "is_dirty"],
         workout_group_exercises: ["id", "exercise_id", "date", "routine_section_id", "workout_group_id", "last_modified", "is_deleted", "is_dirty"],
+        workout_routines: ["id", "date", "routine_id", "routine_section_id", "last_modified", "is_deleted", "is_dirty"],
         goals: ["id", "type_id", "exercise_id", "metric_weight", "reps", "unit", "title", "target_date", "sort_order", "distance", "duration_seconds", "start_date", "last_modified", "is_deleted", "is_dirty"],
         measurements: ["id", "name", "unit_id", "goal_type", "goal_value", "custom", "enabled", "sort_order", "last_modified", "is_deleted", "is_dirty"],
         measurement_records: ["id", "measurement_id", "date", "time", "value", "comment", "last_modified", "is_deleted", "is_dirty"],

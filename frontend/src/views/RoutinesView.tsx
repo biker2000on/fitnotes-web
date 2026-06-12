@@ -1,9 +1,10 @@
 // RoutinesView.tsx - Expanded interactive list of routines with section (Workout Day) populating.
 import { useMemo, useState } from 'react';
-import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search, Trash2 } from 'lucide-react';
+import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search, Trash2, CalendarCheck } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
@@ -12,7 +13,8 @@ const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test
 export function RoutinesView() {
   const {
     routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
-    setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises, handleDeleteRoutine
+    setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises, handleDeleteRoutine,
+    workoutRoutines, displayWeight, settings,
   } = useFitNotesStore();
 
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
@@ -34,6 +36,46 @@ export function RoutinesView() {
       r.notes ?? '',
     ].join(' ').toLowerCase().includes(needle));
   }, [routineFilter, routines]);
+
+  // Per-routine and per-section completion stats from workout_routines links.
+  const completionStats = useMemo(() => {
+    const byRoutine: Record<string, { count: number; last: string }> = {};
+    const bySection: Record<string, { count: number; last: string }> = {};
+    for (const wr of workoutRoutines) {
+      if (wr.is_deleted) continue;
+      const r = byRoutine[wr.routine_id] || (byRoutine[wr.routine_id] = { count: 0, last: '' });
+      r.count += 1;
+      if (wr.date > r.last) r.last = wr.date;
+      if (wr.routine_section_id) {
+        const s = bySection[wr.routine_section_id] || (bySection[wr.routine_section_id] = { count: 0, last: '' });
+        s.count += 1;
+        if (wr.date > s.last) s.last = wr.date;
+      }
+    }
+    return { byRoutine, bySection };
+  }, [workoutRoutines]);
+
+  // Compact read-only description of a template set, e.g. "100 kg x 5" or "5 km in 30m".
+  const formatTemplateSet = (set: RoutineSectionExerciseSet, typeId: number): string => {
+    const parts: string[] = [];
+    if (typeHasWeight(typeId) && set.metric_weight !== null && set.metric_weight > 0) {
+      parts.push(displayWeight(set.metric_weight, set.unit));
+    }
+    if (typeHasReps(typeId) && set.reps !== null) {
+      parts.push(parts.length > 0 ? `x ${set.reps}` : `${set.reps} reps`);
+    }
+    if (typeHasDistance(typeId) && set.distance !== null) {
+      parts.push(settings.distance_unit === 2
+        ? `${Math.round((set.distance / 1.60934) * 100) / 100} mi`
+        : `${set.distance} km`);
+    }
+    if (typeHasDuration(typeId) && set.duration_seconds !== null) {
+      const m = Math.floor(set.duration_seconds / 60);
+      const s = set.duration_seconds % 60;
+      parts.push(s > 0 ? `${m}m ${s}s` : `${m}m`);
+    }
+    return parts.join(' ');
+  };
 
   // Toggle routine card expansion and load details inline
   const handleToggleExpand = async (routineId: string) => {
@@ -173,6 +215,12 @@ export function RoutinesView() {
                         {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary-dark)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary-dark)' }} />}
                       </div>
                       <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '4px' }}>{r.notes || 'No notes added.'}</p>
+                      {completionStats.byRoutine[r.id] && (
+                        <p style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
+                          <CalendarCheck size={13} />
+                          Completed {completionStats.byRoutine[r.id].count} {completionStats.byRoutine[r.id].count === 1 ? 'time' : 'times'} - last {completionStats.byRoutine[r.id].last}
+                        </p>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
@@ -245,8 +293,16 @@ export function RoutinesView() {
                                   onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-dark)'}
                                 >
                                   <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
                                       <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary-dark)' }}>{sec.name}</div>
+                                      {completionStats.bySection[sec.id] && (
+                                        <span
+                                          title={`Last completed ${completionStats.bySection[sec.id].last}`}
+                                          style={{ fontSize: '10px', fontWeight: 800, color: 'var(--accent)', backgroundColor: 'rgba(16, 185, 129, 0.12)', borderRadius: '4px', padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}
+                                        >
+                                          {completionStats.bySection[sec.id].count}x done
+                                        </span>
+                                      )}
                                     </div>
                                     
                                     {/* Exercise list inside split */}
@@ -255,23 +311,49 @@ export function RoutinesView() {
                                         <div style={{ fontStyle: 'italic', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>No exercises</div>
                                       ) : (
                                         secExs.map(se => {
-                                          const exName = exercises.find(x => x.id === se.exercise_id)?.name || 'Unknown Exercise';
-                                          const setsCount = routineDetails.sets.filter(s => s.routine_section_exercise_id === se.id).length;
+                                          const ex = exercises.find(x => x.id === se.exercise_id);
+                                          const exName = ex?.name || 'Unknown Exercise';
+                                          const exSets = routineDetails.sets.filter(s => s.routine_section_exercise_id === se.id).sort(bySortOrder);
                                           const linkedGroupEx = routineDetails.groupExercises.find(ge => ge.routine_section_id === sec.id && ge.exercise_id === se.exercise_id);
                                           const group = linkedGroupEx ? routineDetails.groups.find(g => g.id === linkedGroupEx.workout_group_id) : null;
                                           const groupColor = group ? intColorToHex(group.colour) : null;
                                           const groupLabel = group ? (groupLabelById.get(group.id) || group.name) : null;
-                                          
+
+                                          // Collapse identical consecutive sets: "3 x (100 kg x 5)" reads better than repeating.
+                                          const setDescriptions: string[] = [];
+                                          for (const s of exSets) {
+                                            const desc = formatTemplateSet(s, ex?.exercise_type_id ?? 0) || '—';
+                                            setDescriptions.push(desc);
+                                          }
+                                          const collapsed: Array<{ desc: string; count: number }> = [];
+                                          for (const desc of setDescriptions) {
+                                            const last = collapsed[collapsed.length - 1];
+                                            if (last && last.desc === desc) last.count += 1;
+                                            else collapsed.push({ desc, count: 1 });
+                                          }
+
                                           return (
-                                            <div key={se.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)', borderLeft: groupColor ? `3px solid ${groupColor}` : '3px solid transparent', paddingLeft: groupColor ? '6px' : 0 }}>
-                                              <Dumbbell size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
-                                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{exName}</span>
-                                              {group && (
-                                                <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: groupColor || 'var(--primary)', backgroundColor: groupColor ? `${groupColor}20` : 'rgba(99, 102, 241, 0.12)', borderRadius: '4px', padding: '2px 5px' }}>
-                                                  {groupLabel}
-                                                </span>
+                                            <div key={se.id} style={{ borderLeft: groupColor ? `3px solid ${groupColor}` : '3px solid transparent', paddingLeft: groupColor ? '6px' : 0 }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)' }}>
+                                                <Dumbbell size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: 'var(--text-primary-dark)' }}>{exName}</span>
+                                                {group && (
+                                                  <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: groupColor || 'var(--primary)', backgroundColor: groupColor ? `${groupColor}20` : 'rgba(99, 102, 241, 0.12)', borderRadius: '4px', padding: '2px 5px' }}>
+                                                    {groupLabel}
+                                                  </span>
+                                                )}
+                                                <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>{exSets.length} {exSets.length === 1 ? 'set' : 'sets'}</span>
+                                              </div>
+                                              {collapsed.length > 0 && (
+                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', paddingLeft: '18px', marginTop: '2px', lineHeight: 1.5 }}>
+                                                  {collapsed.map((c, i) => (
+                                                    <span key={i}>
+                                                      {i > 0 && <span style={{ opacity: 0.4 }}> · </span>}
+                                                      {c.count > 1 ? `${c.count} x (${c.desc})` : c.desc}
+                                                    </span>
+                                                  ))}
+                                                </div>
                                               )}
-                                              <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>({setsCount} {setsCount === 1 ? 'set' : 'sets'})</span>
                                             </div>
                                           );
                                         })

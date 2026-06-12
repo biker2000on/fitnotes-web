@@ -1,6 +1,6 @@
 // SyncView.tsx - Account login, cloud sync, and FitNotes backup import/export.
 import { useState, useEffect } from 'react';
-import { RefreshCw, Upload, Download, Globe } from 'lucide-react';
+import { RefreshCw, Upload, Download, Globe, KeyRound } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 
 export function SyncView() {
@@ -8,14 +8,57 @@ export function SyncView() {
     token, userEmail, syncStatus, triggerSync,
     importStatus, handleBackupUpload, exporting, handleBackupDownload,
     authError, authLoading, authEmail, setAuthEmail, authPassword, setAuthPassword, handleAuth, handleCsvDownload,
-    customApiUrl, updateCustomApiUrl, getApiBaseUrl,
+    customApiUrl, updateCustomApiUrl, getApiBaseUrl, triggerToast,
   } = useFitNotesStore();
 
   const [apiUrlInput, setApiUrlInput] = useState(customApiUrl);
+  const [oidcProvider, setOidcProvider] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<{ oidc_linked: boolean; has_password: boolean; oidc_provider: string; auth_method: string } | null>(null);
+  const [unlinking, setUnlinking] = useState(false);
 
   useEffect(() => {
     setApiUrlInput(customApiUrl);
   }, [customApiUrl]);
+
+  // Discover whether the server has an SSO provider configured.
+  useEffect(() => {
+    fetch(`${getApiBaseUrl()}/api/auth/providers`)
+      .then(res => (res.ok ? res.json() : {}))
+      .then((data: { oidc?: { name?: string } }) => setOidcProvider(data?.oidc?.name ?? null))
+      .catch(() => setOidcProvider(null));
+  }, [customApiUrl]);
+
+  // Identity / link status for the signed-in account.
+  const loadIdentity = () => {
+    if (!token) {
+      setIdentity(null);
+      return;
+    }
+    fetch(`${getApiBaseUrl()}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => setIdentity(data))
+      .catch(() => setIdentity(null));
+  };
+  useEffect(loadIdentity, [token, customApiUrl]);
+
+  const handleUnlink = async () => {
+    if (!token) return;
+    setUnlinking(true);
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/oidc/unlink`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to unlink');
+      triggerToast('Single sign-on identity unlinked.');
+      loadIdentity();
+    } catch (e: any) {
+      triggerToast(e.message || 'Failed to unlink', 'error');
+    } finally {
+      setUnlinking(false);
+    }
+  };
 
   return (
     <div style={{ maxWidth: '480px', margin: '40px auto 0 auto', width: '100%' }}>
@@ -107,6 +150,46 @@ export function SyncView() {
               FitNotes offline-first worker automatically merges changes using our custom Last-Write-Wins conflict resolution algorithm.
             </p>
           </div>
+
+          {/* Single Sign-On Identity Card */}
+          {oidcProvider && identity && (
+            <div className="card" style={{ gap: '12px', padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                  <KeyRound size={18} />
+                </div>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>{identity.oidc_provider || oidcProvider}</h3>
+                  <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', margin: '2px 0 0 0' }}>
+                    {identity.oidc_linked
+                      ? `Linked - you can sign in with ${identity.oidc_provider || oidcProvider}`
+                      : 'Link your account to sign in with single sign-on'}
+                  </p>
+                </div>
+                {identity.oidc_linked ? (
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleUnlink}
+                    disabled={unlinking || !identity.has_password}
+                    title={!identity.has_password ? 'This account has no password - unlinking would lock you out' : undefined}
+                    style={{ fontSize: '12px', padding: '8px 14px', color: 'var(--danger)', borderColor: 'rgba(239, 68, 68, 0.4)' }}
+                  >
+                    {unlinking ? 'Unlinking...' : 'Unlink'}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    style={{ fontSize: '12px', padding: '8px 14px' }}
+                    onClick={() => {
+                      window.location.href = `${getApiBaseUrl()}/api/auth/oidc/login?link_token=${encodeURIComponent(token)}`;
+                    }}
+                  >
+                    Link {oidcProvider}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Import FitNotes Backup Card */}
           <div className="card" style={{ gap: '20px', padding: '32px', textAlign: 'center' }}>
@@ -222,6 +305,26 @@ export function SyncView() {
               <button type="button" className="btn btn-secondary" onClick={() => handleAuth('register')} disabled={authLoading} style={{ flex: 1 }}>Create Account</button>
             </div>
           </form>
+
+          {oidcProvider && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ flex: 1, height: '1px', background: 'var(--border-dark)' }} />
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>or</span>
+                <span style={{ flex: 1, height: '1px', background: 'var(--border-dark)' }} />
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                style={{ width: '100%', height: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                onClick={() => {
+                  window.location.href = `${getApiBaseUrl()}/api/auth/oidc/login`;
+                }}
+              >
+                <KeyRound size={16} /> Sign in with {oidcProvider}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

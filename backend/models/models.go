@@ -12,6 +12,11 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	AuthMethod   string    `json:"auth_method,omitempty"` // password | oidc | both
+	OidcSubject  *string   `json:"-"`
+	OidcIssuer   *string   `json:"-"`
+	DisplayName  *string   `json:"display_name,omitempty"`
+	AvatarURL    *string   `json:"avatar_url,omitempty"`
 }
 
 type Category struct {
@@ -139,6 +144,16 @@ type GraphFavourite struct {
 	RepFilter    *string    `json:"rep_filter"`
 	LastModified time.Time  `json:"last_modified"`
 	IsDeleted    bool       `json:"is_deleted"`
+}
+
+type WorkoutRoutine struct {
+	ID               uuid.UUID  `json:"id"`
+	UserID           uuid.UUID  `json:"user_id"`
+	Date             string     `json:"date"` // YYYY-MM-DD
+	RoutineID        uuid.UUID  `json:"routine_id"`
+	RoutineSectionID *uuid.UUID `json:"routine_section_id"`
+	LastModified     time.Time  `json:"last_modified"`
+	IsDeleted        bool       `json:"is_deleted"`
 }
 
 type BodyWeight struct {
