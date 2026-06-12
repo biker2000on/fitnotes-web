@@ -131,6 +131,41 @@ export function ExercisesView() {
     });
   }, [categories, categoryFilter, exercises, favouritesOnly, query]);
 
+  // View-scoped keys: b toggles bulk-edit; in bulk mode Ctrl+A selects all
+  // visible and Esc exits. Single keys are ignored while typing in a field.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+      if (bulkMode && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a' && !typing) {
+        e.preventDefault();
+        setSelectedIds(new Set(filteredExercises.map(x => x.id)));
+        return;
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key === 'b') {
+        e.preventDefault();
+        setBulkMode(prev => {
+          if (prev) {
+            setSelectedIds(new Set());
+            setBulkCategory('');
+            setBulkType('');
+          }
+          return !prev;
+        });
+        return;
+      }
+      if (e.key === 'Escape' && bulkMode) {
+        exitBulkMode();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [bulkMode, filteredExercises]);
+
   const createExercise = async () => {
     if (!newExName.trim()) return;
     await handleCreateExercise();
@@ -247,9 +282,9 @@ export function ExercisesView() {
             <button
               className={`btn ${bulkMode ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
-              title="Select multiple exercises to edit at once"
+              title="Select multiple exercises to edit at once (b)"
             >
-              <CheckSquare size={15} /> {bulkMode ? 'Done' : 'Bulk Edit'}
+              <CheckSquare size={15} /> {bulkMode ? 'Done' : 'Bulk Edit'} <kbd className="kbd" style={{ opacity: 0.6 }}>b</kbd>
             </button>
             <button className={`btn ${favouritesOnly ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFavouritesOnly(v => !v)}>
               <Star size={15} fill={favouritesOnly ? 'currentColor' : 'transparent'} /> Favorites
@@ -343,10 +378,11 @@ export function ExercisesView() {
           </span>
           <button
             className="btn btn-secondary"
-            style={{ padding: '6px 10px', fontSize: '12px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
             onClick={() => setSelectedIds(new Set(filteredExercises.map(x => x.id)))}
+            title="Select all visible (Ctrl+A)"
           >
-            Select All ({filteredExercises.length})
+            Select All ({filteredExercises.length}) <kbd className="kbd" style={{ opacity: 0.6 }}>Ctrl+A</kbd>
           </button>
           <button
             className="btn btn-secondary"

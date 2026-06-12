@@ -170,7 +170,11 @@ export function SettingsView() {
         <Row label="Load Last Logged Set Values into Inputs"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Ctrl + E</span></Row>
         <Row label="Date Shifts (when not typing)" hint="+ or =: Next day, - or _: Previous day, t: Jump to Today"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>+, -, t</span></Row>
         <Row label="Calendar Month Shifts (when not typing)" hint="[: Shift calendar backwards one month, ]: Shift calendar forwards one month"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>[, ]</span></Row>
+        <Row label="Focus Search / Filter Field"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>/</span></Row>
+        <Row label="Exercise History Drawer" hint="1/2/3: History, Records, Graph tabs - m/y/a: graph range 1M/1Y/All - 0: reset zoom"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>1-3, m, y, a, 0</span></Row>
+        <Row label="Exercises Bulk Edit" hint="b: toggle bulk-edit mode - Ctrl+A: select all visible - Escape: exit"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>b, Ctrl+A</span></Row>
         <Row label="Close Active Modals / Drawers"><span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>Escape</span></Row>
+        <Row label="Show Shortcut Reference Overlay"><span style={{ fontSize: '13px', color: 'var(--accent)', fontWeight: 'bold' }}>?</span></Row>
       </Section>
 
       <Section title="About">

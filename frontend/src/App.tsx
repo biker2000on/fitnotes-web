@@ -18,7 +18,8 @@ import {
   Menu,
   Target,
   Ruler,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Keyboard
 } from 'lucide-react';
 import { intColorToHex } from './lib/colors';
 import { typeHasWeight } from './lib/units';
@@ -45,6 +46,7 @@ import { ConfirmationModal } from './components/ConfirmationModal';
 
 import { PlateCalculatorModal } from './components/PlateCalculatorModal';
 import { CommandPalette } from './components/CommandPalette';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { CopyWorkoutDrawer } from './components/CopyWorkoutDrawer';
 import { BulkActionsDock } from './components/BulkActionsDock';
 import { RoutinesPopulatorModal } from './components/RoutinesPopulatorModal';
@@ -252,7 +254,7 @@ export default function App() {
     activeTab, setActiveTab, sidebarOpen, setSidebarOpen, userUnit, handleUnitChange,
     token, userEmail, handleLogout, toggleTheme, selectedDate, setSelectedDate,
     exercises, categories, routines, allLogs, currentLogs,
-    editingRoutine, setSelectedExercise, showPlateCalc, setShowPlateCalc, setShowCommandPalette, setShowRoutineImportModal,
+    editingRoutine, setSelectedExercise, showPlateCalc, setShowPlateCalc, setShowCommandPalette, setShowShortcutsHelp, setShowRoutineImportModal,
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     showCatModal, setShowCatModal, newCatName, setNewCatName, newCatColor, setNewCatColor, handleCreateCategory,
     showCreateRoutineModal, setShowCreateRoutineModal, newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
@@ -419,9 +421,20 @@ export default function App() {
             </div>
           )}
           
-          <button className="btn btn-secondary" style={{ width: '100%' }} onClick={toggleTheme}>
-            Toggle Theme
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-secondary" style={{ flex: 1 }} onClick={toggleTheme}>
+              Toggle Theme
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '8px 12px', flexShrink: 0 }}
+              onClick={() => setShowShortcutsHelp(true)}
+              title="Keyboard shortcuts (?)"
+              aria-label="Keyboard shortcuts"
+            >
+              <Keyboard size={16} /> <kbd className="kbd">?</kbd>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -547,6 +560,9 @@ export default function App() {
         setPlateCalcTarget={setPlateCalcTarget}
         calculatedPlates={calculatedPlates}
       />
+
+      {/* Global Keyboard Shortcuts reference overlay (press ?) */}
+      <KeyboardShortcutsModal />
 
       {/* Global Command Palette Quick Exercise Search Selector */}
       <CommandPalette

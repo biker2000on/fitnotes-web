@@ -361,6 +361,7 @@ export function useFitNotesController() {
   // Edit Exercise modal states
   const [showEditExModal, setShowEditExModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [editExName, setEditExName] = useState('');
   const [editExCategory, setEditExCategory] = useState('');
@@ -654,6 +655,7 @@ export function useFitNotesController() {
 
       // 2. Escape -> Close all active modals
       if (e.key === 'Escape') {
+        setShowShortcutsHelp(false);
         setShowCommandPalette(false);
         setShowRoutineImportModal(false);
         setShowCreateRoutineModal(false);
@@ -679,6 +681,24 @@ export function useFitNotesController() {
 
       // If actively typing, skip single-key or standard navigation logs shortcuts
       if (isTyping) return;
+
+      // 3.5. ? -> Toggle the keyboard shortcuts reference overlay
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcutsHelp(prev => !prev);
+        return;
+      }
+
+      // 3.6. / -> Focus the current view's search/filter input
+      if (e.key === '/') {
+        const search = document.querySelector<HTMLInputElement>('main input[type="search"]');
+        if (search) {
+          e.preventDefault();
+          search.focus();
+          search.select();
+        }
+        return;
+      }
 
       // 4. Ctrl + E -> Load last logged set values into active inputs for quick editing
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
@@ -3220,7 +3240,7 @@ export function useFitNotesController() {
     newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes, routineCreatorExercises, setRoutineCreatorExercises,
     selectedExForRoutine, setSelectedExForRoutine, showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, showEditExModal, setShowEditExModal,
-    showCommandPalette, setShowCommandPalette, editingExercise, setEditingExercise, editExName, setEditExName,
+    showCommandPalette, setShowCommandPalette, showShortcutsHelp, setShowShortcutsHelp, editingExercise, setEditingExercise, editExName, setEditExName,
     editExCategory, setEditExCategory, editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
     editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit, editExIsFavourite, setEditExIsFavourite,
     showSupersetManagerModal, setShowSupersetManagerModal, selectedExIdsForSuperset, setSelectedExIdsForSuperset,

@@ -68,11 +68,31 @@ export function ExerciseHistoryDrawer() {
     return graph.filter(p => p.dateMs >= cutoff);
   }, [graph, graphRange, zoomDomain]);
 
+  // Drawer-scoped keys: Esc closes, 1/2/3 switch tabs, m/y/a pick the graph
+  // range, 0 resets zoom. Single keys are ignored while typing in a field.
   useEffect(() => {
     if (!historyExerciseId) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setHistoryExerciseId(null);
+      if (event.key === 'Escape') {
+        setHistoryExerciseId(null);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+
+      switch (event.key) {
+        case '1': setTab('history'); break;
+        case '2': setTab('records'); break;
+        case '3': setTab('graph'); break;
+        case 'm': setTab('graph'); setGraphRange('1M'); setZoomDomain(null); break;
+        case 'y': setTab('graph'); setGraphRange('1Y'); setZoomDomain(null); break;
+        case 'a': setTab('graph'); setGraphRange('ALL'); setZoomDomain(null); break;
+        case '0': setZoomDomain(null); break;
+        default: return;
+      }
+      event.preventDefault();
     };
 
     window.addEventListener('keydown', handleKeyDown);
@@ -160,10 +180,11 @@ export function ExerciseHistoryDrawer() {
         </div>
 
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-dark)' }}>
-          {([['history', 'History', HistoryIcon], ['records', 'Records', Trophy], ['graph', 'Graph', LineChart]] as const).map(([id, label, Icon]) => (
+          {([['history', 'History', HistoryIcon, '1'], ['records', 'Records', Trophy, '2'], ['graph', 'Graph', LineChart, '3']] as const).map(([id, label, Icon, key]) => (
             <button
               key={id}
               onClick={() => setTab(id)}
+              title={`${label} (${key})`}
               style={{
                 flex: 1, padding: '12px', background: 'transparent', border: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
@@ -173,6 +194,7 @@ export function ExerciseHistoryDrawer() {
               }}
             >
               <Icon size={15} /> {label}
+              <kbd className="kbd" style={{ opacity: tab === id ? 0.9 : 0.45, minWidth: '18px', height: '18px', fontSize: '10px' }}>{key}</kbd>
             </button>
           ))}
         </div>
@@ -290,8 +312,18 @@ export function ExerciseHistoryDrawer() {
                     )}
                   </div>
                 </div>
-                <p style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', margin: '4px 0 0 0' }}>
-                  Drag across the chart to zoom into a time window.
+                <p style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', margin: '6px 0 0 0', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                  <span>Drag across the chart to zoom.</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <kbd className="kbd" style={{ minWidth: '16px', height: '16px', fontSize: '9px' }}>m</kbd>
+                    <kbd className="kbd" style={{ minWidth: '16px', height: '16px', fontSize: '9px' }}>y</kbd>
+                    <kbd className="kbd" style={{ minWidth: '16px', height: '16px', fontSize: '9px' }}>a</kbd>
+                    <span>ranges</span>
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                    <kbd className="kbd" style={{ minWidth: '16px', height: '16px', fontSize: '9px' }}>0</kbd>
+                    <span>reset zoom</span>
+                  </span>
                 </p>
                 {visibleGraph.length === 0 ? (
                   <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>
