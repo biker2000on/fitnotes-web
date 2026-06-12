@@ -188,20 +188,24 @@ export function ExercisesView() {
             outline: selected ? '2px solid var(--primary)' : 'none',
             borderRadius: '8px',
             background: selected ? 'rgba(99, 102, 241, 0.08)' : undefined,
+            // Leading checkbox column spanning the card height, content beside it.
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: '12px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {/* Global CSS sizes inputs at 100% width; pin the checkbox so the name stays visible. */}
-            <input type="checkbox" checked={selected} readOnly style={{ pointerEvents: 'none', width: '16px', height: '16px', padding: 0, flexShrink: 0, accentColor: 'var(--primary)' }} />
+          {/* Global CSS sizes inputs at 100% width; pin the checkbox so the name stays visible. */}
+          <input type="checkbox" checked={selected} readOnly style={{ pointerEvents: 'none', width: '17px', height: '17px', padding: 0, flexShrink: 0, accentColor: 'var(--primary)' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', flex: 1, minWidth: 0 }}>
             <div className="exercise-catalog-name">{ex.name}</div>
-          </div>
-          <div className="exercise-catalog-meta-row">
-            <div className="exercise-catalog-meta">
-              <span className="exercise-category-chip" style={{ backgroundColor: color + '15', color }}>
-                {cat?.name || 'Misc'}
-              </span>
-              <span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
-              {stats?.lastUsed && <span>last {stats.lastUsed} - {stats.workouts}x</span>}
+            <div className="exercise-catalog-meta-row">
+              <div className="exercise-catalog-meta">
+                <span className="exercise-category-chip" style={{ backgroundColor: color + '15', color }}>
+                  {cat?.name || 'Misc'}
+                </span>
+                <span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
+                {stats?.lastUsed && <span>last {stats.lastUsed} - {stats.workouts}x</span>}
+              </div>
             </div>
           </div>
         </div>
