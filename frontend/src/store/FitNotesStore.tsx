@@ -822,6 +822,9 @@ export function useFitNotesController() {
     }
     // Auto-close sliding mobile sidebar drawer on navigation
     setSidebarOpen(false);
+    // The exercise history drawer is contextual; navigating to another
+    // section should dismiss it rather than letting it shadow the new view.
+    setHistoryExerciseId(null);
   }, [activeTab]);
 
   // Initial Boot Database seed & data loading.
