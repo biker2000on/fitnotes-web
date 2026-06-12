@@ -1359,6 +1359,8 @@ body.light-theme .btn-sync-spin:hover {
   white-space: nowrap;
 }
 
-.light-theme .kbd {
+body.light-theme .kbd {
+  color: var(--text-primary-light);
   background: rgba(0, 0, 0, 0.05);
+  border-color: var(--border-light);
 }
