@@ -9,8 +9,10 @@ import {
 import { useEffect, useState, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
+import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import type { RoutineSection } from '../types';
 
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
 
@@ -100,9 +102,27 @@ export function WorkoutLogView() {
     startRestTimer, shareWorkout,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
     setHistoryExerciseId,
+    workoutRoutines, routines,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
+
+  // Routine day-splits linked to the selected date (for the summary badge).
+  // Section names live in routine_sections, which isn't global store state.
+  const [sectionNames, setSectionNames] = useState<Record<string, string>>({});
+  const dayRoutines = workoutRoutines.filter(wr => wr.date === selectedDate && !wr.is_deleted);
+  useEffect(() => {
+    let cancelled = false;
+    db.query<RoutineSection>('SELECT * FROM routine_sections')
+      .then(secs => {
+        if (cancelled) return;
+        const names: Record<string, string> = {};
+        for (const s of secs) names[s.id] = s.name;
+        setSectionNames(names);
+      })
+      .catch(e => console.warn('Failed to load routine sections for log badge:', e));
+    return () => { cancelled = true; };
+  }, [workoutRoutines]);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const selectedExerciseLogs = selectedExercise ? currentLogs.filter(x => x.exercise_id === selectedExercise.id) : [];
   const selectInputContents = (event: FocusEvent<HTMLInputElement>) => {
@@ -458,6 +478,32 @@ export function WorkoutLogView() {
             )}
           </div>
         </div>
+
+        {dayRoutines.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+            {dayRoutines.map(wr => {
+              const routine = routines.find(r => r.id === wr.routine_id);
+              if (!routine) return null;
+              const sectionName = wr.routine_section_id ? sectionNames[wr.routine_section_id] : null;
+              return (
+                <span
+                  key={wr.id}
+                  title="Routine loaded for this day"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    fontSize: '12px', fontWeight: 700,
+                    color: 'var(--primary)', backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                    border: '1px solid rgba(99, 102, 241, 0.25)',
+                    borderRadius: '999px', padding: '4px 12px',
+                  }}
+                >
+                  <Bookmark size={12} />
+                  {routine.name}{sectionName ? ` - ${sectionName}` : ''}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {workoutComment.trim() && (
           <div className="workout-summary-comment">
