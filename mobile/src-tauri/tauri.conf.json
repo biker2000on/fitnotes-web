@@ -48,5 +48,12 @@
     "targets": "all"
   },
   "productName": "FitNotes",
-  "version": "0.1.0"
+  "version": "0.1.0",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["fitnotes"]
+      }
+    }
+  }
 }

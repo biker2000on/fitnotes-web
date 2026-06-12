@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, Upload, Download, Globe, KeyRound } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
+import { isTauri } from '../storage/db';
 
 export function SyncView() {
   const {
@@ -40,6 +41,28 @@ export function SyncView() {
       .catch(() => setIdentity(null));
   };
   useEffect(loadIdentity, [token, customApiUrl]);
+
+  // Web: navigate the SPA through the redirect flow. Mobile: passkeys don't
+  // work in the embedded WebView, so launch the system browser; the backend
+  // callback returns the session via the fitnotes:// deep link.
+  const startOidcFlow = async (linkToken?: string) => {
+    const params = new URLSearchParams();
+    if (isTauri()) params.set('client', 'mobile');
+    if (linkToken) params.set('link_token', linkToken);
+    const qs = params.toString();
+    const url = `${getApiBaseUrl()}/api/auth/oidc/login${qs ? `?${qs}` : ''}`;
+    if (isTauri()) {
+      try {
+        const { openUrl } = await import('@tauri-apps/plugin-opener');
+        await openUrl(url);
+      } catch (e) {
+        triggerToast('Failed to open the browser for sign-on', 'error');
+        console.warn('opener failed:', e);
+      }
+    } else {
+      window.location.href = url;
+    }
+  };
 
   const handleUnlink = async () => {
     if (!token) return;
@@ -180,9 +203,7 @@ export function SyncView() {
                   <button
                     className="btn btn-primary"
                     style={{ fontSize: '12px', padding: '8px 14px' }}
-                    onClick={() => {
-                      window.location.href = `${getApiBaseUrl()}/api/auth/oidc/login?link_token=${encodeURIComponent(token)}`;
-                    }}
+                    onClick={() => startOidcFlow(token)}
                   >
                     Link {oidcProvider}
                   </button>
@@ -317,9 +338,7 @@ export function SyncView() {
                 type="button"
                 className="btn btn-secondary"
                 style={{ width: '100%', height: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                onClick={() => {
-                  window.location.href = `${getApiBaseUrl()}/api/auth/oidc/login`;
-                }}
+                onClick={() => startOidcFlow()}
               >
                 <KeyRound size={16} /> Sign in with {oidcProvider}
               </button>

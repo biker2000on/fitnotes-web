@@ -111,8 +111,20 @@ func ProvidersHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+// mobileDeepLink is where the mobile (Tauri) flow lands after the callback:
+// the Android app registers this custom scheme and consumes the query params.
+const mobileDeepLink = "fitnotes://oidc"
+
 func oidcErrorRedirect(w http.ResponseWriter, r *http.Request, message string) {
 	http.Redirect(w, r, frontendURL()+"/?oidc_error="+url.QueryEscape(message), http.StatusFound)
+}
+
+func oidcErrorRedirectTo(w http.ResponseWriter, r *http.Request, mobile bool, message string) {
+	if mobile {
+		http.Redirect(w, r, mobileDeepLink+"?oidc_error="+url.QueryEscape(message), http.StatusFound)
+		return
+	}
+	oidcErrorRedirect(w, r, message)
 }
 
 // OidcLoginHandler starts the authorization flow. Optional query params:
@@ -142,6 +154,13 @@ func OidcLoginHandler(w http.ResponseWriter, r *http.Request) {
 		linkUserID = &uid
 	}
 
+	// Mobile (Tauri) clients run the flow in the system browser and return to
+	// the app via a deep link; remember that choice for the callback.
+	redirectTo := "web"
+	if strings.EqualFold(r.URL.Query().Get("client"), "mobile") {
+		redirectTo = "mobile"
+	}
+
 	state := oauth2.GenerateVerifier()
 	nonce := oauth2.GenerateVerifier()
 	verifier := oauth2.GenerateVerifier()
@@ -149,7 +168,7 @@ func OidcLoginHandler(w http.ResponseWriter, r *http.Request) {
 	pool := db.GetDB()
 	_, err = pool.Exec(ctx,
 		"INSERT INTO oidc_states (state, code_verifier, nonce, link_user_id, redirect_to, expires_at) VALUES ($1, $2, $3, $4, $5, $6)",
-		state, verifier, nonce, linkUserID, "/", time.Now().Add(oidcStateTTL),
+		state, verifier, nonce, linkUserID, redirectTo, time.Now().Add(oidcStateTTL),
 	)
 	if err != nil {
 		log.Printf("oidc: failed to persist transaction state: %v", err)
@@ -219,11 +238,12 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	// Recover and consume the transaction (single use).
 	var verifier, nonce string
 	var linkUserID *uuid.UUID
+	var redirectTo *string
 	var expiresAt time.Time
 	err := pool.QueryRow(ctx,
-		"DELETE FROM oidc_states WHERE state = $1 RETURNING code_verifier, nonce, link_user_id, expires_at",
+		"DELETE FROM oidc_states WHERE state = $1 RETURNING code_verifier, nonce, link_user_id, redirect_to, expires_at",
 		state,
-	).Scan(&verifier, &nonce, &linkUserID, &expiresAt)
+	).Scan(&verifier, &nonce, &linkUserID, &redirectTo, &expiresAt)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && time.Now().After(expiresAt)) {
 		oidcErrorRedirect(w, r, "sign-in session expired, try again")
 		return
@@ -233,21 +253,22 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		oidcErrorRedirect(w, r, "internal error")
 		return
 	}
+	mobile := redirectTo != nil && *redirectTo == "mobile"
 
 	if providerErr := r.URL.Query().Get("error"); providerErr != "" {
-		oidcErrorRedirect(w, r, "sign-in cancelled")
+		oidcErrorRedirectTo(w, r, mobile, "sign-in cancelled")
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		oidcErrorRedirect(w, r, "missing authorization code")
+		oidcErrorRedirectTo(w, r, mobile, "missing authorization code")
 		return
 	}
 
 	provider, err := getOidcProvider(ctx)
 	if err != nil {
 		log.Printf("oidc: discovery failed: %v", err)
-		oidcErrorRedirect(w, r, "identity provider unreachable")
+		oidcErrorRedirectTo(w, r, mobile, "identity provider unreachable")
 		return
 	}
 	conf := oidcOauthConfig(provider)
@@ -255,29 +276,29 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	token, err := conf.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 	if err != nil {
 		log.Printf("oidc: token exchange failed: %v", err)
-		oidcErrorRedirect(w, r, "token exchange failed")
+		oidcErrorRedirectTo(w, r, mobile, "token exchange failed")
 		return
 	}
 
 	rawIDToken, ok := token.Extra("id_token").(string)
 	if !ok {
-		oidcErrorRedirect(w, r, "provider did not return an ID token")
+		oidcErrorRedirectTo(w, r, mobile, "provider did not return an ID token")
 		return
 	}
 	idToken, err := provider.Verifier(&oidc.Config{ClientID: conf.ClientID}).Verify(ctx, rawIDToken)
 	if err != nil {
 		log.Printf("oidc: ID token verification failed: %v", err)
-		oidcErrorRedirect(w, r, "invalid ID token")
+		oidcErrorRedirectTo(w, r, mobile, "invalid ID token")
 		return
 	}
 
 	var claims oidcClaims
 	if err := idToken.Claims(&claims); err != nil || claims.Sub == "" {
-		oidcErrorRedirect(w, r, "ID token missing subject")
+		oidcErrorRedirectTo(w, r, mobile, "ID token missing subject")
 		return
 	}
 	if claims.Nonce != nonce {
-		oidcErrorRedirect(w, r, "nonce mismatch")
+		oidcErrorRedirectTo(w, r, mobile, "nonce mismatch")
 		return
 	}
 
@@ -304,23 +325,23 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	userBySubject, err := findUserBy(ctx, pool, "oidc_issuer = $1 AND oidc_subject = $2", issuer, claims.Sub)
 	if err != nil {
 		log.Printf("oidc: user lookup failed: %v", err)
-		oidcErrorRedirect(w, r, "internal error")
+		oidcErrorRedirectTo(w, r, mobile, "internal error")
 		return
 	}
 
 	// ---- (1) LINK MODE ----
 	if linkUserID != nil {
 		if userBySubject != nil && userBySubject.ID != *linkUserID {
-			oidcErrorRedirect(w, r, "this identity is already linked to a different account")
+			oidcErrorRedirectTo(w, r, mobile, "this identity is already linked to a different account")
 			return
 		}
 		linkUser, err := findUserBy(ctx, pool, "id = $1", *linkUserID)
 		if err != nil || linkUser == nil {
-			oidcErrorRedirect(w, r, "account not found")
+			oidcErrorRedirectTo(w, r, mobile, "account not found")
 			return
 		}
 		if linkUser.OidcSubject != nil && *linkUser.OidcSubject != claims.Sub {
-			oidcErrorRedirect(w, r, "your account is already linked to a different identity")
+			oidcErrorRedirectTo(w, r, mobile, "your account is already linked to a different identity")
 			return
 		}
 		authMethod := "oidc"
@@ -335,16 +356,20 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			log.Printf("oidc: link update failed: %v", err)
-			oidcErrorRedirect(w, r, "failed to link identity")
+			oidcErrorRedirectTo(w, r, mobile, "failed to link identity")
 			return
 		}
-		http.Redirect(w, r, frontendURL()+"/?oidc=linked#/sync", http.StatusFound)
+		if mobile {
+			http.Redirect(w, r, mobileDeepLink+"?oidc=linked", http.StatusFound)
+		} else {
+			http.Redirect(w, r, frontendURL()+"/?oidc=linked#/sync", http.StatusFound)
+		}
 		return
 	}
 
 	// ---- (2) SUBJECT MATCH: returning OIDC user ----
 	if userBySubject != nil {
-		issueOidcSession(w, r, ctx, pool, userBySubject.ID, userBySubject.Email, claims)
+		issueOidcSession(w, r, ctx, pool, userBySubject.ID, userBySubject.Email, claims, mobile)
 		return
 	}
 
@@ -353,13 +378,13 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		userByEmail, err := findUserBy(ctx, pool, "email = $1", email)
 		if err != nil {
 			log.Printf("oidc: user lookup failed: %v", err)
-			oidcErrorRedirect(w, r, "internal error")
+			oidcErrorRedirectTo(w, r, mobile, "internal error")
 			return
 		}
 		if userByEmail != nil {
 			if userByEmail.OidcSubject != nil {
 				// Email owner is bound to a different OIDC identity - don't hijack.
-				oidcErrorRedirect(w, r, "an account with this email is linked to a different identity")
+				oidcErrorRedirectTo(w, r, mobile, "an account with this email is linked to a different identity")
 				return
 			}
 			authMethod := "oidc"
@@ -374,23 +399,23 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 			)
 			if err != nil {
 				log.Printf("oidc: auto-link failed: %v", err)
-				oidcErrorRedirect(w, r, "failed to link identity")
+				oidcErrorRedirectTo(w, r, mobile, "failed to link identity")
 				return
 			}
 			log.Printf("oidc: auto-linked %s to user %s by verified email", claims.Sub, userByEmail.ID)
-			issueOidcSession(w, r, ctx, pool, userByEmail.ID, userByEmail.Email, claims)
+			issueOidcSession(w, r, ctx, pool, userByEmail.ID, userByEmail.Email, claims, mobile)
 			return
 		}
 	}
 
 	// ---- (4) CREATE: brand-new OIDC user ----
 	if email == "" {
-		oidcErrorRedirect(w, r, "identity provider did not supply an email address")
+		oidcErrorRedirectTo(w, r, mobile, "identity provider did not supply an email address")
 		return
 	}
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		oidcErrorRedirect(w, r, "internal error")
+		oidcErrorRedirectTo(w, r, mobile, "internal error")
 		return
 	}
 	defer tx.Rollback(ctx)
@@ -403,40 +428,51 @@ func OidcCallbackHandler(w http.ResponseWriter, r *http.Request) {
 	).Scan(&newUserID)
 	if err != nil {
 		log.Printf("oidc: user creation failed: %v", err)
-		oidcErrorRedirect(w, r, "failed to create account")
+		oidcErrorRedirectTo(w, r, mobile, "failed to create account")
 		return
 	}
 	if _, err = tx.Exec(ctx, "INSERT INTO settings (user_id) VALUES ($1)", newUserID); err != nil {
 		log.Printf("oidc: settings creation failed: %v", err)
-		oidcErrorRedirect(w, r, "failed to create account")
+		oidcErrorRedirectTo(w, r, mobile, "failed to create account")
 		return
 	}
 	if err = db.SeedDefaultData(ctx, tx, newUserID); err != nil {
 		log.Printf("oidc: default data seed failed: %v", err)
-		oidcErrorRedirect(w, r, "failed to create account")
+		oidcErrorRedirectTo(w, r, mobile, "failed to create account")
 		return
 	}
 	if err = tx.Commit(ctx); err != nil {
-		oidcErrorRedirect(w, r, "failed to create account")
+		oidcErrorRedirectTo(w, r, mobile, "failed to create account")
 		return
 	}
 	log.Printf("oidc: created new user %s for subject %s", newUserID, claims.Sub)
-	issueOidcSession(w, r, ctx, pool, newUserID, email, claims)
+	issueOidcSession(w, r, ctx, pool, newUserID, email, claims, mobile)
 }
 
-func issueOidcSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, email string, claims oidcClaims) {
+func issueOidcSession(w http.ResponseWriter, r *http.Request, ctx context.Context, pool *pgxpool.Pool, userID uuid.UUID, email string, claims oidcClaims, mobile bool) {
 	// Keep profile data fresh on every sign-in.
 	_, _ = pool.Exec(ctx,
 		"UPDATE users SET display_name = COALESCE(NULLIF($1, ''), display_name), avatar_url = COALESCE(NULLIF($2, ''), avatar_url), updated_at = now() WHERE id = $3",
 		claims.Name, claims.Picture, userID,
 	)
-	token, err := middleware.GenerateToken(userID)
+	// Mobile sessions get the long-lived token, matching password login.
+	var token string
+	var err error
+	if mobile {
+		token, err = middleware.GenerateTokenWithLifetime(userID, middleware.MobileTokenLifetime)
+	} else {
+		token, err = middleware.GenerateToken(userID)
+	}
 	if err != nil {
-		oidcErrorRedirect(w, r, "failed to issue session")
+		oidcErrorRedirectTo(w, r, mobile, "failed to issue session")
 		return
 	}
-	redirect := fmt.Sprintf("%s/?oidc=success&oidc_token=%s&oidc_email=%s",
-		frontendURL(), url.QueryEscape(token), url.QueryEscape(email))
+	base := frontendURL() + "/"
+	if mobile {
+		base = mobileDeepLink
+	}
+	redirect := fmt.Sprintf("%s?oidc=success&oidc_token=%s&oidc_email=%s",
+		base, url.QueryEscape(token), url.QueryEscape(email))
 	http.Redirect(w, r, redirect, http.StatusFound)
 }
 

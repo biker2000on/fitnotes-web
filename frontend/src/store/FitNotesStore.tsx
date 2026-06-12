@@ -3058,25 +3058,22 @@ export function useFitNotesController() {
     }
   }, [token]);
 
-  // OIDC return: /api/auth/oidc/callback redirects back to the SPA with a
-  // fresh JWT (or an error) in the query string, mirroring the Withings flow.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+  // OIDC return, shared by both transports: the web flow lands back on the
+  // SPA with query params; the mobile flow returns via the fitnotes://oidc
+  // deep link with the same params.
+  const completeOidcAuth = (params: URLSearchParams): boolean => {
     const oidcToken = params.get('oidc_token');
     const oidcError = params.get('oidc_error');
     const oidcLinked = params.get('oidc') === 'linked';
-    if (!oidcToken && !oidcError && !oidcLinked) return;
-
-    const newUrl = window.location.pathname + window.location.hash;
-    window.history.replaceState({}, document.title, newUrl);
+    if (!oidcToken && !oidcError && !oidcLinked) return false;
 
     if (oidcError) {
       triggerToast(`Single sign-on failed: ${oidcError}`, 'error');
-      return;
+      return true;
     }
     if (oidcLinked) {
       triggerToast('Single sign-on identity linked to your account!');
-      return;
+      return true;
     }
     if (oidcToken) {
       const email = params.get('oidc_email') || '';
@@ -3106,6 +3103,54 @@ export function useFitNotesController() {
         triggerToast('Signed in with single sign-on!');
       })();
     }
+    return true;
+  };
+
+  // Web transport: query params on the SPA URL (mirrors the Withings flow).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (completeOidcAuth(params)) {
+      const newUrl = window.location.pathname + window.location.hash;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+
+  // Mobile transport: deep links delivered by the OS after the system-browser
+  // sign-in. Covers both a running app (onOpenUrl) and a cold start by the
+  // link itself (getCurrent); the handled-set dedupes overlap between them.
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const handled = new Set<string>();
+
+    const handleUrls = (urls: string[] | null | undefined) => {
+      for (const raw of urls ?? []) {
+        if (!raw || handled.has(raw)) continue;
+        handled.add(raw);
+        try {
+          const u = new URL(raw);
+          if (u.protocol !== 'fitnotes:') continue;
+          completeOidcAuth(u.searchParams);
+        } catch (e) {
+          console.warn('Ignoring malformed deep link:', raw, e);
+        }
+      }
+    };
+
+    import('@tauri-apps/plugin-deep-link')
+      .then(async ({ onOpenUrl, getCurrent }) => {
+        handleUrls(await getCurrent().catch(() => null));
+        const un = await onOpenUrl(handleUrls);
+        if (disposed) un();
+        else unlisten = un;
+      })
+      .catch((e) => console.warn('Deep link listener unavailable:', e));
+
+    return () => {
+      disposed = true;
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // Bodyweight Logger

@@ -1277,6 +1277,10 @@ fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Deep links (fitnotes://oidc) carry the OIDC session back from the
+        // system browser; opener launches that browser for the passkey flow.
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             // Setup local sqlite file inside user App Data directory
             let app_data_dir = app.path().app_data_dir().expect("Failed to get app data dir");
