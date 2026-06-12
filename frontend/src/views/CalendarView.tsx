@@ -6,6 +6,7 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { getLocalDateString } from '../lib/date';
+import { FilterCombobox } from '../components/FilterCombobox';
 import type { RoutineSection } from '../types';
 
 export function CalendarView() {
@@ -237,25 +238,35 @@ export function CalendarView() {
           <button className={`btn ${view === 'list' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setView('list')}>
             <List size={14} /> History
           </button>
-          <select value={filter} onChange={e => setFilter(e.target.value)} style={{ padding: '6px', marginLeft: 'auto', maxWidth: '220px', borderRadius: '8px', border: '1px solid var(--border-dark)' }}>
-            <option value="">All workouts</option>
-            <optgroup label="Routines">
-              {routines.map(r => <option key={r.id} value={`rt:${r.id}`}>{r.name}</option>)}
-            </optgroup>
-            <optgroup label="Routine Days">
-              {routineSections.map(sec => {
-                const parent = routines.find(r => r.id === sec.routine_id);
-                if (!parent) return null;
-                return <option key={sec.id} value={`rts:${sec.id}`}>{parent.name} - {sec.name}</option>;
-              })}
-            </optgroup>
-            <optgroup label="Categories">
-              {categories.map(c => <option key={c.id} value={`cat:${c.id}`}>{c.name}</option>)}
-            </optgroup>
-            <optgroup label="Exercises">
-              {exercises.map(ex => <option key={ex.id} value={`ex:${ex.id}`}>{ex.name}</option>)}
-            </optgroup>
-          </select>
+          <FilterCombobox
+            className="calendar-filter-combobox"
+            value={filter}
+            onChange={setFilter}
+            placeholder="All workouts"
+            groups={[
+              {
+                label: 'Routines',
+                options: routines.map(r => ({ value: `rt:${r.id}`, label: r.name })),
+              },
+              {
+                label: 'Routine Days',
+                options: routineSections
+                  .map(sec => {
+                    const parent = routines.find(r => r.id === sec.routine_id);
+                    return parent ? { value: `rts:${sec.id}`, label: `${parent.name} - ${sec.name}` } : null;
+                  })
+                  .filter((o): o is { value: string; label: string } => o !== null),
+              },
+              {
+                label: 'Categories',
+                options: categories.map(c => ({ value: `cat:${c.id}`, label: c.name })),
+              },
+              {
+                label: 'Exercises',
+                options: exercises.map(ex => ({ value: `ex:${ex.id}`, label: ex.name })),
+              },
+            ]}
+          />
         </div>
 
         {view === 'list' ? (
