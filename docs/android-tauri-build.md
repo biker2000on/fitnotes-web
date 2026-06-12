@@ -98,26 +98,26 @@ INSTALL_PARSE_FAILED_NO_CERTIFICATES
 
 Use debug builds for local sideloading until release signing is configured.
 
-## OIDC deep link (required manifest edit)
+## OIDC deep link
 
-`mobile/src-tauri/gen/android` is NOT tracked in git. After regenerating it
-with `cargo tauri android init`, re-add the OIDC deep-link intent filter to
-`gen/android/app/src/main/AndroidManifest.xml` inside the `MainActivity`
-element (next to the LAUNCHER intent-filter):
+The `fitnotes://` scheme is registered via the deep-link plugin's `mobile`
+config in `tauri.conf.json` — the plugin both generates the Android
+intent-filter (between its AUTO-GENERATED markers in the manifest) and
+gates runtime delivery on that same config:
 
-```xml
-<!-- OIDC deep link: the backend callback redirects the system
-     browser to fitnotes://oidc?... to hand the session back. -->
-<intent-filter>
-    <action android:name="android.intent.action.VIEW" />
-    <category android:name="android.intent.category.DEFAULT" />
-    <category android:name="android.intent.category.BROWSABLE" />
-    <data android:scheme="fitnotes" />
-</intent-filter>
+```json
+"plugins": {
+  "deep-link": {
+    "mobile": [{ "scheme": ["fitnotes"] }],
+    "desktop": { "schemes": ["fitnotes"] }
+  }
+}
 ```
 
-Without it, "Sign in with Pocket ID" completes in the browser but never
-returns to the app. The deep link is consumed by the
+Gotcha: a `desktop.schemes`-only config compiles and the OS even routes the
+intent to the app, but the plugin's Android handler drops any URL that does
+not match a `mobile` entry (`isDeepLink()` returns false when the list is
+empty), so JS never sees it. The deep link is consumed by the
 `@tauri-apps/plugin-deep-link` listener in `frontend/src/store/FitNotesStore.tsx`.
 
 ## Repo-specific gotchas
