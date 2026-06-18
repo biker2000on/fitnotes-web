@@ -13,6 +13,7 @@ import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type { RoutineSection } from '../types';
+import { addDays } from '../lib/date';
 
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
 
@@ -96,16 +97,68 @@ export function WorkoutLogView() {
     handleMarkAllComplete, handleMarkExerciseComplete,
     setShowPlateCalc, setShowCommandPalette, setShowRoutineImportModal, setShowCopyWorkoutDrawer,
     setSelectedExIdsForSuperset, setShowSupersetManagerModal,
-    workoutGroups, groupExercises, exercises, categories, selectedDate, handleClearGroup,
+    workoutGroups, groupExercises, exercises, categories, selectedDate, setSelectedDate, handleClearGroup,
     workoutComment, setWorkoutComment, handleSaveComment,
     settings, logComment, setLogComment, handleCopyPreviousSet, handleClearDay,
-    startRestTimer, shareWorkout,
+    startRestTimer, shareWorkout, triggerToast,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
     setHistoryExerciseId,
     workoutRoutines, routines,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
+
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) return;
+    
+    // Ignore swipe if started inside interactive element, sets table cells, or drag handles
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('select') ||
+      target.closest('textarea') ||
+      target.closest('.set-td') ||
+      target.closest('[data-rbd-drag-handle-context-id]') ||
+      target.closest('.workout-history-btn') ||
+      target.closest('.complete-all-icon-btn') ||
+      target.closest('.summary-action-btn')
+    ) {
+      return;
+    }
+
+    setTouchStart({
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY,
+    });
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStart) return;
+    if (e.changedTouches.length !== 1) {
+      setTouchStart(null);
+      return;
+    }
+
+    const diffX = e.changedTouches[0].clientX - touchStart.x;
+    const diffY = e.changedTouches[0].clientY - touchStart.y;
+    setTouchStart(null);
+
+    const threshold = 50;
+    if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX > 0) {
+        // Swipe right -> Go back 1 day
+        setSelectedDate(addDays(selectedDate, -1));
+        triggerToast('Moved back 1 day');
+      } else {
+        // Swipe left -> Go forward 1 day
+        setSelectedDate(addDays(selectedDate, 1));
+        triggerToast('Moved forward 1 day');
+      }
+    }
+  };
 
   // Routine day-splits linked to the selected date (for the summary badge).
   // Section names live in routine_sections, which isn't global store state.
@@ -160,7 +213,11 @@ export function WorkoutLogView() {
   };
 
   return (
-    <div className="workout-grid">
+    <div 
+      className="workout-grid"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="workout-mobile-sync-row">
         <WorkoutSyncIndicator />
       </div>
