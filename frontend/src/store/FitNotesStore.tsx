@@ -2107,8 +2107,9 @@ export function useFitNotesController() {
   };
 
   // 7 Dynamic Exercise Types formatter
-  const formatLogValue = (log: TrainingLog, typeId: number) => {
-    const hasWeightValue = log.metric_weight !== null && log.metric_weight > 0;
+  const formatLogValue = (log: TrainingLog, typeId: number | string) => {
+    const id = Number(typeId);
+    const hasWeightValue = log.metric_weight !== null && Number(log.metric_weight) > 0;
     const weightStr = hasWeightValue ? `${displayWeight(log.metric_weight, log.unit)}` : '';
     const repsStr = log.reps !== null ? `${log.reps} reps` : '';
     const distStr = log.distance !== null
@@ -2117,7 +2118,7 @@ export function useFitNotesController() {
     const durStr = log.duration_seconds !== null ? `${Math.floor(log.duration_seconds / 60)}m ${log.duration_seconds % 60}s` : '';
     const distanceTimeStr = distStr && durStr ? `${distStr} in ${durStr}` : distStr || durStr;
 
-    switch (typeId) {
+    switch (id) {
       case 0: // Weight & Reps
         if (!hasWeightValue && repsStr) return repsStr;
         return `${weightStr} x ${repsStr}`;

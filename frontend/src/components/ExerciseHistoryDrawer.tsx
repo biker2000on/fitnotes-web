@@ -23,7 +23,7 @@ export function ExerciseHistoryDrawer() {
   const [dragCurrent, setDragCurrent] = useState<number | null>(null);
 
   const exercise = exercises.find(e => e.id === historyExerciseId) ?? null;
-  const exerciseTypeId = exercise?.exercise_type_id ?? 0;
+  const exerciseTypeId = Number(exercise?.exercise_type_id ?? 0);
   const hasWeight = typeHasWeight(exerciseTypeId);
   const hasReps = typeHasReps(exerciseTypeId);
   const hasDistance = typeHasDistance(exerciseTypeId);

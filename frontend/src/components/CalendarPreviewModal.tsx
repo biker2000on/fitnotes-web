@@ -97,7 +97,7 @@ export const CalendarPreviewModal: React.FC<CalendarPreviewModalProps> = ({
                           <span style={{ fontWeight: 800, opacity: 0.6 }}>#{index + 1}</span>
                           <span>
                             {(() => {
-                              const typeId = ex.exercise_type_id;
+                              const typeId = Number(ex.exercise_type_id);
                               switch (typeId) {
                                 case 1: return `${displayWeight(log.metric_weight, log.unit)} x ${log.reps}`;
                                 case 2: return `${log.reps} reps`;
