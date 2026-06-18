@@ -468,32 +468,6 @@ export default function App() {
             <div className={`header-actions ${activeTab === 'log' || activeTab === 'exercises' ? 'mobile-bottom-actions' : ''} ${activeTab === 'exercises' ? 'mobile-exercise-actions' : ''}`} style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
               {activeTab === 'log' && (
                 <>
-                  <button className="btn btn-primary mobile-action-primary" onClick={() => setShowCommandPalette(true)} title="Select Exercise" aria-label="Select Exercise" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Dumbbell size={16} /> Select Exercise (Ctrl+K)
-                  </button>
-                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => setShowRoutineImportModal(true)} title="Load Routine" aria-label="Load Routine">
-                    <Bookmark size={16} /> Load Routine
-                  </button>
-                  <button className="btn btn-secondary mobile-action-comments" title="Workout Comments" aria-label="Workout Comments" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-workout-comments'))}>
-                    <MessageSquare size={16} />
-                  </button>
-                </>
-              )}
-              {activeTab === 'exercises' && (
-                <>
-                  <button className="btn btn-primary mobile-action-primary" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-create-exercise'))} title="Create Exercise" aria-label="Create Exercise">
-                    <Plus size={16} /> Create Exercise
-                  </button>
-                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => { setNewCatName(''); setNewCatColor('#6366f1'); setShowCatModal(true); }} title="Add Category" aria-label="Add Category">
-                    <FolderPlus size={16} /> Add Category
-                  </button>
-                  <button className="btn btn-secondary mobile-action-tertiary" onClick={() => setShowManageCatsModal(true)} title="Manage Categories" aria-label="Manage Categories">
-                    <SettingsIcon size={16} /> Manage Categories
-                  </button>
-                </>
-              )}
-              {activeTab === 'log' && (
-                <>
                   <div className="date-nav-actions" style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px' }} title="Subtract 1 Day" onClick={() => {
                       setSelectedDate(addDays(selectedDate, -1));
@@ -511,7 +485,29 @@ export default function App() {
                       setSelectedDate(getLocalDateString());
                     }}><CalendarDays size={16} /><span className="desktop-label">Today</span></button>
                   </div>
+                  <button className="btn btn-secondary mobile-action-comments" title="Workout Comments" aria-label="Workout Comments" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-workout-comments'))}>
+                    <MessageSquare size={16} />
+                  </button>
+                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => setShowRoutineImportModal(true)} title="Load Routine" aria-label="Load Routine">
+                    <Bookmark size={16} /> Load Routine
+                  </button>
+                  <button className="btn btn-primary mobile-action-primary" onClick={() => setShowCommandPalette(true)} title="Select Exercise" aria-label="Select Exercise" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Dumbbell size={16} /> Select Exercise (Ctrl+K)
+                  </button>
                   <SyncStatusIndicator />
+                </>
+              )}
+              {activeTab === 'exercises' && (
+                <>
+                  <button className="btn btn-primary mobile-action-primary" onClick={() => window.dispatchEvent(new CustomEvent('fitnotes:open-create-exercise'))} title="Create Exercise" aria-label="Create Exercise">
+                    <Plus size={16} /> Create Exercise
+                  </button>
+                  <button className="btn btn-secondary mobile-action-secondary" onClick={() => { setNewCatName(''); setNewCatColor('#6366f1'); setShowCatModal(true); }} title="Add Category" aria-label="Add Category">
+                    <FolderPlus size={16} /> Add Category
+                  </button>
+                  <button className="btn btn-secondary mobile-action-tertiary" onClick={() => setShowManageCatsModal(true)} title="Manage Categories" aria-label="Manage Categories">
+                    <SettingsIcon size={16} /> Manage Categories
+                  </button>
                 </>
               )}
             </div>
