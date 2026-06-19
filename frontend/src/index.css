@@ -300,6 +300,12 @@ body.light-theme .title-section p {
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
+  will-change: transform, opacity;
+}
+
+.workout-grid.swiping {
+  transition: none !important;
 }
 
 @media (max-width: 1200px) {

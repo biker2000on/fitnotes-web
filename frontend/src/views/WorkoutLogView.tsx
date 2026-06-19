@@ -109,8 +109,13 @@ export function WorkoutLogView() {
   const [showEntryModal, setShowEntryModal] = useState(false);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const isSwipingRef = useRef<boolean>(false);
+  const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length !== 1) return;
 
@@ -143,47 +148,99 @@ export function WorkoutLogView() {
         x: e.touches[0].clientX,
         y: e.touches[0].clientY,
       };
+      isSwipingRef.current = false;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const touchStart = touchStartRef.current;
+      if (!touchStart) return;
+
+      const currentX = e.touches[0].clientX;
+      const currentY = e.touches[0].clientY;
+      const diffX = currentX - touchStart.x;
+      const diffY = currentY - touchStart.y;
+
+      if (!isSwipingRef.current) {
+        if (Math.abs(diffX) > 10) {
+          if (Math.abs(diffX) > Math.abs(diffY)) {
+            isSwipingRef.current = true;
+            grid.classList.add('swiping');
+          } else {
+            touchStartRef.current = null;
+            return;
+          }
+        } else if (Math.abs(diffY) > 10) {
+          touchStartRef.current = null;
+          return;
+        }
+      }
+
+      if (isSwipingRef.current) {
+        if (e.cancelable) e.preventDefault();
+        grid.style.transform = `translateX(${diffX}px)`;
+        grid.style.opacity = String(Math.max(0.5, 1 - Math.abs(diffX) / window.innerWidth));
+      }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
       const touchStart = touchStartRef.current;
-      if (!touchStart) return;
+      const isSwiping = isSwipingRef.current;
       touchStartRef.current = null;
+      isSwipingRef.current = false;
 
-      if (e.changedTouches.length !== 1) return;
+      if (!touchStart || !isSwiping) return;
 
-      if (
-        document.querySelector('.modal-overlay') || 
-        document.querySelector('.sidebar-backdrop.open')
-      ) {
+      grid.classList.remove('swiping');
+
+      if (e.changedTouches.length !== 1) {
+        grid.style.transform = '';
+        grid.style.opacity = '';
         return;
       }
 
       const diffX = e.changedTouches[0].clientX - touchStart.x;
-      const diffY = e.changedTouches[0].clientY - touchStart.y;
+      const threshold = 80;
 
-      const threshold = 50;
-      if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
-        if (diffX > 0) {
-          // Swipe right -> Go back 1 day
-          setSelectedDate(addDays(selectedDate, -1));
-          triggerToast('Moved back 1 day');
-        } else {
-          // Swipe left -> Go forward 1 day
-          setSelectedDate(addDays(selectedDate, 1));
-          triggerToast('Moved forward 1 day');
-        }
+      if (Math.abs(diffX) > threshold) {
+        const direction = diffX > 0 ? 1 : -1;
+        
+        grid.style.transform = `translateX(${direction * 100}vw)`;
+        grid.style.opacity = '0';
+
+        setTimeout(() => {
+          const dateChange = direction > 0 ? -1 : 1;
+          setSelectedDate((prevDate) => {
+            const nextDate = addDays(prevDate, dateChange);
+            triggerToast(direction > 0 ? 'Moved back 1 day' : 'Moved forward 1 day');
+            return nextDate;
+          });
+
+          grid.classList.add('swiping');
+          grid.style.transform = `translateX(${-direction * 100}vw)`;
+          grid.style.opacity = '0';
+
+          grid.getBoundingClientRect();
+
+          grid.classList.remove('swiping');
+          grid.style.transform = 'translateX(0)';
+          grid.style.opacity = '1';
+        }, 250);
+      } else {
+        grid.style.transform = '';
+        grid.style.opacity = '';
       }
     };
 
-    window.addEventListener('touchstart', handleTouchStart, { passive: true });
-    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+    window.addEventListener('touchstart', handleTouchStart);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [selectedDate, setSelectedDate, triggerToast]);
+  }, [setSelectedDate, triggerToast]);
 
   // Routine day-splits linked to the selected date (for the summary badge).
   // Section names live in routine_sections, which isn't global store state.
@@ -277,7 +334,7 @@ export function WorkoutLogView() {
   };
 
   return (
-    <div className="workout-grid">
+    <div className="workout-grid" ref={gridRef}>
       <div className="workout-mobile-sync-row">
         <WorkoutSyncIndicator />
       </div>
