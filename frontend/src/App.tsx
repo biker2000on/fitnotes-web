@@ -571,15 +571,6 @@ export default function App() {
           setSelectedExercise(ex);
           setShowCommandPalette(false);
           window.dispatchEvent(new CustomEvent('fitnotes:open-set-entry'));
-          // Automatically focus the appropriate logging input
-          setTimeout(() => {
-            const inputId = typeHasWeight(ex.exercise_type_id) ? 'log-weight-input' : 'log-distance-input';
-            const inputEl = document.getElementById(inputId);
-            if (inputEl) {
-              (inputEl as HTMLInputElement).focus();
-              (inputEl as HTMLInputElement).select();
-            }
-          }, 80);
         }}
       />
 

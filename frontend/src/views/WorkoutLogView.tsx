@@ -193,6 +193,27 @@ export function WorkoutLogView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (showEntryModal && selectedExercise) {
+      setTimeout(() => {
+        let inputToFocus: HTMLInputElement | null = null;
+        if (typeHasWeight(selectedExercise.exercise_type_id)) {
+          inputToFocus = document.getElementById('log-weight-input') as HTMLInputElement;
+        } else if (typeHasReps(selectedExercise.exercise_type_id)) {
+          inputToFocus = document.getElementById('log-reps-input') as HTMLInputElement;
+        } else if (typeHasDistance(selectedExercise.exercise_type_id)) {
+          inputToFocus = document.getElementById('log-distance-input') as HTMLInputElement;
+        } else if (typeHasDuration(selectedExercise.exercise_type_id)) {
+          inputToFocus = document.getElementById('log-duration-min-input') as HTMLInputElement;
+        }
+        if (inputToFocus) {
+          inputToFocus.focus();
+          inputToFocus.select();
+        }
+      }, 50);
+    }
+  }, [showEntryModal, selectedExercise]);
+
   const submitSet = async () => {
     await handleAddSet();
   };
