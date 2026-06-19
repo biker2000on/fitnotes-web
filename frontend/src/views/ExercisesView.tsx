@@ -135,6 +135,15 @@ export function ExercisesView() {
   // visible and Esc exits. Single keys are ignored while typing in a field.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showCreateModal) {
+          setShowCreateModal(false);
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+      }
+
       const target = e.target as HTMLElement | null;
       const typing = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
 

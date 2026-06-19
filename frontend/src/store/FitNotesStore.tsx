@@ -676,6 +676,11 @@ export function useFitNotesController() {
         setShowCalendarPreviewModal(false);
         setShowPlateCalc(false);
         setConfirmOpen(false);
+        setShowBulkMoveModal(false);
+        setShowAddExToSectionModal(false);
+        setShowPastImporterModal(false);
+        setShowCopyWorkoutDrawer(false);
+        setActiveRoutineForPopulate(null);
         return;
       }
 

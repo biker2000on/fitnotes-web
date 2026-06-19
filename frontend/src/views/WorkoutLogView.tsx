@@ -214,6 +214,24 @@ export function WorkoutLogView() {
     }
   }, [showEntryModal, selectedExercise]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showEntryModal) {
+          cancelEntry();
+          e.stopPropagation();
+          e.preventDefault();
+        } else if (showCommentsModal) {
+          setShowCommentsModal(false);
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [showEntryModal, showCommentsModal, editingLog]);
+
   const submitSet = async () => {
     await handleAddSet();
   };

@@ -220,6 +220,18 @@ export function BodyView() {
     setXDomain(domainForPreset(rangePreset));
   }, [fullDomain, rangePreset]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showLogModal) {
+        setShowLogModal(false);
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showLogModal]);
+
   const setPreset = (preset: Exclude<TimeRangePreset, 'CUSTOM'>) => {
     setRangePreset(preset);
     setXDomain(domainForPreset(preset));
