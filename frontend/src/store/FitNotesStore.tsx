@@ -70,6 +70,8 @@ const getApiBaseUrl = () => {
   const configured = import.meta.env.VITE_API_BASE_URL;
   if (configured) return configured;
 
+  if (isTauri()) return 'https://fitnotes.adventureintandem.com';
+
   if (typeof window === 'undefined') return 'http://localhost:8080';
 
   const { hostname, port, origin } = window.location;

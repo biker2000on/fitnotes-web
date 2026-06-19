@@ -6,7 +6,7 @@ import {
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
   RefreshCw, WifiOff,
 } from 'lucide-react';
-import { useEffect, useState, type FocusEvent } from 'react';
+import { useEffect, useState, useRef, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
@@ -108,57 +108,82 @@ export function WorkoutLogView() {
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
 
-  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) return;
-    
-    // Ignore swipe if started inside interactive element, sets table cells, or drag handles
-    const target = e.target as HTMLElement;
-    if (
-      target.closest('button') ||
-      target.closest('input') ||
-      target.closest('select') ||
-      target.closest('textarea') ||
-      target.closest('.set-td') ||
-      target.closest('[data-rbd-drag-handle-context-id]') ||
-      target.closest('.workout-history-btn') ||
-      target.closest('.complete-all-icon-btn') ||
-      target.closest('.summary-action-btn')
-    ) {
-      return;
-    }
+  useEffect(() => {
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
 
-    setTouchStart({
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-    });
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStart) return;
-    if (e.changedTouches.length !== 1) {
-      setTouchStart(null);
-      return;
-    }
-
-    const diffX = e.changedTouches[0].clientX - touchStart.x;
-    const diffY = e.changedTouches[0].clientY - touchStart.y;
-    setTouchStart(null);
-
-    const threshold = 50;
-    if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX > 0) {
-        // Swipe right -> Go back 1 day
-        setSelectedDate(addDays(selectedDate, -1));
-        triggerToast('Moved back 1 day');
-      } else {
-        // Swipe left -> Go forward 1 day
-        setSelectedDate(addDays(selectedDate, 1));
-        triggerToast('Moved forward 1 day');
+      // Ignore swipes when modals or sidebar are open
+      if (
+        document.querySelector('.modal-overlay') || 
+        document.querySelector('.sidebar-backdrop.open')
+      ) {
+        return;
       }
-    }
-  };
+
+      // Ignore swipe if started inside interactive element, sets table cells, or drag handles
+      const target = e.target as HTMLElement;
+      if (
+        !target ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('textarea') ||
+        target.closest('.set-td') ||
+        target.closest('[data-rbd-drag-handle-context-id]') ||
+        target.closest('.workout-history-btn') ||
+        target.closest('.complete-all-icon-btn') ||
+        target.closest('.summary-action-btn')
+      ) {
+        return;
+      }
+
+      touchStartRef.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touchStart = touchStartRef.current;
+      if (!touchStart) return;
+      touchStartRef.current = null;
+
+      if (e.changedTouches.length !== 1) return;
+
+      if (
+        document.querySelector('.modal-overlay') || 
+        document.querySelector('.sidebar-backdrop.open')
+      ) {
+        return;
+      }
+
+      const diffX = e.changedTouches[0].clientX - touchStart.x;
+      const diffY = e.changedTouches[0].clientY - touchStart.y;
+
+      const threshold = 50;
+      if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
+        if (diffX > 0) {
+          // Swipe right -> Go back 1 day
+          setSelectedDate(addDays(selectedDate, -1));
+          triggerToast('Moved back 1 day');
+        } else {
+          // Swipe left -> Go forward 1 day
+          setSelectedDate(addDays(selectedDate, 1));
+          triggerToast('Moved forward 1 day');
+        }
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [selectedDate, setSelectedDate, triggerToast]);
 
   // Routine day-splits linked to the selected date (for the summary badge).
   // Section names live in routine_sections, which isn't global store state.
@@ -252,11 +277,7 @@ export function WorkoutLogView() {
   };
 
   return (
-    <div 
-      className="workout-grid"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
+    <div className="workout-grid">
       <div className="workout-mobile-sync-row">
         <WorkoutSyncIndicator />
       </div>
