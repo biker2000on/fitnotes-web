@@ -655,6 +655,7 @@ export default function App() {
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <input 
                           type="number" 
+                          placeholder="--"
                           value={item.weight} 
                           onChange={(e) => {
                             const updated = [...routineCreatorExercises];
@@ -666,6 +667,7 @@ export default function App() {
                         <span>{userUnit} x</span>
                         <input 
                           type="number" 
+                          placeholder="--"
                           value={item.reps} 
                           onChange={(e) => {
                             const updated = [...routineCreatorExercises];

@@ -472,8 +472,14 @@ export function useFitNotesController() {
     return weight / (1.0278 - 0.0278 * reps);
   };
 
-  const getHighest1RM = (exerciseId: string) => {
-    const activeExLogs = allLogs.filter(l => l.exercise_id === exerciseId && !l.is_deleted && l.metric_weight && l.reps);
+  const getHighest1RM = (exerciseId: string, beforeDate?: string) => {
+    const activeExLogs = allLogs.filter(l =>
+      l.exercise_id === exerciseId &&
+      !l.is_deleted &&
+      l.metric_weight &&
+      l.reps &&
+      (!beforeDate || l.date < beforeDate)
+    );
     if (activeExLogs.length === 0) return 0;
     
     let max1RM = 0;
@@ -1880,130 +1886,120 @@ export function useFitNotesController() {
     percentage: number = 75,
     sectionId?: string
   ) => {
+    const targetDate = selectedDateRef.current;
+    const defaultUnit = userUnit === 'kg' ? 1 : 2;
+    const findLastSessionLogs = (exerciseId: string) => {
+      const pastExLogs = allLogs.filter(l =>
+        l.exercise_id === exerciseId &&
+        !l.is_deleted &&
+        l.date < targetDate
+      );
+
+      if (pastExLogs.length === 0) return [];
+
+      const uniqueDates = Array.from(new Set(pastExLogs.map(l => l.date)))
+        .sort((a, b) => b.localeCompare(a));
+      return pastExLogs.filter(l => l.date === uniqueDates[0]);
+    };
+
+    const insertLogFromSource = async (
+      exerciseId: string,
+      source: Pick<TrainingLog | RoutineSectionExerciseSet, 'metric_weight' | 'reps' | 'distance' | 'duration_seconds' | 'unit'>,
+      overrides: Partial<TrainingLog> = {}
+    ) => {
+      const log: TrainingLog = {
+        id: uuidv4(),
+        exercise_id: exerciseId,
+        date: targetDate,
+        metric_weight: source.metric_weight,
+        reps: source.reps,
+        unit: source.unit ?? defaultUnit,
+        is_personal_record: false,
+        is_complete: false,
+        distance: source.distance,
+        duration_seconds: source.duration_seconds,
+        ...overrides
+      };
+      await db.execute('INSERT INTO training_logs', [log]);
+    };
+
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
     const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId) && !s.is_deleted).sort(bySortOrder);
+    let totalSetsLogged = 0;
 
     for (const sec of routineSecs) {
       const exList = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
       const secExs = exList.filter(x => x.routine_section_id === sec.id && !x.is_deleted).sort(bySortOrder);
       const importedExerciseIds = secExs.map(se => se.exercise_id);
+      let sectionSetsLogged = 0;
 
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
         const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted).sort(bySortOrder);
+        const lastSessionLogs = type === 'template' ? [] : findLastSessionLogs(se.exercise_id);
 
         if (type === 'template') {
           for (const s of exSets) {
-            const log: TrainingLog = {
-              id: uuidv4(),
-              exercise_id: se.exercise_id,
-              date: selectedDate,
-              metric_weight: s.metric_weight,
-              reps: s.reps,
-              unit: userUnit === 'kg' ? 1 : 2,
-              is_personal_record: false,
-              is_complete: false,
-              distance: s.distance,
-              duration_seconds: s.duration_seconds
-            };
-            await db.execute('INSERT INTO training_logs', [log]);
+            await insertLogFromSource(se.exercise_id, s, { routine_section_exercise_set_id: s.id });
+            sectionSetsLogged++;
+            totalSetsLogged++;
           }
         } else if (type === 'last_workout') {
-          const pastExLogs = allLogs.filter(l => 
-            l.exercise_id === se.exercise_id && 
-            !l.is_deleted && 
-            l.date !== selectedDate
-          );
-          
-          if (pastExLogs.length > 0) {
-            const uniqueDates = Array.from(new Set(pastExLogs.map(l => l.date)))
-              .sort((a, b) => b.localeCompare(a));
-            const lastDate = uniqueDates[0];
-            const lastSessionLogs = pastExLogs.filter(l => l.date === lastDate);
-            
+          if (lastSessionLogs.length > 0) {
             for (const lastLog of lastSessionLogs) {
-              const log: TrainingLog = {
-                id: uuidv4(),
-                exercise_id: se.exercise_id,
-                date: selectedDate,
-                metric_weight: lastLog.metric_weight,
-                reps: lastLog.reps,
-                unit: userUnit === 'kg' ? 1 : 2,
-                is_personal_record: false,
-                is_complete: false,
-                distance: lastLog.distance,
-                duration_seconds: lastLog.duration_seconds
-              };
-              await db.execute('INSERT INTO training_logs', [log]);
+              await insertLogFromSource(se.exercise_id, lastLog);
+              sectionSetsLogged++;
+              totalSetsLogged++;
             }
           } else {
             for (const s of exSets) {
-              const log: TrainingLog = {
-                id: uuidv4(),
-                exercise_id: se.exercise_id,
-                date: selectedDate,
-                metric_weight: s.metric_weight,
-                reps: s.reps,
-                unit: userUnit === 'kg' ? 1 : 2,
-                is_personal_record: false,
-                is_complete: false,
-                distance: s.distance,
-                duration_seconds: s.duration_seconds
-              };
-              await db.execute('INSERT INTO training_logs', [log]);
+              await insertLogFromSource(se.exercise_id, s, { routine_section_exercise_set_id: s.id });
+              sectionSetsLogged++;
+              totalSetsLogged++;
             }
           }
         } else if (type === 'one_rep_max') {
-          const highest1RM = getHighest1RM(se.exercise_id);
+          const highest1RM = getHighest1RM(se.exercise_id, targetDate);
           
           if (highest1RM > 0) {
             const targetWeight = highest1RM * (percentage / 100);
             const roundedWeight = Math.round(targetWeight / 2.5) * 2.5;
+            const usingTemplateSets = exSets.length > 0;
+            const sourceSets = usingTemplateSets ? exSets : lastSessionLogs;
 
-            for (const s of exSets) {
-              const log: TrainingLog = {
-                id: uuidv4(),
-                exercise_id: se.exercise_id,
-                date: selectedDate,
+            for (const s of sourceSets) {
+              await insertLogFromSource(se.exercise_id, s, {
                 metric_weight: roundedWeight,
-                reps: s.reps,
-                unit: userUnit === 'kg' ? 1 : 2,
-                is_personal_record: false,
-                is_complete: false,
-                distance: s.distance,
-                duration_seconds: s.duration_seconds
-              };
-              await db.execute('INSERT INTO training_logs', [log]);
+                routine_section_exercise_set_id: usingTemplateSets ? s.id : undefined
+              });
+              sectionSetsLogged++;
+              totalSetsLogged++;
             }
           } else {
             for (const s of exSets) {
-              const log: TrainingLog = {
-                id: uuidv4(),
-                exercise_id: se.exercise_id,
-                date: selectedDate,
-                metric_weight: s.metric_weight,
-                reps: s.reps,
-                unit: userUnit === 'kg' ? 1 : 2,
-                is_personal_record: false,
-                is_complete: false,
-                distance: s.distance,
-                duration_seconds: s.duration_seconds
-              };
-              await db.execute('INSERT INTO training_logs', [log]);
+              await insertLogFromSource(se.exercise_id, s, { routine_section_exercise_set_id: s.id });
+              sectionSetsLogged++;
+              totalSetsLogged++;
             }
           }
         }
       }
 
-      await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
-      await recordWorkoutRoutine(routineId, sec.id);
+      if (sectionSetsLogged > 0) {
+        await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
+        await recordWorkoutRoutine(routineId, sec.id, targetDate);
+      }
     }
 
     setShowRoutineImportModal(false);
     setActiveRoutineForPopulate(null);
     setActiveSectionForPopulate(null);
     await refreshData();
-    triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'template defaults'}.`);
+    if (totalSetsLogged > 0) {
+      triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'template defaults'}.`);
+    } else {
+      triggerToast('No routine sets were logged. Add template sets or log this exercise once before using history-based loading.', 'error');
+    }
   };
 
   // Bulk Edit / Mutation Handlers
@@ -2567,8 +2563,8 @@ export function useFitNotesController() {
       ...routineCreatorExercises,
       {
         exercise_id: selectedExForRoutine,
-        weight: '60',
-        reps: '10',
+        weight: '',
+        reps: '',
         sort_order: routineCreatorExercises.length + 1
       }
     ]);
@@ -2610,18 +2606,21 @@ export function useFitNotesController() {
       };
       await db.execute('INSERT INTO routine_section_exercises', [newRse]);
 
-      const rsesId = uuidv4();
-      const newRses: RoutineSectionExerciseSet = {
-        id: rsesId,
-        routine_section_exercise_id: rseId,
-        metric_weight: parseFloat(item.weight),
-        reps: parseInt(item.reps),
-        sort_order: 1,
-        distance: null,
-        duration_seconds: null,
-        unit: userUnit === 'kg' ? 1 : 2
-      };
-      await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
+      const hasTemplateSet = item.weight.trim() !== '' || item.reps.trim() !== '';
+      if (hasTemplateSet) {
+        const rsesId = uuidv4();
+        const newRses: RoutineSectionExerciseSet = {
+          id: rsesId,
+          routine_section_exercise_id: rseId,
+          metric_weight: item.weight.trim() === '' ? null : parseFloat(item.weight),
+          reps: item.reps.trim() === '' ? null : parseInt(item.reps),
+          sort_order: 1,
+          distance: null,
+          duration_seconds: null,
+          unit: userUnit === 'kg' ? 1 : 2
+        };
+        await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
+      }
     }
 
     setNewRoutineName('');
@@ -2795,18 +2794,6 @@ export function useFitNotesController() {
       populate_sets_type: 1
     };
     await db.execute('INSERT INTO routine_section_exercises', [newRse]);
-    
-    const newRses: RoutineSectionExerciseSet = {
-      id: uuidv4(),
-      routine_section_exercise_id: newRseId,
-      metric_weight: 60,
-      reps: 10,
-      sort_order: 1,
-      distance: null,
-      duration_seconds: null,
-      unit: userUnit === 'kg' ? 1 : 2
-    };
-    await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
     
     if (editingRoutine) {
       await loadEditorData(editingRoutine.id);
