@@ -10,7 +10,7 @@ interface ToastNotificationProps {
 export const ToastNotification: React.FC<ToastNotificationProps> = ({ show, message, type }) => {
   if (!show) return null;
   return (
-    <div style={{
+    <div className="toast-notification" style={{
       position: 'fixed',
       bottom: '24px',
       right: '24px',

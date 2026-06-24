@@ -448,6 +448,7 @@ class BrowserLocalDriver implements DBDriver {
     const getDirty = (table: string, uuidFields: string[] = []) => {
       return this.getStore(table)
         .filter(x => x.is_dirty === 1)
+        .filter(x => !isBuiltInSeedRow(table, x))
         .map(x => normalizeForSync(x, uuidFields));
     };
 

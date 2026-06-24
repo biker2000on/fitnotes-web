@@ -711,7 +711,7 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 		// the refresh token. Transient failures (network errors, 5xx, rate
 		// limits) must keep the credentials so the next sync can retry -
 		// deleting here is what silently reverted users to "Connect Scale".
-		if isWithingsAuthRejection(status) {
+		if isWithingsAuthRejection(status, err) {
 			_, _ = tx.Exec(ctx, "DELETE FROM withings_tokens WHERE user_id = $1 AND refresh_token = $2", userID, refreshToken)
 			_ = tx.Commit(ctx)
 			return "", fmt.Errorf("revoked/invalid refresh token: %w", err)
@@ -734,13 +734,22 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 	return newAccess, nil
 }
 
-// isWithingsAuthRejection reports whether a Withings OAuth status code means
-// the credentials are definitively invalid (as opposed to a transient error).
-// 100-102 are authentication failures, 401 is an invalid/expired token.
-func isWithingsAuthRejection(status int) bool {
+// isWithingsAuthRejection reports whether a Withings OAuth failure means the
+// credentials are definitively invalid (as opposed to a transient error).
+// 100-102 are authentication failures, 401 is an invalid/expired token. Withings
+// can also report an invalid refresh token as status 503 "Invalid Params".
+func isWithingsAuthRejection(status int, err error) bool {
 	switch status {
 	case 100, 101, 102, 401:
 		return true
+	}
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		if strings.Contains(message, "invalid refresh_token") ||
+			strings.Contains(message, "invalid_refresh_token") ||
+			strings.Contains(message, "invalid refresh token") {
+			return true
+		}
 	}
 	return false
 }

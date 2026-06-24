@@ -6,6 +6,8 @@ interface ConfirmationModalProps {
   message: string;
   onClose: () => void;
   onApprove: () => void;
+  approveLabel?: string;
+  tone?: 'default' | 'danger';
 }
 
 export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -13,14 +15,18 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   title,
   message,
   onClose,
-  onApprove
+  onApprove,
+  approveLabel = 'Confirm',
+  tone = 'default'
 }) => {
   if (!isOpen) return null;
+  const approveClassName = tone === 'danger' ? 'btn btn-danger' : 'btn btn-primary';
+  const titleColor = tone === 'danger' ? 'var(--danger)' : 'var(--text-primary-dark)';
   return (
     <div className="modal-overlay" style={{ zIndex: 99999 }} onClick={onClose}>
       <div className="modal-content" style={{ maxWidth: '400px', gap: '20px' }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ fontSize: '18px', fontWeight: 800, color: 'var(--danger)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          ⚠️ {title}
+        <h2 style={{ fontSize: '18px', fontWeight: 800, color: titleColor, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {title}
         </h2>
         <p style={{ fontSize: '14px', color: 'var(--text-secondary-dark)', lineHeight: 1.5 }}>
           {message}
@@ -29,15 +35,15 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
           <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>
             Cancel
           </button>
-          <button 
-            className="btn btn-danger" 
+          <button
+            className={approveClassName}
             style={{ flex: 1 }} 
             onClick={() => {
               onApprove();
               onClose();
             }}
           >
-            Delete
+            {approveLabel}
           </button>
         </div>
       </div>

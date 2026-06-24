@@ -270,7 +270,7 @@ export default function App() {
     selectedExIdsForSuperset, setSelectedExIdsForSuperset, supersetColor, setSupersetColor, handleCreateWorkoutSuperset,
     supersetName, setSupersetName, targetSupersetGroupId, setTargetSupersetGroupId, workoutGroups,
 
-    confirmOpen, setConfirmOpen, confirmTitle, confirmMessage, confirmOnApprove,
+    confirmOpen, setConfirmOpen, confirmTitle, confirmMessage, confirmOnApprove, confirmApproveLabel, confirmTone,
     showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, handleCopyWorkoutConfirm,
     showRoutineImportModal, activeRoutineForPopulate, setActiveRoutineForPopulate, handleImportRoutinePopulated,
     activeSectionForPopulate, setActiveSectionForPopulate,
@@ -1169,6 +1169,8 @@ export default function App() {
         message={confirmMessage}
         onClose={() => setConfirmOpen(false)}
         onApprove={confirmOnApprove || (() => {})}
+        approveLabel={confirmApproveLabel}
+        tone={confirmTone}
       />
 
       {/* Premium UI Upgrades: Drawers, Docks & Populator modals */}

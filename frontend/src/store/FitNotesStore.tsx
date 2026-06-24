@@ -441,11 +441,20 @@ export function useFitNotesController() {
   const [confirmTitle, setConfirmTitle] = useState('');
   const [confirmMessage, setConfirmMessage] = useState('');
   const [confirmOnApprove, setConfirmOnApprove] = useState<(() => void) | null>(null);
+  const [confirmApproveLabel, setConfirmApproveLabel] = useState('Confirm');
+  const [confirmTone, setConfirmTone] = useState<'default' | 'danger'>('default');
 
-  const triggerConfirm = (title: string, msg: string, onApprove: () => void) => {
+  const triggerConfirm = (
+    title: string,
+    msg: string,
+    onApprove: () => void,
+    options: { approveLabel?: string; tone?: 'default' | 'danger' } = {},
+  ) => {
     setConfirmTitle(title);
     setConfirmMessage(msg);
     setConfirmOnApprove(() => onApprove);
+    setConfirmApproveLabel(options.approveLabel || 'Confirm');
+    setConfirmTone(options.tone || 'default');
     setConfirmOpen(true);
   };
 
@@ -906,25 +915,6 @@ export function useFitNotesController() {
         }
       }
 
-      // 3. Seed Default Routine Template
-      const localRoutines = await db.query<Routine>('SELECT * FROM routines');
-      if (localRoutines.length === 0) {
-        const defaultRoutine = { id: 'r-ppl-push', name: 'PPL - Push Day A', notes: 'Focus on progressive overload on bench press and overhead shoulders' };
-        await db.execute('INSERT INTO routines', [defaultRoutine]);
-
-        const defaultSection = { id: 'rs-push', routine_id: 'r-ppl-push', name: 'Main Power Work', sort_order: 1 };
-        await db.execute('INSERT INTO routine_sections', [defaultSection]);
-
-        const rse1 = { id: 'rse-1', routine_section_id: 'rs-push', exercise_id: 'e-flat-barbell-bench-press', sort_order: 1, populate_sets_type: 1 };
-        const rse2 = { id: 'rse-2', routine_section_id: 'rs-push', exercise_id: 'e-overhead-press', sort_order: 2, populate_sets_type: 1 };
-        await db.execute('INSERT INTO routine_section_exercises', [rse1]);
-        await db.execute('INSERT INTO routine_section_exercises', [rse2]);
-
-        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-1', routine_section_exercise_id: 'rse-1', metric_weight: 80, reps: 5, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
-        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-2', routine_section_exercise_id: 'rse-1', metric_weight: 80, reps: 5, sort_order: 2, distance: null, duration_seconds: null, unit: 1 }]);
-        await db.execute('INSERT INTO routine_section_exercise_sets', [{ id: 'rses-3', routine_section_exercise_id: 'rse-2', metric_weight: 50, reps: 8, sort_order: 1, distance: null, duration_seconds: null, unit: 1 }]);
-      }
-
       await refreshData();
     };
 
@@ -999,20 +989,25 @@ export function useFitNotesController() {
       }
     }
 
-    setCategories(cats);
+    const activeCats = cats.filter(c => !c.is_deleted);
+    const activeExercises = exs.filter(ex => !ex.is_deleted);
+    const activeRoutines = rts.filter(r => !r.is_deleted);
+    const activeMeasurements = meas.filter(m => !m.is_deleted);
+
+    setCategories(activeCats);
     setGoals(gls);
-    setMeasurements(meas);
-    setExercises(exs);
+    setMeasurements(activeMeasurements);
+    setExercises(activeExercises);
     if (isVisibleDate) setCurrentLogs(logs);
     setAllLogs(allLgs);
     setBodyWeights(weights);
-    setRoutines(rts);
+    setRoutines(activeRoutines);
     setWorkoutGroups(wGroups);
     setGroupExercises(wGroupExs);
     setWorkoutRoutines(wRoutines.filter(wr => !wr.is_deleted));
 
-    if (cats.length > 0 && !newExCategory) {
-      setNewExCategory(cats[0].id);
+    if (activeCats.length > 0 && !newExCategory) {
+      setNewExCategory(activeCats[0].id);
     }
 
     if (!isVisibleDate) return;
@@ -1685,7 +1680,7 @@ export function useFitNotesController() {
       for (const g of groups.filter(x => x.date === selectedDate && !x.is_deleted)) await db.execute('UPDATE workout_groups', [{ ...g, is_deleted: true }]);
       await refreshData();
       triggerToast('Day cleared.');
-    });
+    }, { approveLabel: 'Delete', tone: 'danger' });
   };
 
   // Per-exercise-per-day comment.
@@ -1745,6 +1740,7 @@ export function useFitNotesController() {
 
   // Copy workout selector handler
   const handleCopyWorkoutConfirm = async (sourceDate: string) => {
+    const targetDate = selectedDateRef.current;
     const sourceLogs = allLogs.filter(l => l.date === sourceDate && !l.is_deleted);
     if (sourceLogs.length === 0) {
       triggerToast('No active sets found for selected date!', 'error');
@@ -1753,6 +1749,8 @@ export function useFitNotesController() {
     
     const sourceGroups = workoutGroups.filter(g => g.date === sourceDate && !g.is_deleted);
     const sourceGroupExs = groupExercises.filter(ge => ge.date === sourceDate && !ge.is_deleted);
+    const sourceRoutineLinks = workoutRoutines.filter(wr => wr.date === sourceDate && !wr.is_deleted);
+    const targetRoutineLinks = workoutRoutines.filter(wr => wr.date === targetDate && !wr.is_deleted);
 
     const groupIdMap: Record<string, string> = {};
 
@@ -1762,7 +1760,7 @@ export function useFitNotesController() {
       const newGroup = {
         ...wg,
         id: newGroupId,
-        date: selectedDate,
+        date: targetDate,
         last_modified: new Date().toISOString()
       };
       await db.execute('INSERT INTO workout_groups', [newGroup]);
@@ -1774,7 +1772,7 @@ export function useFitNotesController() {
         const newGe = {
           ...ge,
           id: uuidv4(),
-          date: selectedDate,
+          date: targetDate,
           workout_group_id: newGroupId,
           last_modified: new Date().toISOString()
         };
@@ -1786,12 +1784,28 @@ export function useFitNotesController() {
       const newLog = {
         ...log,
         id: uuidv4(),
-        date: selectedDate,
+        date: targetDate,
         is_complete: false,
         is_personal_record: false,
         last_modified: new Date().toISOString()
       };
       await db.execute('INSERT INTO training_logs', [newLog]);
+    }
+
+    for (const wr of sourceRoutineLinks) {
+      const duplicate = targetRoutineLinks.some(existing =>
+        existing.routine_id === wr.routine_id &&
+        (existing.routine_section_id ?? null) === (wr.routine_section_id ?? null)
+      );
+      if (duplicate) continue;
+
+      const newRoutineLink: WorkoutRoutine = {
+        ...wr,
+        id: uuidv4(),
+        date: targetDate,
+        is_deleted: false,
+      };
+      await db.execute('INSERT INTO workout_routines', [newRoutineLink]);
     }
 
     setShowCopyWorkoutDrawer(false);
@@ -2289,7 +2303,8 @@ export function useFitNotesController() {
           await refreshData();
           triggerToast('Category deleted.');
         }
-      }
+      },
+      { approveLabel: 'Delete', tone: 'danger' },
     );
   };
 
@@ -2322,7 +2337,12 @@ export function useFitNotesController() {
     const typeChanged = newType !== editingExercise.exercise_type_id;
     const hasLogs = allLogs.some(l => l.exercise_id === editingExercise.id && !l.is_deleted);
     if (typeChanged && hasLogs) {
-      triggerConfirm('Change Exercise Type', 'This exercise has logged sets. Changing its type may hide values that no longer apply. Continue?', () => { doSave(); });
+      triggerConfirm(
+        'Change Exercise Type',
+        'This exercise has logged sets. Changing its type may hide values that no longer apply. Continue?',
+        () => { doSave(); },
+        { approveLabel: 'Save Changes' },
+      );
     } else {
       await doSave();
     }
@@ -2343,7 +2363,8 @@ export function useFitNotesController() {
           await refreshData();
           triggerToast('Exercise deleted.');
         }
-      }
+      },
+      { approveLabel: 'Delete', tone: 'danger' },
     );
   };
 
@@ -2663,7 +2684,8 @@ export function useFitNotesController() {
         }
         await refreshData();
         triggerToast('Routine deleted.');
-      }
+      },
+      { approveLabel: 'Delete', tone: 'danger' },
     );
   };
 
@@ -3311,7 +3333,8 @@ export function useFitNotesController() {
     previewDate, setPreviewDate, previewLogs, setPreviewLogs, previewComment, setPreviewComment, calendarYear, setCalendarYear,
     calendarMonth, setCalendarMonth, toastMessage, setToastMessage, toastType, setToastType, showToast, setShowToast,
     toastTimerId, setToastTimerId, confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
-    confirmOnApprove, setConfirmOnApprove, showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, activeRoutineForPopulate, setActiveRoutineForPopulate,
+    confirmOnApprove, setConfirmOnApprove, confirmApproveLabel, setConfirmApproveLabel, confirmTone, setConfirmTone,
+    showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, activeRoutineForPopulate, setActiveRoutineForPopulate,
     activeSectionForPopulate, setActiveSectionForPopulate,
     showBulkMoveModal, setShowBulkMoveModal, bulkMoveTargetDate, setBulkMoveTargetDate, expandedCategories, setExpandedCategories,
     editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId, showPastImporterModal, setShowPastImporterModal,

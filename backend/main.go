@@ -234,7 +234,10 @@ func runDailySync(ctx context.Context) {
 
 		if syncErr != nil {
 			log.Printf("Withings daily sync: Failed for user %s: %v", uid.String(), syncErr)
-		} else if count > 0 {
+			cancel()
+			continue
+		}
+		if count > 0 {
 			log.Printf("Withings daily sync: Successfully synced %d records for user %s", count, uid.String())
 		}
 

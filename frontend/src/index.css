@@ -942,6 +942,10 @@ body.light-theme .modal-content {
   }
 }
 
+.toast-notification {
+  max-width: min(420px, calc(100vw - 32px));
+}
+
 /* ---- Responsive helpers + mobile drawer (Tauri mobile / narrow webviews) ---- */
 .hamburger-btn {
   display: none;
@@ -1083,6 +1087,13 @@ body.light-theme .modal-content {
 
   .main-content.has-mobile-bottom-actions {
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .toast-notification {
+    left: 16px !important;
+    right: 16px !important;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    justify-content: center;
   }
 
   .header {
