@@ -647,7 +647,14 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 			tag, err := tx.Exec(ctx, `
 				INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
 				VALUES ($1, $2, $3, $4, $5, $6, NOW(), false)
-				ON CONFLICT (id) DO NOTHING
+				ON CONFLICT (id) DO UPDATE SET
+					date = EXCLUDED.date,
+					body_weight_metric = EXCLUDED.body_weight_metric,
+					body_fat = EXCLUDED.body_fat,
+					comments = EXCLUDED.comments,
+					last_modified = NOW(),
+					is_deleted = false
+				WHERE body_weights.user_id = EXCLUDED.user_id
 			`, recordID, userID, measDate, weightVal, bodyFatParam, "Synced from Withings")
 
 			if err != nil {
