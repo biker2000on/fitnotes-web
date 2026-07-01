@@ -707,7 +707,7 @@ export default function App() {
                 {routines.length === 0 ? (
                   <p style={{ textAlign: 'center', padding: '24px', color: 'var(--text-secondary-dark)' }}>No routines constructed yet.</p>
                 ) : (
-                  routines.map(r => (
+                  [...routines].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map(r => (
                     <button 
                       key={r.id} 
                       className="btn btn-secondary" 

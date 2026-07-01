@@ -9,6 +9,7 @@ import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet,
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
+type RoutineSortMode = 'nameAsc' | 'nameDesc' | 'lastCompleted' | 'mostCompleted';
 
 export function RoutinesView() {
   const {
@@ -27,15 +28,10 @@ export function RoutinesView() {
     groupExercises: WorkoutGroupExercise[];
   } | null>(null);
   const [routineFilter, setRoutineFilter] = useState('');
-
-  const filteredRoutines = useMemo(() => {
-    const needle = routineFilter.trim().toLowerCase();
-    if (!needle) return routines;
-    return routines.filter(r => [
-      r.name,
-      r.notes ?? '',
-    ].join(' ').toLowerCase().includes(needle));
-  }, [routineFilter, routines]);
+  const [routineSortMode, setRoutineSortMode] = useState<RoutineSortMode>(() => {
+    const saved = localStorage.getItem('fn_routine_sort_mode') as RoutineSortMode | null;
+    return saved === 'nameDesc' || saved === 'lastCompleted' || saved === 'mostCompleted' ? saved : 'nameAsc';
+  });
 
   // Per-routine and per-section completion stats from workout_routines links.
   const completionStats = useMemo(() => {
@@ -54,6 +50,36 @@ export function RoutinesView() {
     }
     return { byRoutine, bySection };
   }, [workoutRoutines]);
+
+  const filteredRoutines = useMemo(() => {
+    const needle = routineFilter.trim().toLowerCase();
+    const filtered = routines.filter(r => {
+      if (!needle) return true;
+      return [
+        r.name,
+        r.notes ?? '',
+      ].join(' ').toLowerCase().includes(needle);
+    });
+
+    const byName = (a: typeof routines[number], b: typeof routines[number]) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    return [...filtered].sort((a, b) => {
+      if (routineSortMode === 'nameDesc') return byName(b, a);
+      if (routineSortMode === 'lastCompleted') {
+        const lastCompare = (completionStats.byRoutine[b.id]?.last ?? '').localeCompare(completionStats.byRoutine[a.id]?.last ?? '');
+        return lastCompare || byName(a, b);
+      }
+      if (routineSortMode === 'mostCompleted') {
+        const countCompare = (completionStats.byRoutine[b.id]?.count ?? 0) - (completionStats.byRoutine[a.id]?.count ?? 0);
+        return countCompare || byName(a, b);
+      }
+      return byName(a, b);
+    });
+  }, [completionStats, routineFilter, routineSortMode, routines]);
+
+  const updateRoutineSortMode = (mode: RoutineSortMode) => {
+    setRoutineSortMode(mode);
+    localStorage.setItem('fn_routine_sort_mode', mode);
+  };
 
   // Compact read-only description of a template set, e.g. "100 kg x 5" or "5 km in 30m".
   const formatTemplateSet = (set: RoutineSectionExerciseSet, typeId: number): string => {
@@ -168,6 +194,17 @@ export function RoutinesView() {
             value={routineFilter}
             onChange={(e) => setRoutineFilter(e.target.value)}
           />
+          <select
+            value={routineSortMode}
+            onChange={(e) => updateRoutineSortMode(e.target.value as RoutineSortMode)}
+            aria-label="Sort routines"
+            style={{ width: 'auto', minWidth: '160px' }}
+          >
+            <option value="nameAsc">Sort: A-Z</option>
+            <option value="nameDesc">Sort: Z-A</option>
+            <option value="lastCompleted">Sort: Last Completed</option>
+            <option value="mostCompleted">Sort: Most Completed</option>
+          </select>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

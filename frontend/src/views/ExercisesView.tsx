@@ -8,6 +8,8 @@ import { intColorToHex } from '../lib/colors';
 import { getExerciseTypeLabel } from '../lib/units';
 import type { Exercise } from '../types';
 
+type ExerciseSortMode = 'name' | 'lastUsed' | 'workouts';
+
 export function ExercisesView() {
   const {
     categories, exercises, allLogs,
@@ -18,7 +20,10 @@ export function ExercisesView() {
     refreshData, triggerToast, triggerConfirm,
   } = useFitNotesStore();
 
-  const [sortMode, setSortMode] = useState<'name' | 'lastUsed' | 'workouts'>('name');
+  const [sortMode, setSortMode] = useState<ExerciseSortMode>(() => {
+    const saved = localStorage.getItem('fn_exercise_sort_mode') as ExerciseSortMode | null;
+    return saved === 'lastUsed' || saved === 'workouts' ? saved : 'name';
+  });
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -106,10 +111,21 @@ export function ExercisesView() {
 
   const sortExercises = (list: Exercise[]) => {
     const copy = [...list];
-    if (sortMode === 'lastUsed') copy.sort((a, b) => (exStats[b.id]?.lastUsed ?? '').localeCompare(exStats[a.id]?.lastUsed ?? ''));
-    else if (sortMode === 'workouts') copy.sort((a, b) => (exStats[b.id]?.workouts ?? 0) - (exStats[a.id]?.workouts ?? 0));
-    else copy.sort((a, b) => a.name.localeCompare(b.name));
+    const byName = (a: Exercise, b: Exercise) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    if (sortMode === 'lastUsed') copy.sort((a, b) => (exStats[b.id]?.lastUsed ?? '').localeCompare(exStats[a.id]?.lastUsed ?? '') || byName(a, b));
+    else if (sortMode === 'workouts') copy.sort((a, b) => ((exStats[b.id]?.workouts ?? 0) - (exStats[a.id]?.workouts ?? 0)) || byName(a, b));
+    else copy.sort(byName);
     return copy;
+  };
+
+  const sortedCategories = useMemo(
+    () => [...categories].filter(c => !c.is_deleted).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    [categories]
+  );
+
+  const updateSortMode = (mode: ExerciseSortMode) => {
+    setSortMode(mode);
+    localStorage.setItem('fn_exercise_sort_mode', mode);
   };
 
   const filteredExercises = useMemo(() => {
@@ -303,7 +319,7 @@ export function ExercisesView() {
             <button className={`btn ${favouritesOnly ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFavouritesOnly(v => !v)}>
               <Star size={15} fill={favouritesOnly ? 'currentColor' : 'transparent'} /> Favorites
             </button>
-            <select value={sortMode} onChange={e => setSortMode(e.target.value as typeof sortMode)}>
+            <select value={sortMode} onChange={e => updateSortMode(e.target.value as ExerciseSortMode)}>
               <option value="name">Sort: A-Z</option>
               <option value="lastUsed">Sort: Last Used</option>
               <option value="workouts">Sort: Most Workouts</option>
@@ -318,7 +334,7 @@ export function ExercisesView() {
           </div>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
             <option value="">All Categories</option>
-            {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {sortedCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
 
@@ -343,7 +359,7 @@ export function ExercisesView() {
             </div>
           )}
 
-          {categories.map(cat => {
+          {sortedCategories.map(cat => {
             const catColor = intColorToHex(cat.colour);
             const catExercises = sortExercises(filteredExercises.filter(x => x.category_id === cat.id));
             const isExpanded = expandedCategories[cat.id] !== false;
@@ -371,6 +387,34 @@ export function ExercisesView() {
               </div>
             );
           })}
+
+          {(() => {
+            const miscExercises = sortExercises(filteredExercises.filter(x => !x.category_id || !categories.some(c => c.id === x.category_id && !c.is_deleted)));
+            const isExpanded = expandedCategories.misc !== false;
+            if (hasFilters && miscExercises.length === 0) return null;
+
+            return (
+              <div className="category-section">
+                <div
+                  onClick={() => toggleCategoryExpand('misc')}
+                  className="exercise-category-header"
+                  style={{ borderLeftColor: 'var(--text-secondary-dark)' }}
+                >
+                  <span style={{ color: 'var(--text-secondary-dark)' }}>Misc ({miscExercises.length})</span>
+                  <span>{isExpanded ? 'Collapse' : 'Expand'}</span>
+                </div>
+                {isExpanded && (
+                  <div className="exercise-category-list">
+                    {miscExercises.length === 0 ? (
+                      <div className="empty-state-text">No exercises in this category.</div>
+                    ) : (
+                      miscExercises.map(ex => <ExerciseRow key={ex.id} ex={ex} />)
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {filteredExercises.length === 0 && (
             <div className="empty-state-text">No exercises match your filters.</div>
