@@ -30,18 +30,18 @@ type Category struct {
 }
 
 type Exercise struct {
-	ID                uuid.UUID  `json:"id"`
-	UserID            uuid.UUID  `json:"user_id"`
-	Name              string     `json:"name"`
-	CategoryID        *uuid.UUID `json:"category_id"`
-	ExerciseTypeID    int        `json:"exercise_type_id"`
-	Notes             *string    `json:"notes"`
-	WeightIncrement   *float64   `json:"weight_increment"`
-	DefaultRestTime   *int       `json:"default_rest_time"`
-	WeightUnitID      *int       `json:"weight_unit_id"`
-	IsFavourite       bool       `json:"is_favourite"`
-	LastModified      time.Time  `json:"last_modified"`
-	IsDeleted         bool       `json:"is_deleted"`
+	ID              uuid.UUID  `json:"id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	Name            string     `json:"name"`
+	CategoryID      *uuid.UUID `json:"category_id"`
+	ExerciseTypeID  int        `json:"exercise_type_id"`
+	Notes           *string    `json:"notes"`
+	WeightIncrement *float64   `json:"weight_increment"`
+	DefaultRestTime *int       `json:"default_rest_time"`
+	WeightUnitID    *int       `json:"weight_unit_id"`
+	IsFavourite     bool       `json:"is_favourite"`
+	LastModified    time.Time  `json:"last_modified"`
+	IsDeleted       bool       `json:"is_deleted"`
 }
 
 type Routine struct {
@@ -63,44 +63,44 @@ type RoutineSection struct {
 }
 
 type RoutineSectionExercise struct {
-	ID                uuid.UUID `json:"id"`
-	RoutineSectionID  uuid.UUID `json:"routine_section_id"`
-	ExerciseID        uuid.UUID `json:"exercise_id"`
-	SortOrder         int       `json:"sort_order"`
-	PopulateSetsType  int       `json:"populate_sets_type"`
-	LastModified      time.Time `json:"last_modified"`
-	IsDeleted         bool      `json:"is_deleted"`
+	ID               uuid.UUID `json:"id"`
+	RoutineSectionID uuid.UUID `json:"routine_section_id"`
+	ExerciseID       uuid.UUID `json:"exercise_id"`
+	SortOrder        int       `json:"sort_order"`
+	PopulateSetsType int       `json:"populate_sets_type"`
+	LastModified     time.Time `json:"last_modified"`
+	IsDeleted        bool      `json:"is_deleted"`
 }
 
 type RoutineSectionExerciseSet struct {
-	ID                        uuid.UUID `json:"id"`
-	RoutineSectionExerciseID  uuid.UUID `json:"routine_section_exercise_id"`
-	MetricWeight              *float64  `json:"metric_weight"`
-	Reps                      *int      `json:"reps"`
-	SortOrder                 int       `json:"sort_order"`
-	Distance                  *float64  `json:"distance"`
-	DurationSeconds           *int      `json:"duration_seconds"`
-	Unit                      *int      `json:"unit"`
-	LastModified              time.Time `json:"last_modified"`
-	IsDeleted                 bool      `json:"is_deleted"`
+	ID                       uuid.UUID `json:"id"`
+	RoutineSectionExerciseID uuid.UUID `json:"routine_section_exercise_id"`
+	MetricWeight             *float64  `json:"metric_weight"`
+	Reps                     *int      `json:"reps"`
+	SortOrder                int       `json:"sort_order"`
+	Distance                 *float64  `json:"distance"`
+	DurationSeconds          *int      `json:"duration_seconds"`
+	Unit                     *int      `json:"unit"`
+	LastModified             time.Time `json:"last_modified"`
+	IsDeleted                bool      `json:"is_deleted"`
 }
 
 type TrainingLog struct {
-	ID                           uuid.UUID  `json:"id"`
-	UserID                       uuid.UUID  `json:"user_id"`
-	ExerciseID                   uuid.UUID  `json:"exercise_id"`
-	Date                         string     `json:"date"` // YYYY-MM-DD format
-	MetricWeight                 *float64   `json:"metric_weight"`
-	Reps                         *int       `json:"reps"`
-	Unit                         *int       `json:"unit"`
-	RoutineSectionExerciseSetID  *uuid.UUID `json:"routine_section_exercise_set_id"`
-	IsPersonalRecord             bool       `json:"is_personal_record"`
-	IsComplete                   bool       `json:"is_complete"`
-	Distance                     *float64   `json:"distance"`
-	DurationSeconds              *int       `json:"duration_seconds"`
-	Comment                      *string    `json:"comment"`
-	LastModified                 time.Time  `json:"last_modified"`
-	IsDeleted                    bool       `json:"is_deleted"`
+	ID                          uuid.UUID  `json:"id"`
+	UserID                      uuid.UUID  `json:"user_id"`
+	ExerciseID                  uuid.UUID  `json:"exercise_id"`
+	Date                        string     `json:"date"` // YYYY-MM-DD format
+	MetricWeight                *float64   `json:"metric_weight"`
+	Reps                        *int       `json:"reps"`
+	Unit                        *int       `json:"unit"`
+	RoutineSectionExerciseSetID *uuid.UUID `json:"routine_section_exercise_set_id"`
+	IsPersonalRecord            bool       `json:"is_personal_record"`
+	IsComplete                  bool       `json:"is_complete"`
+	Distance                    *float64   `json:"distance"`
+	DurationSeconds             *int       `json:"duration_seconds"`
+	Comment                     *string    `json:"comment"`
+	LastModified                time.Time  `json:"last_modified"`
+	IsDeleted                   bool       `json:"is_deleted"`
 }
 
 type ExerciseComment struct {
@@ -157,27 +157,28 @@ type WorkoutRoutine struct {
 }
 
 type BodyWeight struct {
-	ID               uuid.UUID `json:"id"`
-	UserID           uuid.UUID `json:"user_id"`
-	Date             string    `json:"date"` // YYYY-MM-DD format
-	BodyWeightMetric float64   `json:"body_weight_metric"`
-	BodyFat          *float64  `json:"body_fat"`
-	Comments         *string   `json:"comments"`
-	LastModified     time.Time `json:"last_modified"`
-	IsDeleted        bool      `json:"is_deleted"`
+	ID               uuid.UUID  `json:"id"`
+	UserID           uuid.UUID  `json:"user_id"`
+	Date             string     `json:"date"` // YYYY-MM-DD format
+	MeasuredAt       *time.Time `json:"measured_at,omitempty"`
+	BodyWeightMetric float64    `json:"body_weight_metric"`
+	BodyFat          *float64   `json:"body_fat"`
+	Comments         *string    `json:"comments"`
+	LastModified     time.Time  `json:"last_modified"`
+	IsDeleted        bool       `json:"is_deleted"`
 }
 
 type WorkoutGroup struct {
-	ID                         uuid.UUID  `json:"id"`
-	UserID                     uuid.UUID  `json:"user_id"`
-	Name                       string     `json:"name"`
-	Date                       string     `json:"date"` // YYYY-MM-DD
-	Colour                     int        `json:"colour"`
-	RoutineSectionID           *uuid.UUID `json:"routine_section_id"`
-	AutoJumpEnabled            bool       `json:"auto_jump_enabled"`
-	RestTimerAutoStartEnabled  bool       `json:"rest_timer_auto_start_enabled"`
-	LastModified               time.Time  `json:"last_modified"`
-	IsDeleted                  bool       `json:"is_deleted"`
+	ID                        uuid.UUID  `json:"id"`
+	UserID                    uuid.UUID  `json:"user_id"`
+	Name                      string     `json:"name"`
+	Date                      string     `json:"date"` // YYYY-MM-DD
+	Colour                    int        `json:"colour"`
+	RoutineSectionID          *uuid.UUID `json:"routine_section_id"`
+	AutoJumpEnabled           bool       `json:"auto_jump_enabled"`
+	RestTimerAutoStartEnabled bool       `json:"rest_timer_auto_start_enabled"`
+	LastModified              time.Time  `json:"last_modified"`
+	IsDeleted                 bool       `json:"is_deleted"`
 }
 
 type WorkoutGroupExercise struct {
@@ -192,21 +193,21 @@ type WorkoutGroupExercise struct {
 }
 
 type Goal struct {
-	ID              uuid.UUID  `json:"id"`
-	UserID          uuid.UUID  `json:"user_id"`
-	TypeID          int        `json:"type_id"`
-	ExerciseID      uuid.UUID  `json:"exercise_id"`
-	MetricWeight    *float64   `json:"metric_weight"`
-	Reps            *int       `json:"reps"`
-	Unit            *int       `json:"unit"`
-	Title           *string    `json:"title"`
-	TargetDate      *string    `json:"target_date"` // YYYY-MM-DD
-	SortOrder       int        `json:"sort_order"`
-	Distance        *float64   `json:"distance"`
-	DurationSeconds *int       `json:"duration_seconds"`
-	StartDate       *string    `json:"start_date"` // YYYY-MM-DD
-	LastModified    time.Time  `json:"last_modified"`
-	IsDeleted       bool       `json:"is_deleted"`
+	ID              uuid.UUID `json:"id"`
+	UserID          uuid.UUID `json:"user_id"`
+	TypeID          int       `json:"type_id"`
+	ExerciseID      uuid.UUID `json:"exercise_id"`
+	MetricWeight    *float64  `json:"metric_weight"`
+	Reps            *int      `json:"reps"`
+	Unit            *int      `json:"unit"`
+	Title           *string   `json:"title"`
+	TargetDate      *string   `json:"target_date"` // YYYY-MM-DD
+	SortOrder       int       `json:"sort_order"`
+	Distance        *float64  `json:"distance"`
+	DurationSeconds *int      `json:"duration_seconds"`
+	StartDate       *string   `json:"start_date"` // YYYY-MM-DD
+	LastModified    time.Time `json:"last_modified"`
+	IsDeleted       bool      `json:"is_deleted"`
 }
 
 type Barbell struct {

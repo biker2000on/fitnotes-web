@@ -3183,9 +3183,15 @@ export function useFitNotesController() {
   const [historyExerciseId, setHistoryExerciseId] = useState<string | null>(null);
   const handleAddWeight = async () => {
     const parsedWeight = parseFloat(newWeight);
+    const measuredAt = new Date();
+    const selectedDay = new Date(`${selectedDate}T00:00:00`);
+    if (!Number.isNaN(selectedDay.getTime())) {
+      measuredAt.setFullYear(selectedDay.getFullYear(), selectedDay.getMonth(), selectedDay.getDate());
+    }
     const record: BodyWeight = {
       id: uuidv4(),
       date: selectedDate,
+      measured_at: measuredAt.toISOString(),
       body_weight_metric: userUnit === 'lbs' ? lbsToKg(parsedWeight) : parsedWeight,
       body_fat: newFat ? parseFloat(newFat) : null
     };

@@ -82,6 +82,7 @@ export interface GraphFavourite {
 export interface BodyWeight {
   id: string;
   date: string;
+  measured_at?: string | null;
   body_weight_metric: number;
   body_fat: number | null;
   comments?: string;

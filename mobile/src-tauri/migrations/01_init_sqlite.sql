@@ -91,6 +91,7 @@ CREATE TABLE training_logs (
 CREATE TABLE body_weights (
     id TEXT PRIMARY KEY,
     date TEXT NOT NULL, -- YYYY-MM-DD
+    measured_at TEXT,
     body_weight_metric REAL NOT NULL,
     body_fat REAL,
     comments TEXT,

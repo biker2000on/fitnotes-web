@@ -458,10 +458,11 @@ func pullTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since ti
 
 func pushBodyWeights(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.BodyWeight) error {
 	query := `
-		INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO body_weights (id, user_id, date, measured_at, body_weight_metric, body_fat, comments, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (id) DO UPDATE SET
 			date = EXCLUDED.date,
+			measured_at = EXCLUDED.measured_at,
 			body_weight_metric = EXCLUDED.body_weight_metric,
 			body_fat = EXCLUDED.body_fat,
 			comments = EXCLUDED.comments,
@@ -475,7 +476,11 @@ func pushBodyWeights(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []m
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, query, item.ID, userID, parsedDate, item.BodyWeightMetric, item.BodyFat, item.Comments, item.LastModified, item.IsDeleted)
+		measuredAt := item.MeasuredAt
+		if measuredAt == nil {
+			measuredAt = &parsedDate
+		}
+		_, err = tx.Exec(ctx, query, item.ID, userID, parsedDate, measuredAt, item.BodyWeightMetric, item.BodyFat, item.Comments, item.LastModified, item.IsDeleted)
 		if err != nil {
 			return err
 		}
@@ -485,7 +490,7 @@ func pushBodyWeights(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []m
 
 func pullBodyWeights(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.BodyWeight, error) {
 	rows, err := tx.Query(ctx,
-		"SELECT id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted FROM body_weights WHERE user_id = $1 AND last_modified > $2",
+		"SELECT id, user_id, date, COALESCE(measured_at, date::timestamp AT TIME ZONE 'UTC'), body_weight_metric, body_fat, comments, last_modified, is_deleted FROM body_weights WHERE user_id = $1 AND last_modified > $2",
 		userID, since,
 	)
 	if err != nil {
@@ -497,11 +502,13 @@ func pullBodyWeights(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since tim
 	for rows.Next() {
 		var item models.BodyWeight
 		var dateVal time.Time
-		err := rows.Scan(&item.ID, &item.UserID, &dateVal, &item.BodyWeightMetric, &item.BodyFat, &item.Comments, &item.LastModified, &item.IsDeleted)
+		var measuredAt time.Time
+		err := rows.Scan(&item.ID, &item.UserID, &dateVal, &measuredAt, &item.BodyWeightMetric, &item.BodyFat, &item.Comments, &item.LastModified, &item.IsDeleted)
 		if err != nil {
 			return nil, err
 		}
 		item.Date = dateVal.Format("2006-01-02")
+		item.MeasuredAt = &measuredAt
 		list = append(list, item)
 	}
 	return list, nil

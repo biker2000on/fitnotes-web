@@ -159,7 +159,7 @@ class BrowserLocalDriver implements DBDriver {
 
     if (normalized.startsWith('select * from body_weights')) {
       const items = this.getStore('body_weights').filter(x => !x.is_deleted);
-      return items.sort((a, b) => a.date.localeCompare(b.date)) as T[];
+      return items.sort((a, b) => (a.measured_at || a.date).localeCompare(b.measured_at || b.date)) as T[];
     }
 
     if (normalized.startsWith('select * from plates')) {
@@ -740,7 +740,7 @@ class TauriNativeDriver implements DBDriver {
         categories: ["id", "name", "colour", "sort_order", "last_modified", "is_deleted", "is_dirty"],
         exercises: ["id", "name", "category_id", "exercise_type_id", "notes", "weight_increment", "default_rest_time", "weight_unit_id", "is_favourite", "last_modified", "is_deleted", "is_dirty"],
         training_logs: ["id", "exercise_id", "date", "metric_weight", "reps", "unit", "routine_section_exercise_set_id", "is_personal_record", "is_complete", "distance", "duration_seconds", "comment", "last_modified", "is_deleted", "is_dirty"],
-        body_weights: ["id", "date", "body_weight_metric", "body_fat", "comments", "last_modified", "is_deleted", "is_dirty"],
+        body_weights: ["id", "date", "measured_at", "body_weight_metric", "body_fat", "comments", "last_modified", "is_deleted", "is_dirty"],
         plates: ["id", "weight", "unit", "count", "enabled", "colour", "width_ratio", "height_ratio", "last_modified", "is_deleted", "is_dirty"],
         barbells: ["id", "weight", "unit", "exercise_id", "last_modified", "is_deleted", "is_dirty"],
         workout_comments: ["id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],

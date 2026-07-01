@@ -38,12 +38,16 @@ export function BodyView() {
   const rawBodyData = useMemo(() => {
     return [...bodyWeights]
       .filter(w => !w.is_deleted)
-      .sort((a, b) => a.date.localeCompare(b.date))
+      .sort((a, b) => (a.measured_at || a.date).localeCompare(b.measured_at || b.date))
       .map(w => {
+        const measuredAt = w.measured_at && !Number.isNaN(Date.parse(w.measured_at))
+          ? w.measured_at
+          : `${w.date}T00:00:00`;
         const weight = userUnit === 'lbs' ? kgToLbs(w.body_weight_metric) : w.body_weight_metric;
         return {
           date: w.date,
-          timestamp: new Date(`${w.date}T00:00:00`).getTime(),
+          measuredAt,
+          timestamp: new Date(measuredAt).getTime(),
           weight: Math.round(weight * 10) / 10,
           bodyFat: w.body_fat == null ? null : Math.round(w.body_fat * 10) / 10,
         };
@@ -110,6 +114,11 @@ export function BodyView() {
   const shortDate = (date: string) => {
     const d = new Date(`${date}T00:00:00`);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' });
+  };
+
+  const shortDateTime = (timestamp: number) => {
+    const d = new Date(timestamp);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: '2-digit', hour: 'numeric', minute: '2-digit' });
   };
 
   const axisDate = (timestamp: number) => new Date(timestamp);
@@ -404,7 +413,7 @@ export function BodyView() {
                     )}
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      labelFormatter={(value) => shortDate(new Date(value).toISOString().slice(0, 10))}
+                      labelFormatter={(value) => shortDateTime(Number(value))}
                       formatter={(value) => [`${value} ${userUnit}`, 'Weight']}
                     />
                     <Line type="monotone" dataKey="weight" stroke="var(--primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} connectNulls />
@@ -446,7 +455,7 @@ export function BodyView() {
                     )}
                     <Tooltip
                       contentStyle={tooltipStyle}
-                      labelFormatter={(value) => shortDate(new Date(value).toISOString().slice(0, 10))}
+                      labelFormatter={(value) => shortDateTime(Number(value))}
                       formatter={(value) => [`${value}%`, 'Body Fat']}
                     />
                     <Line type="monotone" dataKey="bodyFat" stroke="var(--success)" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} connectNulls />

@@ -882,6 +882,7 @@ async fn tauri_sync(
                 &[
                     "id",
                     "date",
+                    "measured_at",
                     "body_weight_metric",
                     "body_fat",
                     "comments",
@@ -1271,6 +1272,11 @@ fn add_column_if_missing(
 
 fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
     add_column_if_missing(conn, "training_logs", "comment", "comment TEXT")?;
+    add_column_if_missing(conn, "body_weights", "measured_at", "measured_at TEXT")?;
+    conn.execute(
+        "UPDATE body_weights SET measured_at = date || 'T00:00:00.000Z' WHERE measured_at IS NULL",
+        [],
+    )?;
     Ok(())
 }
 
@@ -1335,6 +1341,7 @@ pub fn run() {
                 CREATE TABLE IF NOT EXISTS body_weights (
                     id TEXT PRIMARY KEY,
                     date TEXT NOT NULL,
+                    measured_at TEXT,
                     body_weight_metric REAL NOT NULL,
                     body_fat REAL,
                     comments TEXT,

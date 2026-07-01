@@ -95,6 +95,7 @@ CREATE TABLE body_weights (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date DATE NOT NULL,
+    measured_at TIMESTAMP WITH TIME ZONE,
     body_weight_metric DECIMAL(6,2) NOT NULL,
     body_fat DECIMAL(4,2),
     comments TEXT,

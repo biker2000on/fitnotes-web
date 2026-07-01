@@ -182,7 +182,8 @@ func main() {
 	log.Println("API server stopped.")
 }
 
-// Background sync worker that runs on startup and once every 24 hours
+// Background sync worker that runs on startup, keeps Withings tokens warm
+// hourly, and pulls measurement backfills once every 24 hours.
 func startWithingsDailySync(ctx context.Context) {
 	// Wait a moment for server initialization
 	time.Sleep(10 * time.Second)
@@ -190,18 +191,34 @@ func startWithingsDailySync(ctx context.Context) {
 	// Run initial sync on startup
 	runDailySync(ctx)
 
-	ticker := time.NewTicker(24 * time.Hour)
-	defer ticker.Stop()
+	tokenTicker := time.NewTicker(1 * time.Hour)
+	dailyTicker := time.NewTicker(24 * time.Hour)
+	defer tokenTicker.Stop()
+	defer dailyTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Withings background sync worker stopped.")
 			return
-		case <-ticker.C:
+		case <-tokenTicker.C:
+			runWithingsTokenRefresh(ctx)
+		case <-dailyTicker.C:
 			runDailySync(ctx)
 		}
 	}
+}
+
+func runWithingsTokenRefresh(ctx context.Context) {
+	pool := db.GetDB()
+	if pool == nil {
+		log.Println("Withings token refresh: Database pool is not initialized")
+		return
+	}
+
+	refreshCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	handlers.RefreshWithingsAccessTokens(refreshCtx, pool)
 }
 
 func runDailySync(ctx context.Context) {

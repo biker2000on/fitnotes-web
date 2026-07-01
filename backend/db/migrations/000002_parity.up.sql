@@ -3,6 +3,8 @@
 
 ALTER TABLE training_logs ADD COLUMN IF NOT EXISTS comment TEXT;
 ALTER TABLE settings ADD COLUMN IF NOT EXISTS distance_unit INT DEFAULT 1 NOT NULL; -- 1: km, 2: mi
+ALTER TABLE body_weights ADD COLUMN IF NOT EXISTS measured_at TIMESTAMP WITH TIME ZONE;
+UPDATE body_weights SET measured_at = date::timestamp AT TIME ZONE 'UTC' WHERE measured_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS exercise_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -491,9 +491,9 @@ func ImportFitNotesHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			_, err = tx.Exec(ctx, `
-				INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-			`, uuid.New(), userID, parsedDate, weight, fatVal, comVal, time.Now().UTC(), false)
+				INSERT INTO body_weights (id, user_id, date, measured_at, body_weight_metric, body_fat, comments, last_modified, is_deleted)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			`, uuid.New(), userID, parsedDate, parsedDate, weight, fatVal, comVal, time.Now().UTC(), false)
 			if err != nil {
 				http.Error(w, `{"error":"failed to import body weight logs: `+err.Error()+`"}`, http.StatusInternalServerError)
 				return

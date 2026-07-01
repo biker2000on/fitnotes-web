@@ -26,6 +26,8 @@ import (
 var withingsNamespace = uuid.MustParse("d5671bb0-80de-4ff4-a3bf-9a08e6db9fb3")
 var withingsWebhookSyncSemaphore = make(chan struct{}, 4)
 
+const withingsAccessTokenRefreshSkew = 90 * time.Minute
+
 type WithingsTokenResponse struct {
 	Status int `json:"status"`
 	Body   struct {
@@ -230,7 +232,7 @@ func WithingsCallbackHandler(w http.ResponseWriter, r *http.Request) {
 // Withings sends to the callback URL during notify subscribe. The subscribe
 // call fails outright if this probe does not return 200.
 func WithingsWebhookProbeHandler(w http.ResponseWriter, r *http.Request) {
-	if !validWithingsWebhookSecret(r) {
+	if r.Method != http.MethodHead && !validWithingsWebhookSecret(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
@@ -274,8 +276,14 @@ func WithingsWebhookHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Webhook: Received notification for user=%s, appli=%s, range=[%s, %s]", userid, appli, startDateStr, endDateStr)
 
 	// We only process body composition events (appli=1)
-	if appli != "1" || userid == "" {
-		http.Error(w, "unsupported webhook payload", http.StatusBadRequest)
+	if appli != "1" {
+		log.Printf("Webhook: Ignoring unsupported application %q", appli)
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if userid == "" {
+		log.Printf("Webhook: Ignoring payload without userid")
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
@@ -297,7 +305,7 @@ func WithingsWebhookHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			log.Printf("Webhook: Database query error: %v", err)
 		}
-		http.Error(w, "unknown withings user", http.StatusNotFound)
+		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
@@ -633,8 +641,8 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 				continue
 			}
 
-			// Format date as local date string
-			measDate := time.Unix(group.Date, 0).UTC().Format("2006-01-02")
+			measuredAt := time.Unix(group.Date, 0).UTC()
+			measDate := measuredAt.Format("2006-01-02")
 
 			// Create deterministic UUID based on grpid (prevents duplicates, permits clean updates)
 			recordID := uuid.NewSHA1(withingsNamespace, []byte(fmt.Sprintf("%d", group.GrpID)))
@@ -645,17 +653,18 @@ func pullWithingsWeights(ctx context.Context, pool *pgxpool.Pool, userID uuid.UU
 			}
 
 			tag, err := tx.Exec(ctx, `
-				INSERT INTO body_weights (id, user_id, date, body_weight_metric, body_fat, comments, last_modified, is_deleted)
-				VALUES ($1, $2, $3, $4, $5, $6, NOW(), false)
+				INSERT INTO body_weights (id, user_id, date, measured_at, body_weight_metric, body_fat, comments, last_modified, is_deleted)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), false)
 				ON CONFLICT (id) DO UPDATE SET
 					date = EXCLUDED.date,
+					measured_at = EXCLUDED.measured_at,
 					body_weight_metric = EXCLUDED.body_weight_metric,
 					body_fat = EXCLUDED.body_fat,
 					comments = EXCLUDED.comments,
 					last_modified = NOW(),
 					is_deleted = false
 				WHERE body_weights.user_id = EXCLUDED.user_id
-			`, recordID, userID, measDate, weightVal, bodyFatParam, "Synced from Withings")
+			`, recordID, userID, measDate, measuredAt, weightVal, bodyFatParam, "Synced from Withings")
 
 			if err != nil {
 				_ = tx.Rollback(ctx)
@@ -705,7 +714,7 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 		return "", err
 	}
 
-	if time.Now().Add(5 * time.Minute).Before(expiresAt) {
+	if time.Now().Add(withingsAccessTokenRefreshSkew).Before(expiresAt) {
 		if err := tx.Commit(ctx); err != nil {
 			return "", err
 		}
@@ -714,13 +723,8 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 
 	newAccess, newRefresh, newExpiresAt, status, err := refreshWithingsToken(refreshToken)
 	if err != nil {
-		// Drop the stored connection only when Withings definitively rejects
-		// the refresh token. Transient failures (network errors, 5xx, rate
-		// limits) must keep the credentials so the next sync can retry -
-		// deleting here is what silently reverted users to "Connect Scale".
 		if isWithingsAuthRejection(status, err) {
-			_, _ = tx.Exec(ctx, "DELETE FROM withings_tokens WHERE user_id = $1 AND refresh_token = $2", userID, refreshToken)
-			_ = tx.Commit(ctx)
+			log.Printf("Withings token refresh rejected for user %s; keeping stored connection for retry/reconnect visibility: %v", userID, err)
 			return "", fmt.Errorf("revoked/invalid refresh token: %w", err)
 		}
 		return "", fmt.Errorf("transient withings token refresh failure (status %d): %w", status, err)
@@ -728,7 +732,7 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 
 	_, err = tx.Exec(ctx, `
 		UPDATE withings_tokens
-		SET access_token = $1, refresh_token = $2, expires_at = $3, updated_at = NOW()
+		SET access_token = $1, refresh_token = $2, expires_at = $3
 		WHERE user_id = $4
 	`, newAccess, newRefresh, newExpiresAt, userID)
 	if err != nil {
@@ -739,6 +743,29 @@ func getValidWithingsAccessToken(ctx context.Context, pool *pgxpool.Pool, userID
 		return "", err
 	}
 	return newAccess, nil
+}
+
+// RefreshWithingsAccessTokens keeps short-lived access tokens warm. Withings
+// access tokens expire quickly, and every refresh rotates the refresh token, so
+// this uses the same row lock/update path as sync pulls.
+func RefreshWithingsAccessTokens(ctx context.Context, pool *pgxpool.Pool) {
+	rows, err := pool.Query(ctx, "SELECT user_id FROM withings_tokens")
+	if err != nil {
+		log.Printf("Withings token refresh: failed to query users: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var uid uuid.UUID
+		if err := rows.Scan(&uid); err != nil {
+			log.Printf("Withings token refresh: failed to scan user id: %v", err)
+			continue
+		}
+		if _, err := getValidWithingsAccessToken(ctx, pool, uid); err != nil {
+			log.Printf("Withings token refresh: failed for user %s: %v", uid, err)
+		}
+	}
 }
 
 // isWithingsAuthRejection reports whether a Withings OAuth failure means the
