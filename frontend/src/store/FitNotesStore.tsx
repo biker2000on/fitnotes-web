@@ -17,8 +17,9 @@ import type {
   WorkoutGroup, WorkoutGroupExercise, Routine, RoutineSection,
   RoutineSectionExercise, RoutineSectionExerciseSet,
   Goal, Measurement, MeasurementRecord, Settings, ExerciseComment, GraphFavourite, CustomUnit,
-  WorkoutRoutine,
+  WorkoutRoutine, WorkoutTime,
 } from '../types';
+import { POPULATE_SETS_TYPE } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
 
@@ -250,6 +251,13 @@ export function useFitNotesController() {
   const [currentLogs, setCurrentLogs] = useState<TrainingLog[]>([]);
   const [bodyWeights, setBodyWeights] = useState<BodyWeight[]>([]);
   const [workoutComment, setWorkoutComment] = useState<string>('');
+  // Workout time tracking for the selected date (start/stop/duration).
+  const [workoutTime, setWorkoutTime] = useState<WorkoutTime | null>(null);
+  const workoutTimeRef = useRef<WorkoutTime | null>(null);
+  workoutTimeRef.current = workoutTime;
+  // When set, the next exercise picked in the command palette replaces this
+  // exercise in the current day's workout instead of being selected for logging.
+  const [replaceTargetExerciseId, setReplaceTargetExerciseId] = useState<string | null>(null);
   
   // Routines State
   const [routines, setRoutines] = useState<Routine[]>([]);
@@ -931,12 +939,14 @@ export function useFitNotesController() {
     const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
     const comments = await db.query<WorkoutComment>('SELECT * FROM workout_comments WHERE date = ? AND is_deleted = 0', [date]);
     const exComments = await db.query<ExerciseComment>('SELECT * FROM exercise_comments WHERE date = ? AND is_deleted = 0', [date]);
+    const workoutTimes = await db.query<WorkoutTime>('SELECT * FROM workout_times');
 
     if (date !== selectedDateRef.current) return;
 
     setCurrentLogs(logs);
     setExerciseComments(exComments);
     setSelectedLogIdsForGroup([]);
+    setWorkoutTime(workoutTimes.find(wt => wt.date === date && !wt.is_deleted) ?? null);
 
     const nextComment = comments.length > 0 ? comments[0].comment : '';
     workoutCommentRef.current = nextComment;
@@ -1606,6 +1616,10 @@ export function useFitNotesController() {
     if (settings.rest_timer_auto_start) {
       startRestTimer(selectedExercise.default_rest_time || settings.rest_timer_seconds);
     }
+    // Auto-start the workout timer on the first set of today's workout.
+    if (settings.workout_timer_auto_start_enabled && newLog.date === getLocalDateString() && !workoutTimeRef.current?.start_time) {
+      await handleStartWorkoutTimer(true);
+    }
   };
 
   const handleSelectLogForEdit = (log: TrainingLog) => {
@@ -1689,6 +1703,75 @@ export function useFitNotesController() {
     }, { approveLabel: 'Delete', tone: 'danger' });
   };
 
+  // Swap every set of an exercise in the current day's workout (and its
+  // superset links) over to a different exercise — the reference app's
+  // "Replace Exercise" action.
+  const handleReplaceExercise = async (fromExerciseId: string, toExerciseId: string) => {
+    if (fromExerciseId === toExerciseId) { setReplaceTargetExerciseId(null); return; }
+    const date = selectedDateRef.current;
+    const fromEx = exercises.find(x => x.id === fromExerciseId);
+    const toEx = exercises.find(x => x.id === toExerciseId);
+    if (!toEx) return;
+
+    for (const log of currentLogs.filter(l => l.exercise_id === fromExerciseId)) {
+      await db.execute('UPDATE training_logs', [{ ...log, exercise_id: toExerciseId, is_personal_record: false }]);
+    }
+    for (const ge of groupExercises.filter(g => g.date === date && g.exercise_id === fromExerciseId && !g.is_deleted)) {
+      await db.execute('UPDATE workout_group_exercises', [{ ...ge, exercise_id: toExerciseId }]);
+    }
+
+    setReplaceTargetExerciseId(null);
+    if (selectedExercise?.id === fromExerciseId) setSelectedExercise(toEx);
+    await refreshData();
+    triggerToast(`Replaced ${fromEx?.name ?? 'exercise'} with ${toEx.name}.`);
+  };
+
+  // Workout time tracking (mirror of the reference app's "Time Workout"):
+  // start stamps start_time, stop stamps end_time + duration, starting a
+  // finished timer resumes it by clearing the end.
+  const handleStartWorkoutTimer = async (silent = false) => {
+    const existing = workoutTimeRef.current;
+    const nowIso = new Date().toISOString();
+    const rec: WorkoutTime = existing
+      ? { ...existing, start_time: existing.start_time ?? nowIso, end_time: null, duration_seconds: null, is_deleted: false }
+      : { id: uuidv4(), date: selectedDateRef.current, start_time: nowIso, end_time: null, duration_seconds: null };
+    await db.execute('INSERT INTO workout_times', [rec]);
+    setWorkoutTime(rec);
+    if (!silent) triggerToast('Workout timer started.');
+  };
+
+  const handleStopWorkoutTimer = async () => {
+    const existing = workoutTimeRef.current;
+    if (!existing?.start_time || existing.end_time) return;
+    const end = new Date();
+    const started = new Date(existing.start_time);
+    const duration = Math.max(0, Math.round((end.getTime() - started.getTime()) / 1000));
+    const rec: WorkoutTime = { ...existing, end_time: end.toISOString(), duration_seconds: duration };
+    await db.execute('INSERT INTO workout_times', [rec]);
+    setWorkoutTime(rec);
+    const mins = Math.round(duration / 60);
+    triggerToast(`Workout finished in ${mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`}.`);
+  };
+
+  const handleDeleteWorkoutTime = async () => {
+    const existing = workoutTimeRef.current;
+    if (!existing) return;
+    await db.execute('INSERT INTO workout_times', [{ ...existing, is_deleted: true }]);
+    setWorkoutTime(null);
+    triggerToast('Workout time removed.');
+  };
+
+  // Stop the running timer once every set for the day is complete.
+  const maybeAutoStopWorkoutTimer = async (date: string) => {
+    if (!settings.workout_timer_auto_stop_enabled) return;
+    const running = workoutTimeRef.current;
+    if (!running?.start_time || running.end_time || running.date !== date) return;
+    const logs = await db.query<TrainingLog>('SELECT * FROM training_logs WHERE date = ? AND is_deleted = 0', [date]);
+    if (logs.length > 0 && logs.every(l => l.is_complete)) {
+      await handleStopWorkoutTimer();
+    }
+  };
+
   // Per-exercise-per-day comment.
   const saveExerciseComment = async (exerciseId: string, comment: string) => {
     const existing = exerciseComments.find(c => c.exercise_id === exerciseId && c.date === selectedDate);
@@ -1703,6 +1786,7 @@ export function useFitNotesController() {
   const handleToggleComplete = async (log: TrainingLog) => {
     const updated = { ...log, is_complete: !log.is_complete };
     await db.execute('INSERT INTO training_logs', [updated]);
+    if (updated.is_complete) await maybeAutoStopWorkoutTimer(log.date);
     await refreshData();
   };
 
@@ -1714,6 +1798,7 @@ export function useFitNotesController() {
       const updated = { ...log, is_complete: true };
       await db.execute('INSERT INTO training_logs', [updated]);
     }
+    await maybeAutoStopWorkoutTimer(selectedDateRef.current);
     await refreshData();
     triggerToast('All sets marked complete.');
   };
@@ -1726,6 +1811,7 @@ export function useFitNotesController() {
       const updated = { ...log, is_complete: true };
       await db.execute('INSERT INTO training_logs', [updated]);
     }
+    await maybeAutoStopWorkoutTimer(selectedDateRef.current);
     await refreshData();
     triggerToast('All exercise sets marked complete.');
   };
@@ -1936,13 +2022,57 @@ export function useFitNotesController() {
       for (const se of secExs) {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
         const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted).sort(bySortOrder);
-        const lastSessionLogs = type === 'template' ? [] : findLastSessionLogs(se.exercise_id);
+        const lastSessionLogs = findLastSessionLogs(se.exercise_id);
 
-        if (type === 'template') {
-          for (const s of exSets) {
-            await insertLogFromSource(se.exercise_id, s, { routine_section_exercise_set_id: s.id });
+        // One empty set so the exercise still shows up in the workout to log against
+        // (matches the reference app's "Log All" placeholder for don't-populate exercises).
+        const insertPlaceholderSet = async () => {
+          await insertLogFromSource(se.exercise_id, {
+            metric_weight: null, reps: null, distance: null, duration_seconds: null, unit: defaultUnit,
+          });
+          sectionSetsLogged++;
+          totalSetsLogged++;
+        };
+
+        // Predefined sets: a filled field is used verbatim; a blank field is carried
+        // over from the same-position set of the exercise's previous workout.
+        const insertPredefinedSets = async () => {
+          for (let i = 0; i < exSets.length; i++) {
+            const s = exSets[i];
+            const inherit = lastSessionLogs[i] ?? lastSessionLogs[lastSessionLogs.length - 1];
+            await insertLogFromSource(se.exercise_id, {
+              metric_weight: s.metric_weight ?? inherit?.metric_weight ?? null,
+              reps: s.reps ?? inherit?.reps ?? null,
+              distance: s.distance ?? inherit?.distance ?? null,
+              duration_seconds: s.duration_seconds ?? inherit?.duration_seconds ?? null,
+              unit: s.unit ?? defaultUnit,
+            }, { routine_section_exercise_set_id: s.id });
             sectionSetsLogged++;
             totalSetsLogged++;
+          }
+        };
+
+        const insertLastSessionSets = async () => {
+          for (const lastLog of lastSessionLogs) {
+            await insertLogFromSource(se.exercise_id, lastLog);
+            sectionSetsLogged++;
+            totalSetsLogged++;
+          }
+        };
+
+        if (type === 'template') {
+          // Honor each exercise's configured populate_sets_type.
+          const populateType = se.populate_sets_type ?? POPULATE_SETS_TYPE.PREDEFINED_SETS;
+          if (populateType === POPULATE_SETS_TYPE.NONE) {
+            await insertPlaceholderSet();
+          } else if (populateType === POPULATE_SETS_TYPE.COPY_PREVIOUS_WORKOUT) {
+            if (lastSessionLogs.length > 0) await insertLastSessionSets();
+            else if (exSets.length > 0) await insertPredefinedSets();
+            else await insertPlaceholderSet();
+          } else {
+            if (exSets.length > 0) await insertPredefinedSets();
+            else if (lastSessionLogs.length > 0) await insertLastSessionSets();
+            else await insertPlaceholderSet();
           }
         } else if (type === 'last_workout') {
           if (lastSessionLogs.length > 0) {
@@ -1996,7 +2126,7 @@ export function useFitNotesController() {
     setActiveSectionForPopulate(null);
     await refreshData();
     if (totalSetsLogged > 0) {
-      triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'template defaults'}.`);
+      triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'routine set types'}.`);
     } else {
       triggerToast('No routine sets were logged. Add template sets or log this exercise once before using history-based loading.', 'error');
     }
@@ -2688,6 +2818,71 @@ export function useFitNotesController() {
     );
   };
 
+  // Duplicate a routine template with all of its days, exercises, predefined
+  // sets, and routine supersets (mirrors the reference app's "Copy Routine").
+  const handleCopyRoutine = async (routineId: string) => {
+    const source = routines.find(r => r.id === routineId);
+    if (!source) return;
+
+    const allSections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
+    const sections = allSections.filter(s => s.routine_id === routineId && !s.is_deleted);
+    const sectionIds = sections.map(s => s.id);
+
+    const allSecExs = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+    const secExs = allSecExs.filter(se => sectionIds.includes(se.routine_section_id) && !se.is_deleted);
+    const secExIds = secExs.map(se => se.id);
+
+    const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
+    const sets = allSets.filter(s => secExIds.includes(s.routine_section_exercise_id) && !s.is_deleted);
+
+    const allGroups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
+    const groups = allGroups.filter(g => g.routine_section_id && sectionIds.includes(g.routine_section_id) && !g.is_deleted);
+    const groupIds = groups.map(g => g.id);
+
+    const allGroupExs = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
+    const groupExs = allGroupExs.filter(ge => groupIds.includes(ge.workout_group_id) && !ge.is_deleted);
+
+    const newRoutineId = uuidv4();
+    await db.execute('INSERT INTO routines', [{ ...source, id: newRoutineId, name: `${source.name} (Copy)` }]);
+
+    const sectionIdMap = new Map<string, string>();
+    for (const section of sections) {
+      const newId = uuidv4();
+      sectionIdMap.set(section.id, newId);
+      await db.execute('INSERT INTO routine_sections', [{ ...section, id: newId, routine_id: newRoutineId }]);
+    }
+
+    const secExIdMap = new Map<string, string>();
+    for (const se of secExs) {
+      const newId = uuidv4();
+      secExIdMap.set(se.id, newId);
+      await db.execute('INSERT INTO routine_section_exercises', [{ ...se, id: newId, routine_section_id: sectionIdMap.get(se.routine_section_id)! }]);
+    }
+
+    for (const set of sets) {
+      await db.execute('INSERT INTO routine_section_exercise_sets', [{ ...set, id: uuidv4(), routine_section_exercise_id: secExIdMap.get(set.routine_section_exercise_id)! }]);
+    }
+
+    const groupIdMap = new Map<string, string>();
+    for (const group of groups) {
+      const newId = uuidv4();
+      groupIdMap.set(group.id, newId);
+      await db.execute('INSERT INTO workout_groups', [{ ...group, id: newId, routine_section_id: sectionIdMap.get(group.routine_section_id!)! }]);
+    }
+
+    for (const ge of groupExs) {
+      await db.execute('INSERT INTO workout_group_exercises', [{
+        ...ge,
+        id: uuidv4(),
+        workout_group_id: groupIdMap.get(ge.workout_group_id)!,
+        routine_section_id: ge.routine_section_id ? sectionIdMap.get(ge.routine_section_id) ?? null : null,
+      }]);
+    }
+
+    await refreshData();
+    triggerToast(`Copied routine as "${source.name} (Copy)".`);
+  };
+
   // Import / Load Routine template into current daily logs
   const handleImportRoutine = async (routineId: string) => {
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
@@ -2813,11 +3008,13 @@ export function useFitNotesController() {
   const handleAddSetToTemplateExercise = async (rseId: string) => {
     const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === rseId);
     const lastSet = exSets[exSets.length - 1];
+    // New sets copy the previous set; the first set starts blank (blank fields
+    // carry over from the previous workout when the routine is loaded).
     const newSet: RoutineSectionExerciseSet = {
       id: uuidv4(),
       routine_section_exercise_id: rseId,
-      metric_weight: lastSet?.metric_weight ?? 60,
-      reps: lastSet?.reps ?? 10,
+      metric_weight: lastSet?.metric_weight ?? null,
+      reps: lastSet?.reps ?? null,
       sort_order: exSets.length + 1,
       distance: lastSet?.distance ?? null,
       duration_seconds: lastSet?.duration_seconds ?? null,
@@ -2828,6 +3025,18 @@ export function useFitNotesController() {
       await loadEditorData(editingRoutine.id);
     }
     triggerToast('Set added to template exercise.');
+  };
+
+  // Change how an exercise's sets are populated when its routine is loaded
+  // (0 = don't populate, 1 = predefined sets, 2 = copy previous workout).
+  const handleUpdatePopulateSetsType = async (rseId: string, populateSetsType: number) => {
+    const allSecExs = await db.query<RoutineSectionExercise>('SELECT * FROM routine_section_exercises');
+    const target = allSecExs.find(se => se.id === rseId);
+    if (!target) return;
+    await db.execute('UPDATE routine_section_exercises', [{ ...target, populate_sets_type: populateSetsType }]);
+    if (editingRoutine) {
+      await loadEditorData(editingRoutine.id);
+    }
   };
 
   const handleDeleteSetFromTemplateExercise = async (setId: string) => {
@@ -2882,37 +3091,10 @@ export function useFitNotesController() {
   };
 
   const handleAddAllSectionLogs = async (sectionId: string) => {
-    const secExs = editorSectionExercises.filter(se => se.routine_section_id === sectionId && !se.is_deleted).sort(bySortOrder);
-    const importedExerciseIds = secExs.map(se => se.exercise_id);
-    let setsLogged = 0;
-    
-    for (const se of secExs) {
-      const exSets = editorExerciseSets.filter(s => s.routine_section_exercise_id === se.id && !s.is_deleted).sort(bySortOrder);
-      for (const s of exSets) {
-        const log: TrainingLog = {
-          id: uuidv4(),
-          exercise_id: se.exercise_id,
-          date: selectedDate,
-          metric_weight: s.metric_weight,
-          reps: s.reps,
-          unit: userUnit === 'kg' ? 1 : 2,
-          is_personal_record: false,
-          is_complete: false,
-          distance: s.distance,
-          duration_seconds: s.duration_seconds
-        };
-        await db.execute('INSERT INTO training_logs', [log]);
-        setsLogged++;
-      }
-    }
-
-    await copyRoutineSectionSupersetsToWorkout(sectionId, importedExerciseIds);
-    if (editingRoutine) {
-      await recordWorkoutRoutine(editingRoutine.id, sectionId);
-    }
-
-    await refreshData();
-    triggerToast(`Logged all ${setsLogged} sets from this day template into today's log.`);
+    if (!editingRoutine) return;
+    // Route through the shared populate path so each exercise's populate_sets_type
+    // (predefined / copy previous / none) is honored.
+    await handleImportRoutinePopulated(editingRoutine.id, 'template', 75, sectionId);
     setActiveTab('log');
   };
 
@@ -3304,6 +3486,8 @@ export function useFitNotesController() {
     lastSyncTime, setLastSyncTime,
     importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
     currentLogs, setCurrentLogs, bodyWeights, setBodyWeights, workoutComment, setWorkoutComment, routines, setRoutines,
+    workoutTime, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
+    replaceTargetExerciseId, setReplaceTargetExerciseId, handleReplaceExercise, handleCopyRoutine,
     showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,
     showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
@@ -3352,7 +3536,7 @@ export function useFitNotesController() {
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
     handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
     loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
-    handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdateSectionName, handleDeleteSection,
+    handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateSectionName, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
     saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord, calculatePlatesSolver,
   };

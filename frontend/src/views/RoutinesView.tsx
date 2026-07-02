@@ -1,11 +1,12 @@
 // RoutinesView.tsx - Expanded interactive list of routines with section (Workout Day) populating.
 import { useMemo, useState } from 'react';
-import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search, Trash2, CalendarCheck } from 'lucide-react';
+import { Bookmark, Plus, ChevronDown, ChevronUp, Play, Dumbbell, Search, Trash2, CalendarCheck, Copy } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise } from '../types';
+import { POPULATE_SETS_TYPE } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
@@ -15,6 +16,7 @@ export function RoutinesView() {
   const {
     routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
     setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises, handleDeleteRoutine,
+    handleCopyRoutine,
     workoutRoutines, displayWeight, settings,
   } = useFitNotesStore();
 
@@ -235,18 +237,13 @@ export function RoutinesView() {
                 >
                   {/* Card Header (Tappable Row) */}
                   <div
+                    className="routine-card-header"
                     style={{
-                      padding: '20px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      userSelect: 'none',
                       background: isExpanded ? 'rgba(99, 102, 241, 0.02)' : 'transparent'
                     }}
                     onClick={() => handleToggleExpand(r.id)}
                   >
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary-dark)' }}>{r.name}</h3>
                         {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary-dark)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary-dark)' }} />}
@@ -260,7 +257,7 @@ export function RoutinesView() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                    <div className="routine-card-actions" onClick={(e) => e.stopPropagation()}>
                       <button 
                         className="btn btn-secondary" 
                         style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }} 
@@ -270,6 +267,14 @@ export function RoutinesView() {
                         }}
                       >
                         Edit
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 10px' }}
+                        onClick={() => handleCopyRoutine(r.id)}
+                        title="Duplicate routine"
+                      >
+                        <Copy size={14} /> Copy
                       </button>
                       <button
                         className="btn btn-secondary"
@@ -300,7 +305,7 @@ export function RoutinesView() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                           <h4 style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginBottom: '4px' }}>Workout Day Splits (Select to Start)</h4>
                           
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                          <div className="routine-splits-grid">
                             {routineDetails.sections.map(sec => {
                               const secExs = routineDetails.exercises.filter(x => x.routine_section_id === sec.id).sort(bySortOrder);
                               const groupLabelById = new Map<string, string>();
@@ -343,7 +348,7 @@ export function RoutinesView() {
                                     </div>
                                     
                                     {/* Exercise list inside split */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                       {secExs.length === 0 ? (
                                         <div style={{ fontStyle: 'italic', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>No exercises</div>
                                       ) : (
@@ -356,11 +361,21 @@ export function RoutinesView() {
                                           const groupColor = group ? intColorToHex(group.colour) : null;
                                           const groupLabel = group ? (groupLabelById.get(group.id) || group.name) : null;
 
+                                          // Label for how this exercise populates its sets when the split starts.
+                                          const populateType = se.populate_sets_type ?? POPULATE_SETS_TYPE.PREDEFINED_SETS;
+                                          const setCountLabel = populateType === POPULATE_SETS_TYPE.COPY_PREVIOUS_WORKOUT
+                                            ? 'copies previous'
+                                            : populateType === POPULATE_SETS_TYPE.NONE
+                                              ? 'on the fly'
+                                              : `${exSets.length} ${exSets.length === 1 ? 'set' : 'sets'}`;
+
                                           // Collapse identical consecutive sets: "3 x (100 kg x 5)" reads better than repeating.
                                           const setDescriptions: string[] = [];
-                                          for (const s of exSets) {
-                                            const desc = formatTemplateSet(s, ex?.exercise_type_id ?? 0) || '—';
-                                            setDescriptions.push(desc);
+                                          if (populateType === POPULATE_SETS_TYPE.PREDEFINED_SETS) {
+                                            for (const s of exSets) {
+                                              const desc = formatTemplateSet(s, ex?.exercise_type_id ?? 0) || 'carried over';
+                                              setDescriptions.push(desc);
+                                            }
                                           }
                                           const collapsed: Array<{ desc: string; count: number }> = [];
                                           for (const desc of setDescriptions) {
@@ -379,7 +394,7 @@ export function RoutinesView() {
                                                     {groupLabel}
                                                   </span>
                                                 )}
-                                                <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7 }}>{exSets.length} {exSets.length === 1 ? 'set' : 'sets'}</span>
+                                                <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7, whiteSpace: 'nowrap' }}>{setCountLabel}</span>
                                               </div>
                                               {collapsed.length > 0 && (
                                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', paddingLeft: '18px', marginTop: '2px', lineHeight: 1.5 }}>

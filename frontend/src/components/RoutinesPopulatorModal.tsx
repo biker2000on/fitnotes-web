@@ -67,8 +67,8 @@ export const RoutinesPopulatorModal: React.FC<RoutinesPopulatorModalProps> = ({
           >
             <Clipboard size={20} color={selectedType === 'template' ? 'var(--primary)' : 'var(--text-secondary-dark)'} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary-dark)' }}>Template Defaults</span>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Load predefined sets and target weights directly</span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary-dark)' }}>Routine Set Types</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Follow each exercise's setting: predefined sets, copy previous, or log on-the-fly</span>
             </div>
           </div>
 

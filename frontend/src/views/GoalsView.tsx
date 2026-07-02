@@ -193,13 +193,13 @@ export function GoalsView() {
                       {goalTypeLabel(g.type_id)}{g.target_date ? ` · by ${g.target_date}` : ''}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {done && <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700 }}><Check size={14} /> Achieved</span>}
-                    <button onClick={() => move(g, -1)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary-dark)' }} title="Move up"><ChevronUp size={16} /></button>
-                    <button onClick={() => move(g, 1)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary-dark)' }} title="Move down"><ChevronDown size={16} /></button>
-                    <button onClick={() => startEdit(g)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary-dark)' }} title="Edit goal"><Pencil size={15} /></button>
-                    <button onClick={() => deleteGoal(g.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }} title="Delete goal">
-                      <Trash2 size={16} color="var(--danger)" />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    {done && <span style={{ color: 'var(--success)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700, marginRight: '4px' }}><Check size={14} /> Achieved</span>}
+                    <button className="icon-btn workout-history-btn" onClick={() => move(g, -1)} title="Move up" aria-label="Move goal up"><ChevronUp size={16} /></button>
+                    <button className="icon-btn workout-history-btn" onClick={() => move(g, 1)} title="Move down" aria-label="Move goal down"><ChevronDown size={16} /></button>
+                    <button className="icon-btn workout-history-btn" onClick={() => startEdit(g)} title="Edit goal" aria-label="Edit goal"><Pencil size={15} /></button>
+                    <button className="icon-btn workout-history-btn" onClick={() => deleteGoal(g.id)} title="Delete goal" aria-label="Delete goal" style={{ color: 'var(--danger)' }}>
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>

@@ -148,6 +148,15 @@ export interface RoutineSection {
   is_dirty?: number;
 }
 
+// How sets are populated for a routine exercise when loading it into a workout
+// (mirrors the FitNotes RoutineSectionExerciseTable enum: NONE=0,
+// PREDEFINED_SETS=1, COPY_PREVIOUS_WORKOUT=2).
+export const POPULATE_SETS_TYPE = {
+  NONE: 0,
+  PREDEFINED_SETS: 1,
+  COPY_PREVIOUS_WORKOUT: 2,
+} as const;
+
 export interface RoutineSectionExercise {
   id: string;
   routine_section_id: string;

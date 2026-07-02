@@ -4,7 +4,7 @@
 import {
   TrendingUp, Calculator, Plus, Check, Trash2, GripVertical, X,
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
-  RefreshCw, WifiOff,
+  RefreshCw, WifiOff, ArrowLeftRight, Square, Play,
 } from 'lucide-react';
 import { useEffect, useState, useRef, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -16,6 +16,52 @@ import type { RoutineSection } from '../types';
 import { addDays } from '../lib/date';
 
 const isGenericSupersetName = (name?: string | null) => /^superset\s+\d+$/i.test((name || '').trim());
+
+const formatElapsed = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+};
+
+// Start/stop workout duration tracking chip shown in the summary header.
+function WorkoutTimerChip() {
+  const { workoutTime, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime } = useFitNotesStore();
+  const running = !!workoutTime?.start_time && !workoutTime?.end_time;
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!running) return;
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, [running]);
+
+  if (!workoutTime?.start_time) {
+    return (
+      <button className="workout-timer-chip" onClick={() => handleStartWorkoutTimer()} title="Start workout timer">
+        <Play size={14} /> Time Workout
+      </button>
+    );
+  }
+
+  if (running) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(workoutTime.start_time)) / 1000));
+    return (
+      <button className="workout-timer-chip running" onClick={handleStopWorkoutTimer} title="Stop workout timer">
+        <Square size={12} fill="currentColor" /> {formatElapsed(elapsed)}
+      </button>
+    );
+  }
+
+  const duration = workoutTime.duration_seconds ?? 0;
+  return (
+    <span className="workout-timer-chip finished">
+      <Timer size={14} /> {formatElapsed(duration)}
+      <button className="workout-timer-chip-action" onClick={() => handleStartWorkoutTimer()} title="Resume workout timer"><Play size={12} /></button>
+      <button className="workout-timer-chip-action" onClick={handleDeleteWorkoutTime} title="Remove workout time"><X size={12} /></button>
+    </span>
+  );
+}
 
 const formatSyncAge = (timestamp: string): string => {
   if (!timestamp) return 'Never synced';
@@ -104,6 +150,7 @@ export function WorkoutLogView() {
     editingLog, handleSelectLogForEdit, handleCancelEdit,
     setHistoryExerciseId,
     workoutRoutines, routines,
+    setReplaceTargetExerciseId,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
@@ -510,6 +557,7 @@ export function WorkoutLogView() {
                                 <td className="set-td" style={{ textAlign: 'center' }}>
                                   <input
                                     type="checkbox"
+                                    className="set-select-checkbox"
                                     checked={selectedLogIdsForGroup.includes(log.id)}
                                     onChange={(e) => {
                                       if (e.target.checked) {
@@ -518,7 +566,6 @@ export function WorkoutLogView() {
                                         setSelectedLogIdsForGroup(selectedLogIdsForGroup.filter(id => id !== log.id));
                                       }
                                     }}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                   />
                                 </td>
                                 <td className="set-td" style={{ cursor: 'grab', color: 'var(--text-secondary-dark)' }} {...draggableProvided.dragHandleProps}>
@@ -537,11 +584,12 @@ export function WorkoutLogView() {
                                 {showComplete && (
                                   <td className="set-td" style={{ textAlign: 'center' }}>
                                     <button
-                                      className="btn"
+                                      className={`set-complete-toggle ${log.is_complete ? 'checked' : ''}`}
                                       onClick={() => handleToggleComplete(log)}
-                                      style={{ padding: '4px 8px', backgroundColor: log.is_complete ? 'var(--success)' : 'rgba(255,255,255,0.05)', color: log.is_complete ? 'white' : 'var(--text-primary-dark)', borderRadius: '6px' }}
+                                      title={log.is_complete ? 'Mark Incomplete' : 'Mark Complete'}
+                                      aria-label={log.is_complete ? 'Mark set incomplete' : 'Mark set complete'}
                                     >
-                                      <Check size={14} />
+                                      <Check size={18} strokeWidth={3} />
                                     </button>
                                   </td>
                                 )}
@@ -620,6 +668,7 @@ export function WorkoutLogView() {
             <Layers size={18} color="var(--primary)" />
             <span>Today's Workout Summary</span>
           </div>
+          <WorkoutTimerChip />
           <div className="workout-summary-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {currentLogs.length > 0 && (
               <button className="btn btn-primary complete-all-icon-btn summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete} title="Complete All" aria-label="Complete All">
@@ -836,6 +885,18 @@ export function WorkoutLogView() {
                                     className="icon-btn workout-history-btn"
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      setReplaceTargetExerciseId(ex.id);
+                                      setShowCommandPalette(true);
+                                    }}
+                                    title="Replace exercise (swap all of today's sets to another exercise)"
+                                    aria-label={`Replace ${ex.name} with another exercise`}
+                                  >
+                                    <ArrowLeftRight size={15} />
+                                  </button>
+                                  <button
+                                    className="icon-btn workout-history-btn"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setHistoryExerciseId(ex.id);
                                     }}
                                     title="History, records, and graph"
@@ -885,23 +946,20 @@ export function WorkoutLogView() {
                                         </span>
                                       </div>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <div 
-                                          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                                        <button
+                                          className={`set-complete-toggle ${log.is_complete ? 'checked' : ''}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleToggleComplete(log);
                                           }}
                                           title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                                          aria-label={log.is_complete ? "Mark set incomplete" : "Mark set complete"}
                                         >
-                                          {log.is_complete ? (
-                                            <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                          ) : (
-                                            <span style={{ opacity: 0.2 }}>○</span>
-                                          )}
-                                        </div>
+                                          <Check size={18} strokeWidth={3} />
+                                        </button>
                                         <button 
                                           className="btn btn-secondary" 
-                                          style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
+                                          style={{ padding: '8px 10px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.6, fontSize: '14px' }}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleDeleteSet(log.id);
@@ -955,6 +1013,18 @@ export function WorkoutLogView() {
                             className="icon-btn workout-history-btn"
                             onClick={(e) => {
                               e.stopPropagation();
+                              setReplaceTargetExerciseId(ex.id);
+                              setShowCommandPalette(true);
+                            }}
+                            title="Replace exercise (swap all of today's sets to another exercise)"
+                            aria-label={`Replace ${ex.name} with another exercise`}
+                          >
+                            <ArrowLeftRight size={15} />
+                          </button>
+                          <button
+                            className="icon-btn workout-history-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setHistoryExerciseId(ex.id);
                             }}
                             title="History, records, and graph"
@@ -1001,23 +1071,20 @@ export function WorkoutLogView() {
                               </span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div 
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '4px' }}
+                              <button
+                                className={`set-complete-toggle ${log.is_complete ? 'checked' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleToggleComplete(log);
                                 }}
                                 title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
+                                aria-label={log.is_complete ? "Mark set incomplete" : "Mark set complete"}
                               >
-                                {log.is_complete ? (
-                                  <span style={{ color: 'var(--accent)', fontWeight: 'bold' }}>✓</span>
-                                ) : (
-                                  <span style={{ opacity: 0.2 }}>○</span>
-                                )}
-                              </div>
+                                <Check size={18} strokeWidth={3} />
+                              </button>
                               <button 
                                 className="btn btn-secondary" 
-                                style={{ padding: '2px 6px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.5 }}
+                                style={{ padding: '8px 10px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.6, fontSize: '14px' }}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleDeleteSet(log.id);

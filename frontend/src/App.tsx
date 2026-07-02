@@ -267,6 +267,7 @@ export default function App() {
     editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit,
     editExIsFavourite, setEditExIsFavourite, handleUpdateExercise, handleDeleteExercise,
     showCommandPalette, showSupersetManagerModal, setShowSupersetManagerModal,
+    replaceTargetExerciseId, setReplaceTargetExerciseId, handleReplaceExercise,
     selectedExIdsForSuperset, setSelectedExIdsForSuperset, supersetColor, setSupersetColor, handleCreateWorkoutSuperset,
     supersetName, setSupersetName, targetSupersetGroupId, setTargetSupersetGroupId, workoutGroups,
 
@@ -563,11 +564,19 @@ export default function App() {
       {/* Global Command Palette Quick Exercise Search Selector */}
       <CommandPalette
         isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
+        onClose={() => {
+          setShowCommandPalette(false);
+          setReplaceTargetExerciseId(null);
+        }}
         exercises={exercises}
         categories={categories}
         intColorToHex={intColorToHex}
         onSelectExercise={(ex) => {
+          if (replaceTargetExerciseId) {
+            handleReplaceExercise(replaceTargetExerciseId, ex.id);
+            setShowCommandPalette(false);
+            return;
+          }
           setSelectedExercise(ex);
           setShowCommandPalette(false);
           window.dispatchEvent(new CustomEvent('fitnotes:open-set-entry'));
@@ -615,13 +624,14 @@ export default function App() {
 
       {/* 5. Routine Creator Template Modal Drawer */}
       {showCreateRoutineModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateRoutineModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCreateRoutineModal(false)}>
+          <div className="modal-content mobile-modal-content" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-modal-header">
               <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Bookmark size={20} color="var(--primary)" /> Build Routine Template</h2>
               <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowCreateRoutineModal(false)}>Close</button>
             </div>
 
+            <div className="mobile-modal-scroll">
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Template Name</label>
@@ -646,7 +656,7 @@ export default function App() {
               </div>
 
               {/* Display added list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto', marginTop: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
                 {routineCreatorExercises.map((item, idx) => {
                   const ex = exercises.find(x => x.id === item.exercise_id);
                   return (
@@ -684,9 +694,10 @@ export default function App() {
               </div>
             </div>
 
-            <button className="btn btn-primary" onClick={handleCreateRoutineTemplate} style={{ width: '100%', height: '46px' }}>
+            <button className="btn btn-primary" onClick={handleCreateRoutineTemplate} style={{ width: '100%', height: '46px', flexShrink: 0 }}>
               Save Routine Template
             </button>
+            </div>
           </div>
         </div>
       )}
@@ -732,8 +743,8 @@ export default function App() {
 
       {/* Add Exercise to Routine Section Modal */}
       {showAddExToSectionModal && editorAddExerciseTargetSectionId && (
-        <div className="modal-overlay" onClick={() => setShowAddExToSectionModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowAddExToSectionModal(false)}>
+          <div className="modal-content mobile-modal-content" style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexShrink: 0 }}>
               <h2 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 <Dumbbell size={20} color="var(--primary)" /> Select Exercise to Add
@@ -753,7 +764,7 @@ export default function App() {
             </div>
 
             {/* Category Filter Pills */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '16px', flexShrink: 0, maxHeight: '80px', overflowY: 'auto', paddingBottom: '4px' }}>
+            <div className="category-pill-row">
               <button 
                 className="btn" 
                 style={{ 
@@ -838,8 +849,8 @@ export default function App() {
 
       {/* Import Previous Workout Logs Modal */}
       {showPastImporterModal && pastImporterTargetSectionId && (
-        <div className="modal-overlay" onClick={() => setShowPastImporterModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowPastImporterModal(false)}>
+          <div className="modal-content mobile-modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <h2 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
                 <Bookmark size={20} color="var(--primary)" /> Import Past Workout
@@ -851,7 +862,7 @@ export default function App() {
               Select a calendar date to import all exercise templates and logged sets directly into this day section:
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
+            <div className="mobile-modal-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '12px' }}>
               {/* Date Input Selector */}
               <div>
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Select Target Date</label>
@@ -1049,8 +1060,9 @@ export default function App() {
                 const isChecked = selectedExIdsForSuperset.includes(exId);
                 return (
                   <label key={exId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', backgroundColor: isChecked ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
+                      className="set-select-checkbox"
                       checked={isChecked}
                       onChange={(e) => {
                         if (e.target.checked) {
@@ -1059,7 +1071,6 @@ export default function App() {
                           setSelectedExIdsForSuperset(selectedExIdsForSuperset.filter(id => id !== exId));
                         }
                       }}
-                      style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                     />
                     <span style={{ fontWeight: 700, fontSize: '14px' }}>{ex.name}</span>
                   </label>

@@ -5,8 +5,35 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { POPULATE_SETS_TYPE } from '../types';
 
 const bySortOrder = <T extends { sort_order: number }>(a: T, b: T) => a.sort_order - b.sort_order;
+
+// The three set-population modes from the reference app, in its display order.
+const POPULATE_TYPE_OPTIONS = [
+  {
+    value: POPULATE_SETS_TYPE.COPY_PREVIOUS_WORKOUT,
+    label: 'Copy previous sets',
+    hint: "Automatically copies sets from this exercise's most recent workout.",
+  },
+  {
+    value: POPULATE_SETS_TYPE.PREDEFINED_SETS,
+    label: 'Predefined sets',
+    hint: 'Sets below are created in each workout. Leave a field blank to carry that value over from the previous workout.',
+  },
+  {
+    value: POPULATE_SETS_TYPE.NONE,
+    label: "Don't populate",
+    hint: 'No sets are pre-filled — record sets on-the-fly during the workout.',
+  },
+];
+
+// Parse a numeric input where an empty field means "inherit from previous workout".
+const numOrNull = (raw: string, parse: (v: string) => number): number | null => {
+  if (raw.trim() === '') return null;
+  const parsed = parse(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+};
 
 export function RoutineEditorView() {
   const {
@@ -15,6 +42,7 @@ export function RoutineEditorView() {
     editorSections, editorSectionExercises, editorExerciseSets,
     exercises, groupExercises, workoutGroups, userUnit,
     handleUpdateSectionName, handleAddAllSectionLogs, handleDeleteSection,
+    handleUpdatePopulateSetsType,
     openAddExerciseToSection, openPastImporter,
     selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     handleClearRoutineGroup, handleDeleteExerciseFromSection,
@@ -75,7 +103,7 @@ export function RoutineEditorView() {
                         >
                           {/* Section Header */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-dark)', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 200px', minWidth: 0 }}>
                               <div {...providedSection.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-secondary-dark)', display: 'flex', alignItems: 'center' }}>
                                 <GripVertical size={18} />
                               </div>
@@ -83,13 +111,13 @@ export function RoutineEditorView() {
                                 type="text"
                                 value={section.name}
                                 onChange={(e) => handleUpdateSectionName(section.id, e.target.value)}
-                                style={{ fontWeight: 800, fontSize: '16px', border: 'none', background: 'transparent', padding: '4px', borderBottom: '1px solid transparent', width: '240px', color: 'var(--text-primary-dark)' }}
+                                style={{ fontWeight: 800, fontSize: '16px', border: 'none', background: 'transparent', padding: '4px', borderBottom: '1px solid transparent', flex: 1, minWidth: '120px', maxWidth: '280px', color: 'var(--text-primary-dark)' }}
                                 onFocus={(e) => (e.target.style.borderBottomColor = 'var(--primary)')}
                                 onBlur={(e) => (e.target.style.borderBottomColor = 'transparent')}
                               />
                             </div>
 
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <div className="routine-section-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                               <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => handleAddAllSectionLogs(section.id)} title="Log all template sets from this day into today's log">
                                 <Check size={14} color="var(--success)" /> Add to Log
                               </button>
@@ -133,10 +161,11 @@ export function RoutineEditorView() {
                                             style={{ backgroundColor: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-dark)', borderLeft: groupColor ? `6px solid ${groupColor}` : '1px solid var(--border-dark)', borderRadius: groupColor ? '0 12px 12px 0' : '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', ...providedExDraggable.draggableProps.style }}
                                           >
                                             {/* Exercise Header */}
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
                                                 <input
                                                   type="checkbox"
+                                                  className="set-select-checkbox"
                                                   checked={selectedSectionExerciseIdsForSuperset.includes(se.id)}
                                                   onChange={(e) => {
                                                     if (e.target.checked) {
@@ -145,7 +174,6 @@ export function RoutineEditorView() {
                                                       setSelectedSectionExerciseIdsForSuperset(selectedSectionExerciseIdsForSuperset.filter(id => id !== se.id));
                                                     }
                                                   }}
-                                                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                                                 />
                                                 <div {...providedExDraggable.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-secondary-dark)', display: 'flex', alignItems: 'center' }}>
                                                   <GripVertical size={16} />
@@ -172,10 +200,27 @@ export function RoutineEditorView() {
                                               </div>
                                             </div>
 
-                                            {/* Template Predefined Sets List */}
+                                            {/* Set population mode (mirrors reference populate_sets_type dialog) */}
+                                            <div className="populate-type-row">
+                                              {POPULATE_TYPE_OPTIONS.map(opt => (
+                                                <button
+                                                  key={opt.value}
+                                                  className={`populate-type-btn ${se.populate_sets_type === opt.value ? 'active' : ''}`}
+                                                  onClick={() => handleUpdatePopulateSetsType(se.id, opt.value)}
+                                                >
+                                                  {opt.label}
+                                                </button>
+                                              ))}
+                                            </div>
+                                            <p className="populate-type-hint">
+                                              {(POPULATE_TYPE_OPTIONS.find(opt => opt.value === se.populate_sets_type) ?? POPULATE_TYPE_OPTIONS[1]).hint}
+                                            </p>
+
+                                            {/* Template Predefined Sets List (only relevant for predefined mode) */}
+                                            {se.populate_sets_type === POPULATE_SETS_TYPE.PREDEFINED_SETS && (
                                             <div style={{ paddingLeft: '8px' }}>
                                               {exerciseSets.length === 0 ? (
-                                                <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>No sets defined for this template.</p>
+                                                <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontStyle: 'italic', margin: '4px 0 10px 0' }}>No predefined sets added yet.</p>
                                               ) : (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
                                                   {exerciseSets.map((set, setIdx) => {
@@ -185,15 +230,15 @@ export function RoutineEditorView() {
                                                     const hasDuration = typeHasDuration(ex.exercise_type_id);
 
                                                     return (
-                                                      <div key={set.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px' }}>
-                                                        <span style={{ fontWeight: 800, color: 'var(--text-secondary-dark)', width: '40px' }}>Set {setIdx + 1}</span>
+                                                      <div key={set.id} className="template-set-row">
+                                                        <span style={{ fontWeight: 800, color: 'var(--text-secondary-dark)', width: '40px', flexShrink: 0 }}>Set {setIdx + 1}</span>
 
                                                         {isWeightedEx && (
                                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                             <span style={{ color: 'var(--text-secondary-dark)' }}>Weight:</span>
-                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: Math.max(0, (set.metric_weight || 0) - 2.5) })}>-</button>
-                                                            <input type="number" value={set.metric_weight || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { metric_weight: parseFloat(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
-                                                            <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: (set.metric_weight || 0) + 2.5 })}>+</button>
+                                                            <button className="btn btn-secondary template-set-stepper" onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: Math.max(0, (set.metric_weight || 0) - 2.5) })}>-</button>
+                                                            <input type="number" placeholder="prev" value={set.metric_weight ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { metric_weight: numOrNull(e.target.value, parseFloat) })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '28px', borderRadius: '4px' }} />
+                                                            <button className="btn btn-secondary template-set-stepper" onClick={() => handleUpdateTemplateSetValues(set.id, { metric_weight: (set.metric_weight || 0) + 2.5 })}>+</button>
                                                             <span style={{ color: 'var(--text-secondary-dark)', fontSize: '12px' }}>{userUnit}</span>
                                                           </div>
                                                         )}
@@ -201,28 +246,28 @@ export function RoutineEditorView() {
                                                         {hasReps && (
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                           <span style={{ color: 'var(--text-secondary-dark)' }}>Reps:</span>
-                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { reps: Math.max(0, (set.reps || 0) - 1) })}>-</button>
-                                                          <input type="number" value={set.reps || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { reps: parseInt(e.target.value) || 0 })} style={{ width: '50px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
-                                                          <button className="btn btn-secondary" style={{ padding: '2px 8px', height: '24px', fontSize: '11px' }} onClick={() => handleUpdateTemplateSetValues(set.id, { reps: (set.reps || 0) + 1 })}>+</button>
+                                                          <button className="btn btn-secondary template-set-stepper" onClick={() => handleUpdateTemplateSetValues(set.id, { reps: Math.max(0, (set.reps || 0) - 1) })}>-</button>
+                                                          <input type="number" placeholder="prev" value={set.reps ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { reps: numOrNull(e.target.value, (v) => parseInt(v, 10)) })} style={{ width: '50px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '28px', borderRadius: '4px' }} />
+                                                          <button className="btn btn-secondary template-set-stepper" onClick={() => handleUpdateTemplateSetValues(set.id, { reps: (set.reps || 0) + 1 })}>+</button>
                                                         </div>
                                                         )}
 
                                                         {hasDistance && (
                                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                             <span style={{ color: 'var(--text-secondary-dark)' }}>Distance:</span>
-                                                            <input type="number" value={set.distance || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { distance: parseFloat(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                            <input type="number" placeholder="prev" value={set.distance ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { distance: numOrNull(e.target.value, parseFloat) })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '28px', borderRadius: '4px' }} />
                                                           </div>
                                                         )}
 
                                                         {hasDuration && (
                                                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                             <span style={{ color: 'var(--text-secondary-dark)' }}>Time:</span>
-                                                            <input type="number" value={set.duration_seconds || ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { duration_seconds: parseInt(e.target.value) || 0 })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '24px', borderRadius: '4px' }} />
+                                                            <input type="number" placeholder="prev" value={set.duration_seconds ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { duration_seconds: numOrNull(e.target.value, (v) => parseInt(v, 10)) })} style={{ width: '65px', padding: '4px', textAlign: 'center', fontSize: '13px', height: '28px', borderRadius: '4px' }} />
                                                             <span style={{ color: 'var(--text-secondary-dark)', fontSize: '12px' }}>sec</span>
                                                           </div>
                                                         )}
 
-                                                        <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary-dark)', cursor: 'pointer', marginLeft: 'auto', display: 'flex', alignItems: 'center' }} onClick={() => handleDeleteSetFromTemplateExercise(set.id)} title="Delete Set">
+                                                        <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary-dark)', cursor: 'pointer', marginLeft: 'auto', display: 'flex', alignItems: 'center', padding: '6px' }} onClick={() => handleDeleteSetFromTemplateExercise(set.id)} title="Delete Set">
                                                           <Trash2 size={14} color="var(--danger)" />
                                                         </button>
                                                       </div>
@@ -231,10 +276,11 @@ export function RoutineEditorView() {
                                                 </div>
                                               )}
 
-                                              <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} onClick={() => handleAddSetToTemplateExercise(se.id)}>
+                                              <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }} onClick={() => handleAddSetToTemplateExercise(se.id)}>
                                                 <Plus size={12} /> Add Predefined Set
                                               </button>
                                             </div>
+                                            )}
                                           </div>
                                         )}
                                       </Draggable>
