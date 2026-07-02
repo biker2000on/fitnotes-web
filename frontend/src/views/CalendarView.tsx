@@ -1,7 +1,7 @@
 // CalendarView.tsx - Responsive calendar dashboard with workout history and
 // a selected-day summary that preserves supersets.
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List, Menu, Bookmark } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -14,11 +14,12 @@ export function CalendarView() {
     calendarYear, calendarMonth, handlePrevMonth, handleNextMonth,
     allLogs, selectedDate, setSelectedDate, settings, exercises, categories,
     workoutComment, setActiveTab, formatLogValue, handleSelectLogForEdit,
-    workoutGroups, groupExercises, routines, workoutRoutines,
+    workoutGroups, groupExercises, routines, workoutRoutines, setSidebarOpen,
   } = useFitNotesStore();
   const [view, setView] = useState<'month' | 'list'>('month');
   const [filter, setFilter] = useState('');
   const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
+  const swipeRef = useRef({ startX: 0, startY: 0, tracking: false, swiped: false });
 
   // Routine day-splits for the filter dropdown (not kept in global store state).
   useEffect(() => {
@@ -125,6 +126,38 @@ export function CalendarView() {
   const allLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayLabels = Array.from({ length: 7 }, (_, i) => allLabels[(weekStart + i) % 7]);
 
+  const handleCalendarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'mouse') return;
+    swipeRef.current = { startX: e.clientX, startY: e.clientY, tracking: true, swiped: false };
+  };
+
+  const handleCalendarPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const swipe = swipeRef.current;
+    if (!swipe.tracking) return;
+
+    swipe.tracking = false;
+    const deltaX = e.clientX - swipe.startX;
+    const deltaY = e.clientY - swipe.startY;
+    const absX = Math.abs(deltaX);
+    const absY = Math.abs(deltaY);
+
+    if (absX >= 56 && absX > absY * 1.4) {
+      swipe.swiped = true;
+      if (deltaX > 0) {
+        handlePrevMonth();
+      } else {
+        handleNextMonth();
+      }
+      window.setTimeout(() => {
+        swipeRef.current.swiped = false;
+      }, 180);
+    }
+  };
+
+  const handleCalendarPointerCancel = () => {
+    swipeRef.current.tracking = false;
+  };
+
   const historyDays = useMemo(() => {
     const byDate: Record<string, { sets: number; exercises: Set<string> }> = {};
     for (const l of allLogs) {
@@ -153,6 +186,21 @@ export function CalendarView() {
     () => allLogs.filter(l => l.date === selectedDate && !l.is_deleted),
     [allLogs, selectedDate],
   );
+
+  const linkedRoutineSummaries = useMemo(() => (
+    workoutRoutines
+      .filter(wr => wr.date === selectedDate && !wr.is_deleted)
+      .map(wr => {
+        const routine = routines.find(r => r.id === wr.routine_id && !r.is_deleted);
+        if (!routine) return null;
+        const section = wr.routine_section_id ? routineSections.find(s => s.id === wr.routine_section_id && !s.is_deleted) : null;
+        return {
+          id: wr.id,
+          label: `${routine.name}${section ? ` - ${section.name}` : ''}`,
+        };
+      })
+      .filter((item): item is { id: string; label: string } => item !== null)
+  ), [workoutRoutines, selectedDate, routines, routineSections]);
 
   const summaryItems = useMemo(() => {
     const activeGroups = workoutGroups.filter(wg => wg.date === selectedDate && !wg.is_deleted);
@@ -232,6 +280,9 @@ export function CalendarView() {
 
       <div className="calendar-left-pane card">
         <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="hamburger-btn calendar-menu-btn" onClick={() => setSidebarOpen(true)} title="Open navigation menu" aria-label="Open navigation menu">
+            <Menu size={20} />
+          </button>
           <button className={`btn ${view === 'month' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setView('month')}>
             <Calendar size={14} /> Month
           </button>
@@ -298,7 +349,12 @@ export function CalendarView() {
             ))}
           </div>
         ) : (
-          <div className="calendar-container">
+          <div
+            className="calendar-container calendar-container-swipable"
+            onPointerDown={handleCalendarPointerDown}
+            onPointerUp={handleCalendarPointerUp}
+            onPointerCancel={handleCalendarPointerCancel}
+          >
             <div className="calendar-header">
               <h2 style={{ fontSize: '20px', fontWeight: 700 }}>
                 {new Date(calendarYear, calendarMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}
@@ -330,7 +386,10 @@ export function CalendarView() {
                     <div
                       key={`day-${dayNum}`}
                       className={`calendar-day ${selectedDate === dateStr ? 'active' : ''} ${isToday ? 'today' : ''}`}
-                      onClick={() => setSelectedDate(dateStr)}
+                      onClick={() => {
+                        if (swipeRef.current.swiped) return;
+                        setSelectedDate(dateStr);
+                      }}
                       style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
                     >
                       {dayNum}
@@ -357,6 +416,27 @@ export function CalendarView() {
           </div>
           <div className="workout-summary-date">{formattedSelectedDate}</div>
         </div>
+
+        {linkedRoutineSummaries.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+            {linkedRoutineSummaries.map(routine => (
+              <span
+                key={routine.id}
+                title="Routine linked to this workout"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  fontSize: '12px', fontWeight: 700,
+                  color: 'var(--primary)', backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  borderRadius: '999px', padding: '4px 12px',
+                }}
+              >
+                <Bookmark size={12} />
+                {routine.label}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="workout-summary-scroll">
           {summaryItems.length === 0 ? (

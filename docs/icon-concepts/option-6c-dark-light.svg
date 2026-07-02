@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" fill="none">
+  <rect width="900" height="520" fill="#f8fafc"/>
+  <text x="48" y="64" fill="#0f172a" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="30" font-weight="800">FitNotes Icon Concept C</text>
+  <text x="48" y="98" fill="#475569" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="17" font-weight="500">Workout-complete logbook mark, shown in dark and light app-icon treatments.</text>
+
+  <defs>
+    <filter id="softShadow" x="-24%" y="-24%" width="148%" height="156%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0f172a" flood-opacity="0.18"/>
+    </filter>
+    <style>
+      .label { fill: #0f172a; font: 800 20px Inter, Segoe UI, Arial, sans-serif; }
+      .note { fill: #64748b; font: 500 14px Inter, Segoe UI, Arial, sans-serif; }
+    </style>
+  </defs>
+
+  <!-- Dark mode icon -->
+  <g transform="translate(120 150)">
+    <rect x="0" y="0" width="240" height="240" rx="54" fill="#0b1220" filter="url(#softShadow)"/>
+    <rect x="61" y="45" width="128" height="150" rx="24" fill="#f8fafc"/>
+    <rect x="61" y="45" width="33" height="150" rx="16.5" fill="#0284c7"/>
+    <path d="M119 84H158" stroke="#94a3b8" stroke-width="8" stroke-linecap="round"/>
+    <path d="M119 110H148" stroke="#cbd5e1" stroke-width="8" stroke-linecap="round"/>
+    <path d="M111 154L127 170L164 129" stroke="#0284c7" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="42" y="292" class="label">Dark Icon</text>
+    <text x="12" y="318" class="note">Best for the current dark app shell.</text>
+  </g>
+
+  <!-- Light mode icon -->
+  <g transform="translate(540 150)">
+    <rect x="0" y="0" width="240" height="240" rx="54" fill="#f8fafc" stroke="#cbd5e1" stroke-width="7" filter="url(#softShadow)"/>
+    <rect x="61" y="45" width="128" height="150" rx="24" fill="#0f172a"/>
+    <rect x="61" y="45" width="33" height="150" rx="16.5" fill="#0284c7"/>
+    <path d="M119 84H158" stroke="#e2e8f0" stroke-width="8" stroke-linecap="round"/>
+    <path d="M119 110H148" stroke="#94a3b8" stroke-width="8" stroke-linecap="round"/>
+    <path d="M111 154L127 170L164 129" stroke="#38bdf8" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="42" y="292" class="label">Light Icon</text>
+    <text x="11" y="318" class="note">Same geometry, inverted surface.</text>
+  </g>
+</svg>

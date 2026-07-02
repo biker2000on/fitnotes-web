@@ -90,7 +90,7 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_oidc_identity_idx ON users (oidc_issuer, oidc_subject) WHERE oidc_subject IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS oidc_states (
+CREATE UNLOGGED TABLE IF NOT EXISTS oidc_states (
     state VARCHAR(255) PRIMARY KEY,
     code_verifier TEXT NOT NULL,
     nonce VARCHAR(255) NOT NULL,
@@ -98,3 +98,4 @@ CREATE TABLE IF NOT EXISTS oidc_states (
     redirect_to TEXT,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
+ALTER TABLE IF EXISTS oidc_states SET UNLOGGED;

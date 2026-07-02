@@ -251,6 +251,11 @@ body.light-theme .nav-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* Keep the header aligned with the centered content column instead of
+     stretching across ultra-wide viewports. */
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 .title-section h1 {
@@ -300,6 +305,9 @@ body.light-theme .title-section p {
   grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
   will-change: transform, opacity;
 }
@@ -348,6 +356,16 @@ body.light-theme .title-section p {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.calendar-container-swipable {
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.calendar-menu-btn {
+  padding: 7px;
+  border-radius: 8px;
 }
 
 .calendar-header {

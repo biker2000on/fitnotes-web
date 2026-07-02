@@ -1698,6 +1698,8 @@ export function useFitNotesController() {
       for (const l of currentLogs) await db.execute('UPDATE training_logs', [{ ...l, is_deleted: true }]);
       const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
       for (const g of groups.filter(x => x.date === selectedDate && !x.is_deleted)) await db.execute('UPDATE workout_groups', [{ ...g, is_deleted: true }]);
+      const routineLinks = await db.query<WorkoutRoutine>('SELECT * FROM workout_routines');
+      for (const wr of routineLinks.filter(x => x.date === selectedDate && !x.is_deleted)) await db.execute('UPDATE workout_routines', [{ ...wr, is_deleted: true }]);
       await refreshData();
       triggerToast('Day cleared.');
     }, { approveLabel: 'Delete', tone: 'danger' });
@@ -1828,6 +1830,17 @@ export function useFitNotesController() {
       await db.execute('INSERT INTO training_logs', [deleted]);
       await refreshDateData(target.date);
     }
+  };
+
+  const handleDeleteWorkoutRoutine = async (id: string) => {
+    const target = workoutRoutines.find(x => x.id === id);
+    if (!target) return;
+
+    const deleted = { ...target, is_deleted: true };
+    setWorkoutRoutines(prev => prev.map(wr => wr.id === id ? deleted : wr));
+    await db.execute('INSERT INTO workout_routines', [deleted]);
+    await refreshData();
+    triggerToast('Routine link removed from workout.');
   };
 
   // Copy workout selector handler
@@ -3492,7 +3505,7 @@ export function useFitNotesController() {
     showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     pastLoggedDates, setPastLoggedDates, workoutGroups, setWorkoutGroups, groupExercises, setGroupExercises,
-    workoutRoutines, setWorkoutRoutines, recordWorkoutRoutine,
+    workoutRoutines, setWorkoutRoutines, recordWorkoutRoutine, handleDeleteWorkoutRoutine,
     selectedLogIdsForGroup, setSelectedLogIdsForGroup, newExName, setNewExName, newExCategory, setNewExCategory,
     newExType, setNewExType, newExNotes, setNewExNotes, showCatModal, setShowCatModal, newCatName, setNewCatName,
     newCatColor, setNewCatColor, selectedExercise, setSelectedExercise, logWeight, setLogWeight, logReps, setLogReps,

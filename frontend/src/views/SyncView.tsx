@@ -84,7 +84,7 @@ export function SyncView() {
   };
 
   return (
-    <div style={{ maxWidth: '480px', margin: '40px auto 0 auto', width: '100%' }}>
+    <div style={{ maxWidth: '620px', margin: '24px auto 0 auto', width: '100%' }}>
       {/* API Server Endpoint Override Widget */}
       <div className="card" style={{ gap: '16px', padding: '24px', marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

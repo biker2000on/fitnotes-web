@@ -149,7 +149,7 @@ export function WorkoutLogView() {
     startRestTimer, shareWorkout, triggerToast,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
     setHistoryExerciseId,
-    workoutRoutines, routines,
+    workoutRoutines, routines, handleDeleteWorkoutRoutine,
     setReplaceTargetExerciseId,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
@@ -722,6 +722,20 @@ export function WorkoutLogView() {
                 >
                   <Bookmark size={12} />
                   {routine.name}{sectionName ? ` - ${sectionName}` : ''}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteWorkoutRoutine(wr.id)}
+                    aria-label={`Remove ${routine.name}${sectionName ? ` - ${sectionName}` : ''} from this workout`}
+                    title="Remove routine from this workout"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      width: '18px', height: '18px', marginRight: '-6px',
+                      border: 'none', borderRadius: '50%', cursor: 'pointer',
+                      background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger)',
+                    }}
+                  >
+                    <X size={12} />
+                  </button>
                 </span>
               );
             })}
