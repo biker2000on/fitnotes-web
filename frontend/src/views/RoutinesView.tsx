@@ -177,7 +177,7 @@ export function RoutinesView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '800px', margin: '0 auto', width: '100%' }}>
-      <div className="card">
+      <div className="card" style={{ padding: '16px 18px', gap: '12px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Bookmark size={18} color="var(--primary)" />
@@ -209,7 +209,7 @@ export function RoutinesView() {
           </select>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {routines.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--text-secondary-dark)' }}>
               <Bookmark size={32} style={{ opacity: 0.2, marginBottom: '8px', display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
@@ -245,13 +245,13 @@ export function RoutinesView() {
                   >
                     <div style={{ flex: '1 1 220px', minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary-dark)' }}>{r.name}</h3>
+                        <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary-dark)' }}>{r.name}</h3>
                         {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary-dark)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary-dark)' }} />}
                       </div>
-                      <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '4px' }}>{r.notes || 'No notes added.'}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', marginTop: '2px' }}>{r.notes || 'No notes added.'}</p>
                       {completionStats.byRoutine[r.id] && (
-                        <p style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
-                          <CalendarCheck size={13} />
+                        <p style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
+                          <CalendarCheck size={12} />
                           Completed {completionStats.byRoutine[r.id].count} {completionStats.byRoutine[r.id].count === 1 ? 'time' : 'times'} - last {completionStats.byRoutine[r.id].last}
                         </p>
                       )}
@@ -296,14 +296,14 @@ export function RoutinesView() {
 
                   {/* Card Expanded Content */}
                   {isExpanded && (
-                    <div style={{ padding: '20px', borderTop: '1px solid var(--border-dark)', backgroundColor: 'rgba(0,0,0,0.08)' }}>
+                    <div style={{ padding: '12px 16px', borderTop: '1px solid var(--border-dark)', backgroundColor: 'rgba(0,0,0,0.08)' }}>
                       {loadingDetails ? (
                         <div style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '12px 0' }}>Loading workout days...</div>
                       ) : !routineDetails || routineDetails.sections.length === 0 ? (
                         <div style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '12px 0' }}>No workout days added to this routine yet. Edit the template to add days.</div>
                       ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          <h4 style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', marginBottom: '4px' }}>Workout Day Splits (Select to Start)</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <h4 style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', margin: 0 }}>Workout Day Splits (Select to Start)</h4>
                           
                           <div className="routine-splits-grid">
                             {routineDetails.sections.map(sec => {
@@ -323,20 +323,20 @@ export function RoutinesView() {
                                   style={{
                                     background: 'rgba(255,255,255,0.02)',
                                     border: '1px solid var(--border-dark)',
-                                    borderRadius: '12px',
-                                    padding: '16px',
+                                    borderRadius: '10px',
+                                    padding: '10px 12px',
                                     display: 'flex',
                                     flexDirection: 'column',
                                     justifyContent: 'space-between',
-                                    gap: '12px',
+                                    gap: '8px',
                                     transition: 'border-color 0.2s ease'
                                   }}
                                   onMouseEnter={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
                                   onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-dark)'}
                                 >
                                   <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-                                      <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary-dark)' }}>{sec.name}</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
+                                      <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary-dark)' }}>{sec.name}</div>
                                       {completionStats.bySection[sec.id] && (
                                         <span
                                           title={`Last completed ${completionStats.bySection[sec.id].last}`}
@@ -348,7 +348,7 @@ export function RoutinesView() {
                                     </div>
                                     
                                     {/* Exercise list inside split */}
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                       {secExs.length === 0 ? (
                                         <div style={{ fontStyle: 'italic', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>No exercises</div>
                                       ) : (
@@ -397,7 +397,7 @@ export function RoutinesView() {
                                                 <span style={{ fontSize: '11px', fontWeight: 700, opacity: 0.7, whiteSpace: 'nowrap' }}>{setCountLabel}</span>
                                               </div>
                                               {collapsed.length > 0 && (
-                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', paddingLeft: '18px', marginTop: '2px', lineHeight: 1.5 }}>
+                                                <div style={{ fontSize: '11.5px', color: 'var(--text-secondary-dark)', paddingLeft: '18px', lineHeight: 1.35 }}>
                                                   {collapsed.map((c, i) => (
                                                     <span key={i}>
                                                       {i > 0 && <span style={{ opacity: 0.4 }}> · </span>}
@@ -413,17 +413,17 @@ export function RoutinesView() {
                                     </div>
                                   </div>
 
-                                  <button 
-                                    className="btn btn-primary" 
-                                    style={{ 
-                                      width: '100%', 
-                                      display: 'flex', 
-                                      alignItems: 'center', 
-                                      justifyContent: 'center', 
-                                      gap: '6px', 
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{
+                                      width: '100%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '6px',
                                       fontSize: '12px',
-                                      padding: '8px 12px',
-                                      marginTop: '8px'
+                                      padding: '6px 12px',
+                                      marginTop: '4px'
                                     }}
                                     onClick={() => {
                                       // Trigger start of only this Workout Day split

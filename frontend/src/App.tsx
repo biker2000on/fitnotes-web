@@ -258,8 +258,7 @@ export default function App() {
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     showCatModal, setShowCatModal, newCatName, setNewCatName, newCatColor, setNewCatColor, handleCreateCategory,
     showCreateRoutineModal, setShowCreateRoutineModal, newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
-    routineCreatorExercises, setRoutineCreatorExercises, selectedExForRoutine, setSelectedExForRoutine,
-    handleAddExToRoutineCreator, handleCreateRoutineTemplate,
+    handleCreateRoutineTemplate,
     showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, handleUpdateCategory, handleDeleteCategory,
     showEditExModal, setShowEditExModal, editingExercise, editExName, setEditExName, editExCategory, setEditExCategory,
@@ -622,81 +621,47 @@ export default function App() {
         </div>
       )}
 
-      {/* 5. Routine Creator Template Modal Drawer */}
+      {/* 5. Routine Creator Modal — name + notes only; days and exercises are
+          added in the routine editor afterwards (reference app flow). */}
       {showCreateRoutineModal && (
         <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCreateRoutineModal(false)}>
-          <div className="modal-content mobile-modal-content" style={{ maxWidth: '640px' }} onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content mobile-modal-content" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
             <div className="mobile-modal-header">
-              <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Bookmark size={20} color="var(--primary)" /> Build Routine Template</h2>
+              <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Bookmark size={20} color="var(--primary)" /> Create Routine</h2>
               <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowCreateRoutineModal(false)}>Close</button>
             </div>
 
             <div className="mobile-modal-scroll">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Template Name</label>
-                <input type="text" placeholder="e.g. Heavy Pull A, Hypertrophy Legs" value={newRoutineName} onChange={(e) => setNewRoutineName(e.target.value)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Routine Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Push Pull Legs, 5/3/1"
+                    value={newRoutineName}
+                    onChange={(e) => setNewRoutineName(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateRoutineTemplate(); }}
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Notes (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Warmup 5 min, then complete sets with 2 min rest"
+                    value={newRoutineNotes}
+                    onChange={(e) => setNewRoutineNotes(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateRoutineTemplate(); }}
+                  />
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', margin: 0 }}>
+                  You'll add workout days and exercises next, in the routine editor.
+                </p>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Description Notes</label>
-                <input type="text" placeholder="Warmup 5 min, then complete sets with 2 min rest" value={newRoutineNotes} onChange={(e) => setNewRoutineNotes(e.target.value)} />
-              </div>
-            </div>
 
-            {/* Exercises select & adder */}
-            <div style={{ border: '1px solid var(--border-dark)', borderRadius: '16px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: 800 }}>Add Exercise to Routine</h3>
-              <div style={{ display: 'flex', gap: '12px' }}>
-                <select value={selectedExForRoutine} onChange={(e) => setSelectedExForRoutine(e.target.value)} style={{ flex: 2 }}>
-                  {exercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
-                </select>
-                <button className="btn btn-secondary" onClick={handleAddExToRoutineCreator}>
-                  Add
-                </button>
-              </div>
-
-              {/* Display added list */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                {routineCreatorExercises.map((item, idx) => {
-                  const ex = exercises.find(x => x.id === item.exercise_id);
-                  return (
-                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', padding: '8px 12px', backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-dark)', borderRadius: '10px' }}>
-                      <span style={{ fontWeight: 700 }}>{idx + 1}. {ex?.name}</span>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <input 
-                          type="number" 
-                          placeholder="--"
-                          value={item.weight} 
-                          onChange={(e) => {
-                            const updated = [...routineCreatorExercises];
-                            updated[idx].weight = e.target.value;
-                            setRoutineCreatorExercises(updated);
-                          }}
-                          style={{ width: '60px', padding: '4px' }}
-                        />
-                        <span>{userUnit} x</span>
-                        <input 
-                          type="number" 
-                          placeholder="--"
-                          value={item.reps} 
-                          onChange={(e) => {
-                            const updated = [...routineCreatorExercises];
-                            updated[idx].reps = e.target.value;
-                            setRoutineCreatorExercises(updated);
-                          }}
-                          style={{ width: '50px', padding: '4px' }}
-                        />
-                        <span>reps</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button className="btn btn-primary" onClick={handleCreateRoutineTemplate} style={{ width: '100%', height: '46px', flexShrink: 0 }}>
-              Save Routine Template
-            </button>
+              <button className="btn btn-primary" onClick={handleCreateRoutineTemplate} style={{ width: '100%', height: '46px', flexShrink: 0, marginTop: '8px' }}>
+                Create & Open Editor
+              </button>
             </div>
           </div>
         </div>

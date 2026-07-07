@@ -53,8 +53,8 @@ export function RoutineEditorView() {
   if (!editingRoutine) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
-      <div className="card" style={{ padding: '20px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+      <div className="card" style={{ padding: '14px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button className="btn btn-secondary" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => {
@@ -81,7 +81,7 @@ export function RoutineEditorView() {
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="routine-days" type="SECTION">
           {(provided) => (
-            <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
+            <div ref={provided.innerRef} {...provided.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%' }}>
               {editorSections.length === 0 ? (
                 <div className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
                   <p style={{ color: 'var(--text-secondary-dark)', fontSize: '14px', margin: 0 }}>
@@ -99,10 +99,10 @@ export function RoutineEditorView() {
                           ref={providedSection.innerRef}
                           {...providedSection.draggableProps}
                           className="card"
-                          style={{ padding: '24px', backgroundColor: 'var(--bg-surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '16px', ...providedSection.draggableProps.style }}
+                          style={{ padding: '14px 16px', gap: '12px', backgroundColor: 'var(--bg-surface-dark)', border: '1px solid var(--border-dark)', borderRadius: '14px', ...providedSection.draggableProps.style }}
                         >
                           {/* Section Header */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-dark)', paddingBottom: '12px', flexWrap: 'wrap', gap: '12px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-dark)', paddingBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: '1 1 200px', minWidth: 0 }}>
                               <div {...providedSection.dragHandleProps} style={{ cursor: 'grab', color: 'var(--text-secondary-dark)', display: 'flex', alignItems: 'center' }}>
                                 <GripVertical size={18} />
@@ -136,7 +136,7 @@ export function RoutineEditorView() {
                           {/* Exercises Droppable Area inside this section */}
                           <Droppable droppableId={`routine-section-exercises-${section.id}`} type="EXERCISE">
                             {(providedEx) => (
-                              <div ref={providedEx.innerRef} {...providedEx.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '16px', minHeight: '30px' }}>
+                              <div ref={providedEx.innerRef} {...providedEx.droppableProps} style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px', minHeight: '30px' }}>
                                 {sectionExercises.length === 0 ? (
                                   <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', fontStyle: 'italic', padding: '16px 0', margin: 0 }}>
                                     No exercises added to this day yet.
@@ -158,7 +158,7 @@ export function RoutineEditorView() {
                                           <div
                                             ref={providedExDraggable.innerRef}
                                             {...providedExDraggable.draggableProps}
-                                            style={{ backgroundColor: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-dark)', borderLeft: groupColor ? `6px solid ${groupColor}` : '1px solid var(--border-dark)', borderRadius: groupColor ? '0 12px 12px 0' : '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', ...providedExDraggable.draggableProps.style }}
+                                            style={{ backgroundColor: 'rgba(255, 255, 255, 0.015)', border: '1px solid var(--border-dark)', borderLeft: groupColor ? `6px solid ${groupColor}` : '1px solid var(--border-dark)', borderRadius: groupColor ? '0 10px 10px 0' : '10px', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '8px', ...providedExDraggable.draggableProps.style }}
                                           >
                                             {/* Exercise Header */}
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>

@@ -369,8 +369,6 @@ export function useFitNotesController() {
   // Routine templates creation states
   const [newRoutineName, setNewRoutineName] = useState('');
   const [newRoutineNotes, setNewRoutineNotes] = useState('');
-  const [routineCreatorExercises, setRoutineCreatorExercises] = useState<Array<{ exercise_id: string; weight: string; reps: string; sort_order: number }>>([]);
-  const [selectedExForRoutine, setSelectedExForRoutine] = useState('');
 
   // Manage Categories modal states
   const [showManageCatsModal, setShowManageCatsModal] = useState(false);
@@ -1041,7 +1039,6 @@ export function useFitNotesController() {
     if (exs.length > 0 && !selectedExerciseRef.current) {
       setSelectedExercise(exs[0]);
       setAnalyticExerciseId(exs[0].id);
-      setSelectedExForRoutine(exs[0].id);
     }
 
     await loadLastSyncTime();
@@ -2699,79 +2696,38 @@ export function useFitNotesController() {
     triggerToast('Routine superset cleared.');
   };
 
-  // Routine Template Builder
-  const handleAddExToRoutineCreator = () => {
-    if (!selectedExForRoutine) return;
-    setRoutineCreatorExercises([
-      ...routineCreatorExercises,
-      {
-        exercise_id: selectedExForRoutine,
-        weight: '',
-        reps: '',
-        sort_order: routineCreatorExercises.length + 1
-      }
-    ]);
-  };
-
+  // Create a routine from just a name + notes, then land in the editor to add
+  // workout days and exercises — the reference app's flow (fragment_routine_create
+  // is only those two fields; structure is built afterwards in the routine view).
   const handleCreateRoutineTemplate = async () => {
     if (!newRoutineName) {
       triggerToast('Please enter a routine template name!', 'error');
       return;
     }
 
-    const routineId = uuidv4();
     const newRoutine: Routine = {
-      id: routineId,
+      id: uuidv4(),
       name: newRoutineName,
       notes: newRoutineNotes || undefined
     };
-
     await db.execute('INSERT INTO routines', [newRoutine]);
 
-    const sectionId = uuidv4();
+    // Start with one empty day so the editor opens ready for exercises.
     const newSection: RoutineSection = {
-      id: sectionId,
-      routine_id: routineId,
-      name: 'Default Sets',
+      id: uuidv4(),
+      routine_id: newRoutine.id,
+      name: 'Day 1',
       sort_order: 1
     };
     await db.execute('INSERT INTO routine_sections', [newSection]);
 
-    // Group items by exercise to map correct structure
-    for (const item of routineCreatorExercises) {
-      const rseId = uuidv4();
-      const newRse: RoutineSectionExercise = {
-        id: rseId,
-        routine_section_id: sectionId,
-        exercise_id: item.exercise_id,
-        sort_order: item.sort_order,
-        populate_sets_type: 1
-      };
-      await db.execute('INSERT INTO routine_section_exercises', [newRse]);
-
-      const hasTemplateSet = item.weight.trim() !== '' || item.reps.trim() !== '';
-      if (hasTemplateSet) {
-        const rsesId = uuidv4();
-        const newRses: RoutineSectionExerciseSet = {
-          id: rsesId,
-          routine_section_exercise_id: rseId,
-          metric_weight: item.weight.trim() === '' ? null : parseFloat(item.weight),
-          reps: item.reps.trim() === '' ? null : parseInt(item.reps),
-          sort_order: 1,
-          distance: null,
-          duration_seconds: null,
-          unit: userUnit === 'kg' ? 1 : 2
-        };
-        await db.execute('INSERT INTO routine_section_exercise_sets', [newRses]);
-      }
-    }
-
     setNewRoutineName('');
     setNewRoutineNotes('');
-    setRoutineCreatorExercises([]);
     setShowCreateRoutineModal(false);
     await refreshData();
-    triggerToast('Routine template created successfully!');
+    setEditingRoutine(newRoutine);
+    setActiveTab('routine-editor');
+    triggerToast('Routine created — add workout days and exercises.');
   };
 
   const handleDeleteRoutine = async (routineId: string) => {
@@ -3511,8 +3467,8 @@ export function useFitNotesController() {
     newCatColor, setNewCatColor, selectedExercise, setSelectedExercise, logWeight, setLogWeight, logReps, setLogReps,
     logDistance, setLogDistance, logDuration, setLogDuration, showPlateCalc, setShowPlateCalc, plateCalcTarget, setPlateCalcTarget,
     calculatedPlates, setCalculatedPlates, analyticExerciseId, setAnalyticExerciseId, analyticMetric, setAnalyticMetric,
-    newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes, routineCreatorExercises, setRoutineCreatorExercises,
-    selectedExForRoutine, setSelectedExForRoutine, showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
+    newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
+    showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, showEditExModal, setShowEditExModal,
     showCommandPalette, setShowCommandPalette, showShortcutsHelp, setShowShortcutsHelp, editingExercise, setEditingExercise, editExName, setEditExName,
     editExCategory, setEditExCategory, editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
@@ -3547,7 +3503,7 @@ export function useFitNotesController() {
     handleMarkAllComplete, handleMarkExerciseComplete,
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
-    handleCreateRoutineSuperset, handleClearRoutineGroup, handleAddExToRoutineCreator, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
+    handleCreateRoutineSuperset, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
     loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
     handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateSectionName, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,

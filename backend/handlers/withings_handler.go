@@ -31,13 +31,30 @@ const withingsAccessTokenRefreshSkew = 90 * time.Minute
 type WithingsTokenResponse struct {
 	Status int `json:"status"`
 	Body   struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		ExpiresIn    int    `json:"expires_in"`
-		Scope        string `json:"scope"`
-		UserID       string `json:"userid"`
+		AccessToken  string         `json:"access_token"`
+		RefreshToken string         `json:"refresh_token"`
+		ExpiresIn    int            `json:"expires_in"`
+		Scope        string         `json:"scope"`
+		UserID       withingsUserID `json:"userid"`
 	} `json:"body"`
 	Error string `json:"error,omitempty"`
+}
+
+// withingsUserID tolerates Withings returning userid as either a JSON string
+// (authorization-code exchange) or a JSON number (refresh_token exchange).
+type withingsUserID string
+
+func (u *withingsUserID) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(string(data), `"`)
+	if s == "null" {
+		s = ""
+	}
+	*u = withingsUserID(s)
+	return nil
+}
+
+func (u withingsUserID) String() string {
+	return string(u)
 }
 
 type withingsBool bool
@@ -196,7 +213,7 @@ func WithingsCallbackHandler(w http.ResponseWriter, r *http.Request) {
 			refresh_token = EXCLUDED.refresh_token,
 			expires_at = EXCLUDED.expires_at,
 			updated_at = NOW()
-	`, userID, tokResp.Body.UserID, tokResp.Body.AccessToken, tokResp.Body.RefreshToken, tokenExpiresAt)
+	`, userID, tokResp.Body.UserID.String(), tokResp.Body.AccessToken, tokResp.Body.RefreshToken, tokenExpiresAt)
 
 	if err != nil {
 		log.Printf("Failed to save Withings tokens to DB: %v", err)

@@ -828,8 +828,8 @@ body.light-theme .set-complete-toggle.checked {
 }
 
 .populate-type-btn {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 4px 10px;
+  font-size: 11px;
   font-weight: 700;
   font-family: var(--font-family);
   border-radius: 999px;
@@ -864,17 +864,17 @@ body.light-theme .populate-type-btn.active {
 }
 
 .populate-type-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary-dark);
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 /* Routine editor: one predefined-set row (wraps on narrow screens) */
 .template-set-row {
   display: flex;
   align-items: center;
-  gap: 10px 16px;
+  gap: 6px 12px;
   flex-wrap: wrap;
   font-size: 13px;
 }
@@ -888,11 +888,11 @@ body.light-theme .populate-type-btn.active {
 
 /* Routines list: card header + expanded split grid */
 .routine-card-header {
-  padding: 20px;
+  padding: 12px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   flex-wrap: wrap;
   cursor: pointer;
   user-select: none;
@@ -1541,7 +1541,7 @@ body.light-theme .modal-content {
 
   /* Routines list: stack header content, full-width action buttons */
   .routine-card-header {
-    padding: 14px 16px;
+    padding: 10px 12px;
   }
 
   .routine-card-actions {
