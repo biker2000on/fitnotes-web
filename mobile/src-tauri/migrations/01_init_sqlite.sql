@@ -30,6 +30,7 @@ CREATE TABLE routines (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     notes TEXT,
+    category TEXT,
     last_modified TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
     is_deleted INTEGER DEFAULT 0 NOT NULL,
     is_dirty INTEGER DEFAULT 0 NOT NULL

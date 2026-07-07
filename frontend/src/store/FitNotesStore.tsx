@@ -369,6 +369,7 @@ export function useFitNotesController() {
   // Routine templates creation states
   const [newRoutineName, setNewRoutineName] = useState('');
   const [newRoutineNotes, setNewRoutineNotes] = useState('');
+  const [newRoutineCategory, setNewRoutineCategory] = useState('');
 
   // Manage Categories modal states
   const [showManageCatsModal, setShowManageCatsModal] = useState(false);
@@ -2708,7 +2709,8 @@ export function useFitNotesController() {
     const newRoutine: Routine = {
       id: uuidv4(),
       name: newRoutineName,
-      notes: newRoutineNotes || undefined
+      notes: newRoutineNotes || undefined,
+      category: newRoutineCategory.trim() || null
     };
     await db.execute('INSERT INTO routines', [newRoutine]);
 
@@ -2723,11 +2725,24 @@ export function useFitNotesController() {
 
     setNewRoutineName('');
     setNewRoutineNotes('');
+    setNewRoutineCategory('');
     setShowCreateRoutineModal(false);
     await refreshData();
     setEditingRoutine(newRoutine);
     setActiveTab('routine-editor');
     triggerToast('Routine created — add workout days and exercises.');
+  };
+
+  // Set or clear a routine's grouping category (empty string clears it).
+  const handleUpdateRoutineCategory = async (routineId: string, category: string) => {
+    const target = routines.find(r => r.id === routineId);
+    if (!target) return;
+    const trimmed = category.trim();
+    if ((target.category ?? '') === trimmed) return;
+    const updated: Routine = { ...target, category: trimmed || null };
+    await db.execute('UPDATE routines', [updated]);
+    if (editingRoutine?.id === routineId) setEditingRoutine(updated);
+    await refreshData();
   };
 
   const handleDeleteRoutine = async (routineId: string) => {
@@ -3468,6 +3483,7 @@ export function useFitNotesController() {
     logDistance, setLogDistance, logDuration, setLogDuration, showPlateCalc, setShowPlateCalc, plateCalcTarget, setPlateCalcTarget,
     calculatedPlates, setCalculatedPlates, analyticExerciseId, setAnalyticExerciseId, analyticMetric, setAnalyticMetric,
     newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
+    newRoutineCategory, setNewRoutineCategory, handleUpdateRoutineCategory,
     showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, showEditExModal, setShowEditExModal,
     showCommandPalette, setShowCommandPalette, showShortcutsHelp, setShowShortcutsHelp, editingExercise, setEditingExercise, editExName, setEditExName,

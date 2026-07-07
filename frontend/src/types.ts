@@ -135,6 +135,9 @@ export interface Routine {
   id: string;
   name: string;
   notes?: string;
+  // Free-form grouping label (e.g. "ATG", "Dialed Health"). Not part of the
+  // original FitNotes schema — excluded from .fitnotes exports.
+  category?: string | null;
   is_deleted?: boolean;
   is_dirty?: number;
 }

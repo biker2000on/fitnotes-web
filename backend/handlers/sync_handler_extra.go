@@ -24,18 +24,19 @@ import (
 
 func pushRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.Routine) error {
 	query := `
-		INSERT INTO routines (id, user_id, name, notes, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO routines (id, user_id, name, notes, category, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			notes = EXCLUDED.notes,
+			category = EXCLUDED.category,
 			last_modified = EXCLUDED.last_modified,
 			is_deleted = EXCLUDED.is_deleted
 		WHERE routines.user_id = EXCLUDED.user_id
 		  AND routines.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		if _, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.Notes, item.LastModified, item.IsDeleted); err != nil {
+		if _, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.Notes, item.Category, item.LastModified, item.IsDeleted); err != nil {
 			return err
 		}
 	}
@@ -44,7 +45,7 @@ func pushRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []mode
 
 func pullRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.Routine, error) {
 	rows, err := tx.Query(ctx,
-		"SELECT id, user_id, name, notes, last_modified, is_deleted FROM routines WHERE user_id = $1 AND last_modified > $2",
+		"SELECT id, user_id, name, notes, category, last_modified, is_deleted FROM routines WHERE user_id = $1 AND last_modified > $2",
 		userID, since,
 	)
 	if err != nil {
@@ -55,7 +56,7 @@ func pullRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.T
 	var list []models.Routine
 	for rows.Next() {
 		var item models.Routine
-		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.Notes, &item.LastModified, &item.IsDeleted); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.Notes, &item.Category, &item.LastModified, &item.IsDeleted); err != nil {
 			return nil, err
 		}
 		list = append(list, item)

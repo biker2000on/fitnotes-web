@@ -744,7 +744,7 @@ class TauriNativeDriver implements DBDriver {
         plates: ["id", "weight", "unit", "count", "enabled", "colour", "width_ratio", "height_ratio", "last_modified", "is_deleted", "is_dirty"],
         barbells: ["id", "weight", "unit", "exercise_id", "last_modified", "is_deleted", "is_dirty"],
         workout_comments: ["id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],
-        routines: ["id", "name", "notes", "last_modified", "is_deleted", "is_dirty"],
+        routines: ["id", "name", "notes", "category", "last_modified", "is_deleted", "is_dirty"],
         routine_sections: ["id", "routine_id", "name", "sort_order", "last_modified", "is_deleted", "is_dirty"],
         routine_section_exercises: ["id", "routine_section_id", "exercise_id", "sort_order", "populate_sets_type", "last_modified", "is_deleted", "is_dirty"],
         routine_section_exercise_sets: ["id", "routine_section_exercise_id", "metric_weight", "reps", "sort_order", "distance", "duration_seconds", "unit", "last_modified", "is_deleted", "is_dirty"],

@@ -30,10 +30,22 @@ export function RoutinesView() {
     groupExercises: WorkoutGroupExercise[];
   } | null>(null);
   const [routineFilter, setRoutineFilter] = useState('');
+  // '' = all, '__none__' = uncategorized, anything else = that category name.
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [routineSortMode, setRoutineSortMode] = useState<RoutineSortMode>(() => {
     const saved = localStorage.getItem('fn_routine_sort_mode') as RoutineSortMode | null;
     return saved === 'nameDesc' || saved === 'lastCompleted' || saved === 'mostCompleted' ? saved : 'nameAsc';
   });
+
+  // Distinct category labels across routines (case-preserving, first-seen wins).
+  const routineCategories = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of routines) {
+      const cat = (r.category ?? '').trim();
+      if (cat && !seen.has(cat.toLowerCase())) seen.set(cat.toLowerCase(), cat);
+    }
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  }, [routines]);
 
   // Per-routine and per-section completion stats from workout_routines links.
   const completionStats = useMemo(() => {
@@ -56,10 +68,14 @@ export function RoutinesView() {
   const filteredRoutines = useMemo(() => {
     const needle = routineFilter.trim().toLowerCase();
     const filtered = routines.filter(r => {
+      const cat = (r.category ?? '').trim();
+      if (categoryFilter === '__none__' && cat) return false;
+      if (categoryFilter && categoryFilter !== '__none__' && cat.toLowerCase() !== categoryFilter.toLowerCase()) return false;
       if (!needle) return true;
       return [
         r.name,
         r.notes ?? '',
+        cat,
       ].join(' ').toLowerCase().includes(needle);
     });
 
@@ -76,7 +92,23 @@ export function RoutinesView() {
       }
       return byName(a, b);
     });
-  }, [completionStats, routineFilter, routineSortMode, routines]);
+  }, [categoryFilter, completionStats, routineFilter, routineSortMode, routines]);
+
+  // Group the filtered list by category (A-Z, uncategorized last). Falls back
+  // to a single unlabeled group while no categories exist.
+  const groupedRoutines = useMemo(() => {
+    const groups: Array<{ label: string | null; items: typeof routines }> = [];
+    if (routineCategories.length === 0) {
+      return filteredRoutines.length > 0 ? [{ label: null, items: filteredRoutines }] : [];
+    }
+    for (const cat of routineCategories) {
+      const items = filteredRoutines.filter(r => (r.category ?? '').trim().toLowerCase() === cat.toLowerCase());
+      if (items.length > 0) groups.push({ label: cat, items });
+    }
+    const uncategorized = filteredRoutines.filter(r => !(r.category ?? '').trim());
+    if (uncategorized.length > 0) groups.push({ label: 'Uncategorized', items: uncategorized });
+    return groups;
+  }, [filteredRoutines, routineCategories]);
 
   const updateRoutineSortMode = (mode: RoutineSortMode) => {
     setRoutineSortMode(mode);
@@ -196,11 +228,23 @@ export function RoutinesView() {
             value={routineFilter}
             onChange={(e) => setRoutineFilter(e.target.value)}
           />
+          {routineCategories.length > 0 && (
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Filter routines by category"
+              style={{ width: 'auto', minWidth: '130px' }}
+            >
+              <option value="">All Categories</option>
+              {routineCategories.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="__none__">Uncategorized</option>
+            </select>
+          )}
           <select
             value={routineSortMode}
             onChange={(e) => updateRoutineSortMode(e.target.value as RoutineSortMode)}
             aria-label="Sort routines"
-            style={{ width: 'auto', minWidth: '160px' }}
+            style={{ width: 'auto', minWidth: '130px' }}
           >
             <option value="nameAsc">Sort: A-Z</option>
             <option value="nameDesc">Sort: Z-A</option>
@@ -220,7 +264,15 @@ export function RoutinesView() {
               No routine templates match your filter.
             </div>
           ) : (
-            filteredRoutines.map(r => {
+            groupedRoutines.map(group => (
+              <div key={group.label ?? '__all__'} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {group.label && (
+                  <h4 className="routine-group-header">
+                    {group.label}
+                    <span>{group.items.length}</span>
+                  </h4>
+                )}
+                {group.items.map(r => {
               const isExpanded = expandedRoutineId === r.id;
               return (
                 <div
@@ -442,7 +494,9 @@ export function RoutinesView() {
                   )}
                 </div>
               );
-            })
+                })}
+              </div>
+            ))
           )}
         </div>
       </div>

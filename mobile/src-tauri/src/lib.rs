@@ -798,7 +798,7 @@ async fn tauri_sync(
             upsert_table(
                 "routines",
                 items.as_slice(),
-                &["id", "name", "notes", "last_modified", "is_deleted"],
+                &["id", "name", "notes", "category", "last_modified", "is_deleted"],
                 payload.routines.as_slice(),
             )?;
         }
@@ -1273,6 +1273,7 @@ fn add_column_if_missing(
 fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
     add_column_if_missing(conn, "training_logs", "comment", "comment TEXT")?;
     add_column_if_missing(conn, "body_weights", "measured_at", "measured_at TEXT")?;
+    add_column_if_missing(conn, "routines", "category", "category TEXT")?;
     conn.execute(
         "UPDATE body_weights SET measured_at = date || 'T00:00:00.000Z' WHERE measured_at IS NULL",
         [],
@@ -1383,6 +1384,7 @@ pub fn run() {
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     notes TEXT,
+                    category TEXT,
                     last_modified TEXT NOT NULL,
                     is_deleted INTEGER DEFAULT 0 NOT NULL,
                     is_dirty INTEGER DEFAULT 0 NOT NULL

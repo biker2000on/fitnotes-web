@@ -905,6 +905,35 @@ body.light-theme .populate-type-btn.active {
   flex-wrap: wrap;
 }
 
+/* Routine category group header in the routines list */
+.routine-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 2px 0;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--primary);
+}
+
+.routine-group-header span {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-secondary-dark);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.routine-group-header::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-dark);
+}
+
 .routine-splits-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -1542,6 +1571,12 @@ body.light-theme .modal-content {
   /* Routines list: stack header content, full-width action buttons */
   .routine-card-header {
     padding: 10px 12px;
+  }
+
+  /* Category + sort selects share one row under the search field */
+  .routine-filter-row select {
+    flex: 1 1 40%;
+    min-width: 0 !important;
   }
 
   .routine-card-actions {

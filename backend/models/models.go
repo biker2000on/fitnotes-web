@@ -49,6 +49,7 @@ type Routine struct {
 	UserID       uuid.UUID `json:"user_id"`
 	Name         string    `json:"name"`
 	Notes        *string   `json:"notes"`
+	Category     *string   `json:"category"`
 	LastModified time.Time `json:"last_modified"`
 	IsDeleted    bool      `json:"is_deleted"`
 }

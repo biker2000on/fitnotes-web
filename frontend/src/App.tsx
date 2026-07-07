@@ -258,7 +258,7 @@ export default function App() {
     plateCalcTarget, setPlateCalcTarget, calculatedPlates,
     showCatModal, setShowCatModal, newCatName, setNewCatName, newCatColor, setNewCatColor, handleCreateCategory,
     showCreateRoutineModal, setShowCreateRoutineModal, newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
-    handleCreateRoutineTemplate,
+    handleCreateRoutineTemplate, newRoutineCategory, setNewRoutineCategory,
     showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, handleUpdateCategory, handleDeleteCategory,
     showEditExModal, setShowEditExModal, editingExercise, editExName, setEditExName, editExCategory, setEditExCategory,
@@ -643,6 +643,22 @@ export default function App() {
                     onKeyDown={(e) => { if (e.key === 'Enter') handleCreateRoutineTemplate(); }}
                     autoFocus
                   />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Category (optional)</label>
+                  <input
+                    type="text"
+                    list="routine-category-options"
+                    placeholder="e.g. ATG, Dialed Health"
+                    value={newRoutineCategory}
+                    onChange={(e) => setNewRoutineCategory(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleCreateRoutineTemplate(); }}
+                  />
+                  <datalist id="routine-category-options">
+                    {Array.from(new Set(routines.map(r => (r.category ?? '').trim()).filter(Boolean))).sort().map(c => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Notes (optional)</label>

@@ -99,3 +99,8 @@ CREATE UNLOGGED TABLE IF NOT EXISTS oidc_states (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL
 );
 ALTER TABLE IF EXISTS oidc_states SET UNLOGGED;
+
+-- Routine categories: free-form grouping label (e.g. "ATG", "Dialed Health").
+-- Deliberately NOT exported to .fitnotes backups so the original FitNotes app
+-- schema (Routine: _id, name, notes) stays untouched.
+ALTER TABLE routines ADD COLUMN IF NOT EXISTS category TEXT;

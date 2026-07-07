@@ -38,6 +38,7 @@ const numOrNull = (raw: string, parse: (v: string) => number): number | null => 
 export function RoutineEditorView() {
   const {
     editingRoutine, setActiveTab, setEditingRoutine,
+    routines, handleUpdateRoutineCategory,
     handleAddDayToRoutine, handleDragEnd,
     editorSections, editorSectionExercises, editorExerciseSets,
     exercises, groupExercises, workoutGroups, userUnit,
@@ -72,9 +73,27 @@ export function RoutineEditorView() {
               </p>
             </div>
           </div>
-          <button className="btn btn-primary" onClick={handleAddDayToRoutine} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Plus size={16} /> Add Workout Day
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              list="routine-category-edit-options"
+              placeholder="Category"
+              aria-label="Routine category"
+              defaultValue={editingRoutine.category ?? ''}
+              key={editingRoutine.id}
+              onBlur={(e) => handleUpdateRoutineCategory(editingRoutine.id, e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+              style={{ width: '160px', padding: '8px 12px', fontSize: '13px' }}
+            />
+            <datalist id="routine-category-edit-options">
+              {Array.from(new Set(routines.map(r => (r.category ?? '').trim()).filter(Boolean))).sort().map(c => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+            <button className="btn btn-primary" onClick={handleAddDayToRoutine} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Plus size={16} /> Add Workout Day
+            </button>
+          </div>
         </div>
       </div>
 
