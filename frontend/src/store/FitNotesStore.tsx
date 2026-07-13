@@ -2745,6 +2745,35 @@ export function useFitNotesController() {
     await refreshData();
   };
 
+  // Update the routine metadata shown at the top of the template editor.
+  // Keeping editingRoutine in sync prevents the header from reverting to the
+  // previous value while the local database refreshes and syncs upstream.
+  const handleUpdateRoutineDetails = async (
+    routineId: string,
+    details: { name?: string; notes?: string },
+  ) => {
+    const target = editingRoutine?.id === routineId
+      ? editingRoutine
+      : routines.find(r => r.id === routineId);
+    if (!target) return;
+
+    const name = details.name !== undefined ? details.name.trim() : target.name;
+    if (!name) {
+      triggerToast('Routine name cannot be empty.', 'error');
+      return;
+    }
+
+    const notes = details.notes !== undefined ? details.notes.trim() : target.notes;
+    const updated: Routine = { ...target, name, notes: notes || undefined };
+    if (updated.name === target.name && (updated.notes ?? '') === (target.notes ?? '')) return;
+
+    await db.execute('UPDATE routines', [updated]);
+    setEditingRoutine(updated);
+    setRoutines(current => current.map(r => r.id === routineId ? updated : r));
+    await refreshData();
+    triggerToast('Routine details saved.');
+  };
+
   const handleDeleteRoutine = async (routineId: string) => {
     const target = routines.find(r => r.id === routineId);
     if (!target) return;
@@ -3483,7 +3512,7 @@ export function useFitNotesController() {
     logDistance, setLogDistance, logDuration, setLogDuration, showPlateCalc, setShowPlateCalc, plateCalcTarget, setPlateCalcTarget,
     calculatedPlates, setCalculatedPlates, analyticExerciseId, setAnalyticExerciseId, analyticMetric, setAnalyticMetric,
     newRoutineName, setNewRoutineName, newRoutineNotes, setNewRoutineNotes,
-    newRoutineCategory, setNewRoutineCategory, handleUpdateRoutineCategory,
+    newRoutineCategory, setNewRoutineCategory, handleUpdateRoutineCategory, handleUpdateRoutineDetails,
     showManageCatsModal, setShowManageCatsModal, editingCategory, setEditingCategory,
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, showEditExModal, setShowEditExModal,
     showCommandPalette, setShowCommandPalette, showShortcutsHelp, setShowShortcutsHelp, editingExercise, setEditingExercise, editExName, setEditExName,

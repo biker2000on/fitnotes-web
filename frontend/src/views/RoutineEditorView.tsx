@@ -38,7 +38,7 @@ const numOrNull = (raw: string, parse: (v: string) => number): number | null => 
 export function RoutineEditorView() {
   const {
     editingRoutine, setActiveTab, setEditingRoutine,
-    routines, handleUpdateRoutineCategory,
+    routines, handleUpdateRoutineCategory, handleUpdateRoutineDetails,
     handleAddDayToRoutine, handleDragEnd,
     editorSections, editorSectionExercises, editorExerciseSets,
     exercises, groupExercises, workoutGroups, userUnit,
@@ -64,13 +64,29 @@ export function RoutineEditorView() {
             }}>
               <ChevronLeft size={16} /> Back
             </button>
-            <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary-dark)', margin: 0 }}>
-                Editing: {editingRoutine.name}
-              </h2>
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '2px', margin: 0 }}>
-                {editingRoutine.notes || 'Manage days, exercises, and sets for this template.'}
-              </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '260px', flex: '1 1 420px' }}>
+              <input
+                type="text"
+                aria-label="Routine name"
+                defaultValue={editingRoutine.name}
+                key={`${editingRoutine.id}-name-${editingRoutine.name}`}
+                onBlur={(e) => {
+                  const next = e.target.value.trim();
+                  if (!next) e.target.value = editingRoutine.name;
+                  void handleUpdateRoutineDetails(editingRoutine.id, { name: next });
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary-dark)', padding: '5px 8px' }}
+              />
+              <textarea
+                aria-label="Routine notes"
+                placeholder="Routine notes"
+                defaultValue={editingRoutine.notes ?? ''}
+                key={`${editingRoutine.id}-notes-${editingRoutine.notes ?? ''}`}
+                onBlur={(e) => { void handleUpdateRoutineDetails(editingRoutine.id, { notes: e.target.value }); }}
+                rows={2}
+                style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '7px 8px', resize: 'vertical', minHeight: '38px' }}
+              />
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
