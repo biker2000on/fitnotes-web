@@ -19,6 +19,14 @@ export interface Exercise {
   default_rest_time?: number;
   weight_unit_id?: number;
   is_favourite: boolean;
+  aliases?: string | null;
+  instructions?: string | null;
+  video_url?: string | null;
+  equipment?: string | null;
+  primary_muscles?: string | null;
+  regressions?: string | null;
+  progressions?: string | null;
+  substitutions?: string | null;
   is_deleted?: boolean;
   is_dirty?: number;
 }
@@ -35,6 +43,9 @@ export interface TrainingLog {
   distance: number | null;
   duration_seconds: number | null;
   comment?: string | null;
+  rpe?: number | null;
+  rir?: number | null;
+  set_type?: string;
   routine_section_exercise_set_id?: string | null;
   is_deleted?: boolean;
   is_dirty?: number;
@@ -138,6 +149,11 @@ export interface Routine {
   // Free-form grouping label (e.g. "ATG", "Dialed Health"). Not part of the
   // original FitNotes schema — excluded from .fitnotes exports.
   category?: string | null;
+  version?: number;
+  program_weeks?: number;
+  current_week?: number;
+  start_date?: string | null;
+  is_archived?: boolean;
   is_deleted?: boolean;
   is_dirty?: number;
 }
@@ -147,6 +163,9 @@ export interface RoutineSection {
   routine_id: string;
   name: string;
   sort_order: number;
+  week_number?: number;
+  day_of_week?: number | null;
+  phase?: string | null;
   is_deleted?: boolean;
   is_dirty?: number;
 }
@@ -166,6 +185,9 @@ export interface RoutineSectionExercise {
   exercise_id: string;
   sort_order: number;
   populate_sets_type: number;
+  progression_enabled?: boolean;
+  progression_increment?: number | null;
+  progression_reps_step?: number;
   is_deleted?: boolean;
   is_dirty?: number;
 }
@@ -179,6 +201,12 @@ export interface RoutineSectionExerciseSet {
   distance: number | null;
   duration_seconds: number | null;
   unit: number | null;
+  min_reps?: number | null;
+  max_reps?: number | null;
+  set_type?: string;
+  target_rir?: number | null;
+  tempo?: string | null;
+  notes?: string | null;
   is_deleted?: boolean;
   is_dirty?: number;
 }

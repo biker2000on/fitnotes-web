@@ -24,19 +24,24 @@ import (
 
 func pushRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.Routine) error {
 	query := `
-		INSERT INTO routines (id, user_id, name, notes, category, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO routines (id, user_id, name, notes, category, version, program_weeks, current_week, start_date, is_archived, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, GREATEST($6, 1), GREATEST($7, 1), GREATEST($8, 1), $9::date, $10, $11, $12)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			notes = EXCLUDED.notes,
 			category = EXCLUDED.category,
+			version = EXCLUDED.version,
+			program_weeks = EXCLUDED.program_weeks,
+			current_week = EXCLUDED.current_week,
+			start_date = EXCLUDED.start_date,
+			is_archived = EXCLUDED.is_archived,
 			last_modified = EXCLUDED.last_modified,
 			is_deleted = EXCLUDED.is_deleted
 		WHERE routines.user_id = EXCLUDED.user_id
 		  AND routines.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		if _, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.Notes, item.Category, item.LastModified, item.IsDeleted); err != nil {
+		if _, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.Notes, item.Category, item.Version, item.ProgramWeeks, item.CurrentWeek, item.StartDate, item.IsArchived, item.LastModified, item.IsDeleted); err != nil {
 			return err
 		}
 	}
@@ -45,7 +50,7 @@ func pushRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []mode
 
 func pullRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.Routine, error) {
 	rows, err := tx.Query(ctx,
-		"SELECT id, user_id, name, notes, category, last_modified, is_deleted FROM routines WHERE user_id = $1 AND last_modified > $2",
+		"SELECT id, user_id, name, notes, category, version, program_weeks, current_week, start_date::text, is_archived, last_modified, is_deleted FROM routines WHERE user_id = $1 AND last_modified > $2",
 		userID, since,
 	)
 	if err != nil {
@@ -56,7 +61,7 @@ func pullRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.T
 	var list []models.Routine
 	for rows.Next() {
 		var item models.Routine
-		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.Notes, &item.Category, &item.LastModified, &item.IsDeleted); err != nil {
+		if err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.Notes, &item.Category, &item.Version, &item.ProgramWeeks, &item.CurrentWeek, &item.StartDate, &item.IsArchived, &item.LastModified, &item.IsDeleted); err != nil {
 			return nil, err
 		}
 		list = append(list, item)
@@ -68,18 +73,21 @@ func pullRoutines(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.T
 
 func pushRoutineSections(ctx context.Context, tx pgx.Tx, items []models.RoutineSection) error {
 	query := `
-		INSERT INTO routine_sections (id, routine_id, name, sort_order, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO routine_sections (id, routine_id, name, sort_order, week_number, day_of_week, phase, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, GREATEST($5, 1), $6, $7, $8, $9)
 		ON CONFLICT (id) DO UPDATE SET
 			routine_id = EXCLUDED.routine_id,
 			name = EXCLUDED.name,
 			sort_order = EXCLUDED.sort_order,
+			week_number = EXCLUDED.week_number,
+			day_of_week = EXCLUDED.day_of_week,
+			phase = EXCLUDED.phase,
 			last_modified = EXCLUDED.last_modified,
 			is_deleted = EXCLUDED.is_deleted
 		WHERE routine_sections.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineID, item.Name, item.SortOrder, item.LastModified, item.IsDeleted); err != nil {
+		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineID, item.Name, item.SortOrder, item.WeekNumber, item.DayOfWeek, item.Phase, item.LastModified, item.IsDeleted); err != nil {
 			return err
 		}
 	}
@@ -88,7 +96,7 @@ func pushRoutineSections(ctx context.Context, tx pgx.Tx, items []models.RoutineS
 
 func pullRoutineSections(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.RoutineSection, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT rs.id, rs.routine_id, rs.name, rs.sort_order, rs.last_modified, rs.is_deleted
+		SELECT rs.id, rs.routine_id, rs.name, rs.sort_order, rs.week_number, rs.day_of_week, rs.phase, rs.last_modified, rs.is_deleted
 		FROM routine_sections rs
 		JOIN routines r ON rs.routine_id = r.id
 		WHERE r.user_id = $1 AND rs.last_modified > $2`,
@@ -102,7 +110,7 @@ func pullRoutineSections(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since
 	var list []models.RoutineSection
 	for rows.Next() {
 		var item models.RoutineSection
-		if err := rows.Scan(&item.ID, &item.RoutineID, &item.Name, &item.SortOrder, &item.LastModified, &item.IsDeleted); err != nil {
+		if err := rows.Scan(&item.ID, &item.RoutineID, &item.Name, &item.SortOrder, &item.WeekNumber, &item.DayOfWeek, &item.Phase, &item.LastModified, &item.IsDeleted); err != nil {
 			return nil, err
 		}
 		list = append(list, item)
@@ -114,19 +122,22 @@ func pullRoutineSections(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since
 
 func pushRoutineSectionExercises(ctx context.Context, tx pgx.Tx, items []models.RoutineSectionExercise) error {
 	query := `
-		INSERT INTO routine_section_exercises (id, routine_section_id, exercise_id, sort_order, populate_sets_type, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO routine_section_exercises (id, routine_section_id, exercise_id, sort_order, populate_sets_type, progression_enabled, progression_increment, progression_reps_step, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, GREATEST($8, 1), $9, $10)
 		ON CONFLICT (id) DO UPDATE SET
 			routine_section_id = EXCLUDED.routine_section_id,
 			exercise_id = EXCLUDED.exercise_id,
 			sort_order = EXCLUDED.sort_order,
 			populate_sets_type = EXCLUDED.populate_sets_type,
+			progression_enabled = EXCLUDED.progression_enabled,
+			progression_increment = EXCLUDED.progression_increment,
+			progression_reps_step = EXCLUDED.progression_reps_step,
 			last_modified = EXCLUDED.last_modified,
 			is_deleted = EXCLUDED.is_deleted
 		WHERE routine_section_exercises.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineSectionID, item.ExerciseID, item.SortOrder, item.PopulateSetsType, item.LastModified, item.IsDeleted); err != nil {
+		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineSectionID, item.ExerciseID, item.SortOrder, item.PopulateSetsType, item.ProgressionEnabled, item.ProgressionIncrement, item.ProgressionRepsStep, item.LastModified, item.IsDeleted); err != nil {
 			return err
 		}
 	}
@@ -135,7 +146,7 @@ func pushRoutineSectionExercises(ctx context.Context, tx pgx.Tx, items []models.
 
 func pullRoutineSectionExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.RoutineSectionExercise, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT rse.id, rse.routine_section_id, rse.exercise_id, rse.sort_order, rse.populate_sets_type, rse.last_modified, rse.is_deleted
+		SELECT rse.id, rse.routine_section_id, rse.exercise_id, rse.sort_order, rse.populate_sets_type, rse.progression_enabled, rse.progression_increment, rse.progression_reps_step, rse.last_modified, rse.is_deleted
 		FROM routine_section_exercises rse
 		JOIN routine_sections rs ON rse.routine_section_id = rs.id
 		JOIN routines r ON rs.routine_id = r.id
@@ -150,7 +161,7 @@ func pullRoutineSectionExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUI
 	var list []models.RoutineSectionExercise
 	for rows.Next() {
 		var item models.RoutineSectionExercise
-		if err := rows.Scan(&item.ID, &item.RoutineSectionID, &item.ExerciseID, &item.SortOrder, &item.PopulateSetsType, &item.LastModified, &item.IsDeleted); err != nil {
+		if err := rows.Scan(&item.ID, &item.RoutineSectionID, &item.ExerciseID, &item.SortOrder, &item.PopulateSetsType, &item.ProgressionEnabled, &item.ProgressionIncrement, &item.ProgressionRepsStep, &item.LastModified, &item.IsDeleted); err != nil {
 			return nil, err
 		}
 		list = append(list, item)
@@ -162,8 +173,8 @@ func pullRoutineSectionExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUI
 
 func pushRoutineSectionExerciseSets(ctx context.Context, tx pgx.Tx, items []models.RoutineSectionExerciseSet) error {
 	query := `
-		INSERT INTO routine_section_exercise_sets (id, routine_section_exercise_id, metric_weight, reps, sort_order, distance, duration_seconds, unit, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO routine_section_exercise_sets (id, routine_section_exercise_id, metric_weight, reps, sort_order, distance, duration_seconds, unit, min_reps, max_reps, set_type, target_rir, tempo, notes, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE(NULLIF($11, ''), 'working'), $12, $13, $14, $15, $16)
 		ON CONFLICT (id) DO UPDATE SET
 			routine_section_exercise_id = EXCLUDED.routine_section_exercise_id,
 			metric_weight = EXCLUDED.metric_weight,
@@ -172,12 +183,18 @@ func pushRoutineSectionExerciseSets(ctx context.Context, tx pgx.Tx, items []mode
 			distance = EXCLUDED.distance,
 			duration_seconds = EXCLUDED.duration_seconds,
 			unit = EXCLUDED.unit,
+			min_reps = EXCLUDED.min_reps,
+			max_reps = EXCLUDED.max_reps,
+			set_type = EXCLUDED.set_type,
+			target_rir = EXCLUDED.target_rir,
+			tempo = EXCLUDED.tempo,
+			notes = EXCLUDED.notes,
 			last_modified = EXCLUDED.last_modified,
 			is_deleted = EXCLUDED.is_deleted
 		WHERE routine_section_exercise_sets.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineSectionExerciseID, item.MetricWeight, item.Reps, item.SortOrder, item.Distance, item.DurationSeconds, item.Unit, item.LastModified, item.IsDeleted); err != nil {
+		if _, err := tx.Exec(ctx, query, item.ID, item.RoutineSectionExerciseID, item.MetricWeight, item.Reps, item.SortOrder, item.Distance, item.DurationSeconds, item.Unit, item.MinReps, item.MaxReps, item.SetType, item.TargetRIR, item.Tempo, item.Notes, item.LastModified, item.IsDeleted); err != nil {
 			return err
 		}
 	}
@@ -186,7 +203,7 @@ func pushRoutineSectionExerciseSets(ctx context.Context, tx pgx.Tx, items []mode
 
 func pullRoutineSectionExerciseSets(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.RoutineSectionExerciseSet, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT s.id, s.routine_section_exercise_id, s.metric_weight, s.reps, s.sort_order, s.distance, s.duration_seconds, s.unit, s.last_modified, s.is_deleted
+		SELECT s.id, s.routine_section_exercise_id, s.metric_weight, s.reps, s.sort_order, s.distance, s.duration_seconds, s.unit, s.min_reps, s.max_reps, s.set_type, s.target_rir, s.tempo, s.notes, s.last_modified, s.is_deleted
 		FROM routine_section_exercise_sets s
 		JOIN routine_section_exercises rse ON s.routine_section_exercise_id = rse.id
 		JOIN routine_sections rs ON rse.routine_section_id = rs.id
@@ -202,7 +219,7 @@ func pullRoutineSectionExerciseSets(ctx context.Context, tx pgx.Tx, userID uuid.
 	var list []models.RoutineSectionExerciseSet
 	for rows.Next() {
 		var item models.RoutineSectionExerciseSet
-		if err := rows.Scan(&item.ID, &item.RoutineSectionExerciseID, &item.MetricWeight, &item.Reps, &item.SortOrder, &item.Distance, &item.DurationSeconds, &item.Unit, &item.LastModified, &item.IsDeleted); err != nil {
+		if err := rows.Scan(&item.ID, &item.RoutineSectionExerciseID, &item.MetricWeight, &item.Reps, &item.SortOrder, &item.Distance, &item.DurationSeconds, &item.Unit, &item.MinReps, &item.MaxReps, &item.SetType, &item.TargetRIR, &item.Tempo, &item.Notes, &item.LastModified, &item.IsDeleted); err != nil {
 			return nil, err
 		}
 		list = append(list, item)

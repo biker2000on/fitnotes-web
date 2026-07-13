@@ -38,17 +38,17 @@ const numOrNull = (raw: string, parse: (v: string) => number): number | null => 
 export function RoutineEditorView() {
   const {
     editingRoutine, setActiveTab, setEditingRoutine,
-    routines, handleUpdateRoutineCategory, handleUpdateRoutineDetails,
+    routines, handleUpdateRoutineCategory, handleUpdateRoutineDetails, handleCreateRoutineVersion,
     handleAddDayToRoutine, handleDragEnd,
     editorSections, editorSectionExercises, editorExerciseSets,
     exercises, groupExercises, workoutGroups, userUnit,
-    handleUpdateSectionName, handleAddAllSectionLogs, handleDeleteSection,
-    handleUpdatePopulateSetsType,
+    handleUpdateSectionName, handleUpdateSectionSchedule, handleAddAllSectionLogs, handleDeleteSection,
+    handleUpdatePopulateSetsType, handleUpdateRoutineSectionExercise,
     openAddExerciseToSection, openPastImporter,
     selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
-    handleClearRoutineGroup, handleDeleteExerciseFromSection,
+    handleClearRoutineGroup, handleUpdateRoutineGroupName, handleDeleteExerciseFromSection,
     handleUpdateTemplateSetValues, handleDeleteSetFromTemplateExercise, handleAddSetToTemplateExercise,
-    supersetColor, setSupersetColor, handleCreateRoutineSuperset,
+    supersetColor, setSupersetColor, supersetName, setSupersetName, handleCreateRoutineSuperset,
   } = useFitNotesStore();
 
   if (!editingRoutine) return null;
@@ -109,7 +109,25 @@ export function RoutineEditorView() {
             <button className="btn btn-primary" onClick={handleAddDayToRoutine} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Plus size={16} /> Add Workout Day
             </button>
+            <button className="btn btn-secondary" onClick={() => handleCreateRoutineVersion(editingRoutine.id)}>New Version</button>
           </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px', marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-dark)' }}>
+          <label style={{ fontSize: '12px' }}>Version
+            <input type="number" min="1" value={editingRoutine.version ?? 1} onChange={(e) => handleUpdateRoutineDetails(editingRoutine.id, { version: Math.max(1, Number(e.target.value)) })} />
+          </label>
+          <label style={{ fontSize: '12px' }}>Program weeks
+            <input type="number" min="1" max="52" value={editingRoutine.program_weeks ?? 1} onChange={(e) => handleUpdateRoutineDetails(editingRoutine.id, { program_weeks: Math.max(1, Number(e.target.value)) })} />
+          </label>
+          <label style={{ fontSize: '12px' }}>Current week
+            <input type="number" min="1" max={editingRoutine.program_weeks ?? 1} value={editingRoutine.current_week ?? 1} onChange={(e) => handleUpdateRoutineDetails(editingRoutine.id, { current_week: Math.max(1, Number(e.target.value)) })} />
+          </label>
+          <label style={{ fontSize: '12px' }}>Start date
+            <input type="date" value={editingRoutine.start_date ?? ''} onChange={(e) => handleUpdateRoutineDetails(editingRoutine.id, { start_date: e.target.value || null })} />
+          </label>
+          <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '18px' }}>
+            <input type="checkbox" checked={editingRoutine.is_archived ?? false} onChange={(e) => handleUpdateRoutineDetails(editingRoutine.id, { is_archived: e.target.checked })} style={{ width: '18px' }} /> Archived
+          </label>
         </div>
       </div>
 
@@ -150,6 +168,14 @@ export function RoutineEditorView() {
                                 onFocus={(e) => (e.target.style.borderBottomColor = 'var(--primary)')}
                                 onBlur={(e) => (e.target.style.borderBottomColor = 'transparent')}
                               />
+                              <select aria-label="Program week" value={section.week_number ?? 1} onChange={(e) => handleUpdateSectionSchedule(section.id, { week_number: Number(e.target.value) })} style={{ width: '95px', padding: '5px', fontSize: '12px' }}>
+                                {Array.from({ length: Math.max(1, editingRoutine.program_weeks ?? 1) }, (_, i) => <option key={i + 1} value={i + 1}>Week {i + 1}</option>)}
+                              </select>
+                              <select aria-label="Day of week" value={section.day_of_week ?? ''} onChange={(e) => handleUpdateSectionSchedule(section.id, { day_of_week: e.target.value ? Number(e.target.value) : null })} style={{ width: '110px', padding: '5px', fontSize: '12px' }}>
+                                <option value="">Any day</option>
+                                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, i) => <option key={day} value={i + 1}>{day}</option>)}
+                              </select>
+                              <input aria-label="Training phase" placeholder="Phase" value={section.phase ?? ''} onChange={(e) => handleUpdateSectionSchedule(section.id, { phase: e.target.value || null })} style={{ width: '110px', padding: '5px', fontSize: '12px' }} />
                             </div>
 
                             <div className="routine-section-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -216,9 +242,14 @@ export function RoutineEditorView() {
                                                 <div>
                                                   <span style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary-dark)' }}>{ex.name}</span>
                                                   {group && (
-                                                    <span style={{ marginLeft: '8px', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', backgroundColor: groupColor ? groupColor + '20' : undefined, color: groupColor || undefined, fontWeight: 700, textTransform: 'uppercase' }}>
-                                                      Superset
-                                                    </span>
+                                                    <input
+                                                      aria-label="Superset name"
+                                                      defaultValue={group.name}
+                                                      key={`${group.id}-${group.name}`}
+                                                      onBlur={(e) => void handleUpdateRoutineGroupName(group.id, e.target.value)}
+                                                      onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                                                      style={{ marginLeft: '8px', width: '150px', fontSize: '11px', padding: '3px 6px', borderColor: groupColor || undefined, color: groupColor || undefined, fontWeight: 700 }}
+                                                    />
                                                   )}
                                                 </div>
                                               </div>
@@ -250,6 +281,20 @@ export function RoutineEditorView() {
                                             <p className="populate-type-hint">
                                               {(POPULATE_TYPE_OPTIONS.find(opt => opt.value === se.populate_sets_type) ?? POPULATE_TYPE_OPTIONS[1]).hint}
                                             </p>
+
+                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', padding: '8px', borderRadius: '8px', background: 'rgba(99,102,241,0.06)' }}>
+                                              <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '12px', fontWeight: 700 }}>
+                                                <input type="checkbox" checked={se.progression_enabled ?? false} onChange={(e) => handleUpdateRoutineSectionExercise(se.id, { progression_enabled: e.target.checked })} style={{ width: '16px' }} /> Auto-progress after all targets
+                                              </label>
+                                              {se.progression_enabled && <>
+                                                <label style={{ fontSize: '11px' }}>Weight +
+                                                  <input type="number" step="0.5" value={se.progression_increment ?? ''} placeholder="exercise default" onChange={(e) => handleUpdateRoutineSectionExercise(se.id, { progression_increment: numOrNull(e.target.value, parseFloat) })} style={{ width: '90px', padding: '4px' }} />
+                                                </label>
+                                                <label style={{ fontSize: '11px' }}>Reps +
+                                                  <input type="number" min="1" value={se.progression_reps_step ?? 1} onChange={(e) => handleUpdateRoutineSectionExercise(se.id, { progression_reps_step: Math.max(1, Number(e.target.value)) })} style={{ width: '58px', padding: '4px' }} />
+                                                </label>
+                                              </>}
+                                            </div>
 
                                             {/* Template Predefined Sets List (only relevant for predefined mode) */}
                                             {se.populate_sets_type === POPULATE_SETS_TYPE.PREDEFINED_SETS && (
@@ -302,6 +347,17 @@ export function RoutineEditorView() {
                                                           </div>
                                                         )}
 
+                                                        {hasReps && <>
+                                                          <input aria-label="Minimum reps" type="number" min="0" placeholder="min reps" value={set.min_reps ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { min_reps: numOrNull(e.target.value, v => parseInt(v, 10)) })} style={{ width: '72px', padding: '4px', fontSize: '12px' }} />
+                                                          <input aria-label="Maximum reps" type="number" min="0" placeholder="max reps" value={set.max_reps ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { max_reps: numOrNull(e.target.value, v => parseInt(v, 10)) })} style={{ width: '72px', padding: '4px', fontSize: '12px' }} />
+                                                        </>}
+                                                        <select aria-label="Set type" value={set.set_type ?? 'working'} onChange={(e) => handleUpdateTemplateSetValues(set.id, { set_type: e.target.value })} style={{ width: '95px', padding: '4px', fontSize: '12px' }}>
+                                                          <option value="working">Working</option><option value="warmup">Warm-up</option><option value="amrap">AMRAP</option><option value="failure">Failure</option><option value="drop">Drop set</option>
+                                                        </select>
+                                                        <input aria-label="Target RIR" type="number" min="0" max="10" step="0.5" placeholder="RIR" value={set.target_rir ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { target_rir: numOrNull(e.target.value, parseFloat) })} style={{ width: '58px', padding: '4px', fontSize: '12px' }} />
+                                                        <input aria-label="Tempo" placeholder="tempo" value={set.tempo ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { tempo: e.target.value || null })} style={{ width: '72px', padding: '4px', fontSize: '12px' }} />
+                                                        <input aria-label="Set instructions" placeholder="set notes" value={set.notes ?? ''} onChange={(e) => handleUpdateTemplateSetValues(set.id, { notes: e.target.value || null })} style={{ minWidth: '110px', flex: 1, padding: '4px', fontSize: '12px' }} />
+
                                                         <button style={{ background: 'transparent', border: 'none', color: 'var(--text-secondary-dark)', cursor: 'pointer', marginLeft: 'auto', display: 'flex', alignItems: 'center', padding: '6px' }} onClick={() => handleDeleteSetFromTemplateExercise(set.id)} title="Delete Set">
                                                           <Trash2 size={14} color="var(--danger)" />
                                                         </button>
@@ -333,8 +389,9 @@ export function RoutineEditorView() {
                               <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--accent)' }}>
                                 {selectedSectionExerciseIdsForSuperset.filter(id => sectionExercises.some(se => se.id === id)).length} exercises selected
                               </span>
-                              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Superset Bracket Color:</span>
+                              <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <input type="text" value={supersetName} onChange={e => setSupersetName(e.target.value)} placeholder="Superset name" style={{ width: '180px', padding: '5px 8px', fontSize: '12px' }} />
+                                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Bracket:</span>
                                 <input type="color" value={supersetColor} onChange={e => setSupersetColor(e.target.value)} style={{ width: '32px', height: '28px', padding: '0', border: 'none', borderRadius: '4px', cursor: 'pointer', backgroundColor: 'transparent' }} />
                                 <button
                                   className="btn btn-primary"
@@ -342,7 +399,8 @@ export function RoutineEditorView() {
                                   onClick={() => {
                                     const selectedIds = selectedSectionExerciseIdsForSuperset.filter(id => sectionExercises.some(se => se.id === id));
                                     const actualExIds = selectedIds.map(id => sectionExercises.find(se => se.id === id)!.exercise_id);
-                                    handleCreateRoutineSuperset(section.id, actualExIds);
+                                    handleCreateRoutineSuperset(section.id, actualExIds, supersetName);
+                                    setSupersetName('Superset');
                                     setSelectedSectionExerciseIdsForSuperset([]);
                                   }}
                                 >

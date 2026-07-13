@@ -40,6 +40,14 @@ type Exercise struct {
 	DefaultRestTime *int       `json:"default_rest_time"`
 	WeightUnitID    *int       `json:"weight_unit_id"`
 	IsFavourite     bool       `json:"is_favourite"`
+	Aliases         *string    `json:"aliases"`
+	Instructions    *string    `json:"instructions"`
+	VideoURL        *string    `json:"video_url"`
+	Equipment       *string    `json:"equipment"`
+	PrimaryMuscles  *string    `json:"primary_muscles"`
+	Regressions     *string    `json:"regressions"`
+	Progressions    *string    `json:"progressions"`
+	Substitutions   *string    `json:"substitutions"`
 	LastModified    time.Time  `json:"last_modified"`
 	IsDeleted       bool       `json:"is_deleted"`
 }
@@ -50,6 +58,11 @@ type Routine struct {
 	Name         string    `json:"name"`
 	Notes        *string   `json:"notes"`
 	Category     *string   `json:"category"`
+	Version      int       `json:"version"`
+	ProgramWeeks int       `json:"program_weeks"`
+	CurrentWeek  int       `json:"current_week"`
+	StartDate    *string   `json:"start_date"`
+	IsArchived   bool      `json:"is_archived"`
 	LastModified time.Time `json:"last_modified"`
 	IsDeleted    bool      `json:"is_deleted"`
 }
@@ -59,18 +72,24 @@ type RoutineSection struct {
 	RoutineID    uuid.UUID `json:"routine_id"`
 	Name         string    `json:"name"`
 	SortOrder    int       `json:"sort_order"`
+	WeekNumber   int       `json:"week_number"`
+	DayOfWeek    *int      `json:"day_of_week"`
+	Phase        *string   `json:"phase"`
 	LastModified time.Time `json:"last_modified"`
 	IsDeleted    bool      `json:"is_deleted"`
 }
 
 type RoutineSectionExercise struct {
-	ID               uuid.UUID `json:"id"`
-	RoutineSectionID uuid.UUID `json:"routine_section_id"`
-	ExerciseID       uuid.UUID `json:"exercise_id"`
-	SortOrder        int       `json:"sort_order"`
-	PopulateSetsType int       `json:"populate_sets_type"`
-	LastModified     time.Time `json:"last_modified"`
-	IsDeleted        bool      `json:"is_deleted"`
+	ID                   uuid.UUID `json:"id"`
+	RoutineSectionID     uuid.UUID `json:"routine_section_id"`
+	ExerciseID           uuid.UUID `json:"exercise_id"`
+	SortOrder            int       `json:"sort_order"`
+	PopulateSetsType     int       `json:"populate_sets_type"`
+	ProgressionEnabled   bool      `json:"progression_enabled"`
+	ProgressionIncrement *float64  `json:"progression_increment"`
+	ProgressionRepsStep  int       `json:"progression_reps_step"`
+	LastModified         time.Time `json:"last_modified"`
+	IsDeleted            bool      `json:"is_deleted"`
 }
 
 type RoutineSectionExerciseSet struct {
@@ -82,6 +101,12 @@ type RoutineSectionExerciseSet struct {
 	Distance                 *float64  `json:"distance"`
 	DurationSeconds          *int      `json:"duration_seconds"`
 	Unit                     *int      `json:"unit"`
+	MinReps                  *int      `json:"min_reps"`
+	MaxReps                  *int      `json:"max_reps"`
+	SetType                  string    `json:"set_type"`
+	TargetRIR                *float64  `json:"target_rir"`
+	Tempo                    *string   `json:"tempo"`
+	Notes                    *string   `json:"notes"`
 	LastModified             time.Time `json:"last_modified"`
 	IsDeleted                bool      `json:"is_deleted"`
 }
@@ -100,6 +125,9 @@ type TrainingLog struct {
 	Distance                    *float64   `json:"distance"`
 	DurationSeconds             *int       `json:"duration_seconds"`
 	Comment                     *string    `json:"comment"`
+	RPE                         *float64   `json:"rpe"`
+	RIR                         *float64   `json:"rir"`
+	SetType                     string     `json:"set_type"`
 	LastModified                time.Time  `json:"last_modified"`
 	IsDeleted                   bool       `json:"is_deleted"`
 }

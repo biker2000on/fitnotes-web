@@ -787,6 +787,14 @@ async fn tauri_sync(
                     "default_rest_time",
                     "weight_unit_id",
                     "is_favourite",
+                    "aliases",
+                    "instructions",
+                    "video_url",
+                    "equipment",
+                    "primary_muscles",
+                    "regressions",
+                    "progressions",
+                    "substitutions",
                     "last_modified",
                     "is_deleted",
                 ],
@@ -798,7 +806,10 @@ async fn tauri_sync(
             upsert_table(
                 "routines",
                 items.as_slice(),
-                &["id", "name", "notes", "category", "last_modified", "is_deleted"],
+                &[
+                    "id", "name", "notes", "category", "version", "program_weeks",
+                    "current_week", "start_date", "is_archived", "last_modified", "is_deleted",
+                ],
                 payload.routines.as_slice(),
             )?;
         }
@@ -811,6 +822,9 @@ async fn tauri_sync(
                     "routine_id",
                     "name",
                     "sort_order",
+                    "week_number",
+                    "day_of_week",
+                    "phase",
                     "last_modified",
                     "is_deleted",
                 ],
@@ -827,6 +841,9 @@ async fn tauri_sync(
                     "exercise_id",
                     "sort_order",
                     "populate_sets_type",
+                    "progression_enabled",
+                    "progression_increment",
+                    "progression_reps_step",
                     "last_modified",
                     "is_deleted",
                 ],
@@ -846,6 +863,12 @@ async fn tauri_sync(
                     "distance",
                     "duration_seconds",
                     "unit",
+                    "min_reps",
+                    "max_reps",
+                    "set_type",
+                    "target_rir",
+                    "tempo",
+                    "notes",
                     "last_modified",
                     "is_deleted",
                 ],
@@ -869,6 +892,9 @@ async fn tauri_sync(
                     "distance",
                     "duration_seconds",
                     "comment",
+                    "rpe",
+                    "rir",
+                    "set_type",
                     "last_modified",
                     "is_deleted",
                 ],
@@ -1272,8 +1298,48 @@ fn add_column_if_missing(
 
 fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
     add_column_if_missing(conn, "training_logs", "comment", "comment TEXT")?;
+    add_column_if_missing(conn, "training_logs", "rpe", "rpe REAL")?;
+    add_column_if_missing(conn, "training_logs", "rir", "rir REAL")?;
+    add_column_if_missing(conn, "training_logs", "set_type", "set_type TEXT NOT NULL DEFAULT 'working'")?;
     add_column_if_missing(conn, "body_weights", "measured_at", "measured_at TEXT")?;
     add_column_if_missing(conn, "routines", "category", "category TEXT")?;
+    for (column, definition) in [
+        ("aliases", "aliases TEXT"), ("instructions", "instructions TEXT"),
+        ("video_url", "video_url TEXT"), ("equipment", "equipment TEXT"),
+        ("primary_muscles", "primary_muscles TEXT"), ("regressions", "regressions TEXT"),
+        ("progressions", "progressions TEXT"), ("substitutions", "substitutions TEXT"),
+    ] {
+        add_column_if_missing(conn, "exercises", column, definition)?;
+    }
+    for (column, definition) in [
+        ("version", "version INTEGER NOT NULL DEFAULT 1"),
+        ("program_weeks", "program_weeks INTEGER NOT NULL DEFAULT 1"),
+        ("current_week", "current_week INTEGER NOT NULL DEFAULT 1"),
+        ("start_date", "start_date TEXT"),
+        ("is_archived", "is_archived INTEGER NOT NULL DEFAULT 0"),
+    ] {
+        add_column_if_missing(conn, "routines", column, definition)?;
+    }
+    for (column, definition) in [
+        ("week_number", "week_number INTEGER NOT NULL DEFAULT 1"),
+        ("day_of_week", "day_of_week INTEGER"), ("phase", "phase TEXT"),
+    ] {
+        add_column_if_missing(conn, "routine_sections", column, definition)?;
+    }
+    for (column, definition) in [
+        ("progression_enabled", "progression_enabled INTEGER NOT NULL DEFAULT 0"),
+        ("progression_increment", "progression_increment REAL"),
+        ("progression_reps_step", "progression_reps_step INTEGER NOT NULL DEFAULT 1"),
+    ] {
+        add_column_if_missing(conn, "routine_section_exercises", column, definition)?;
+    }
+    for (column, definition) in [
+        ("min_reps", "min_reps INTEGER"), ("max_reps", "max_reps INTEGER"),
+        ("set_type", "set_type TEXT NOT NULL DEFAULT 'working'"),
+        ("target_rir", "target_rir REAL"), ("tempo", "tempo TEXT"), ("notes", "notes TEXT"),
+    ] {
+        add_column_if_missing(conn, "routine_section_exercise_sets", column, definition)?;
+    }
     conn.execute(
         "UPDATE body_weights SET measured_at = date || 'T00:00:00.000Z' WHERE measured_at IS NULL",
         [],

@@ -123,6 +123,9 @@ export function RoutinesView() {
     }
     if (typeHasReps(typeId) && set.reps !== null) {
       parts.push(parts.length > 0 ? `x ${set.reps}` : `${set.reps} reps`);
+    } else if (typeHasReps(typeId) && (set.min_reps != null || set.max_reps != null)) {
+      const range = set.min_reps != null && set.max_reps != null ? `${set.min_reps}-${set.max_reps}` : `${set.min_reps ?? set.max_reps}`;
+      parts.push(parts.length > 0 ? `x ${range}` : `${range} reps`);
     }
     if (typeHasDistance(typeId) && set.distance !== null) {
       parts.push(settings.distance_unit === 2
@@ -134,6 +137,10 @@ export function RoutinesView() {
       const s = set.duration_seconds % 60;
       parts.push(s > 0 ? `${m}m ${s}s` : `${m}m`);
     }
+    if (set.set_type && set.set_type !== 'working') parts.push(`[${set.set_type}]`);
+    if (set.target_rir != null) parts.push(`@ ${set.target_rir} RIR`);
+    if (set.tempo) parts.push(`tempo ${set.tempo}`);
+    if (set.notes) parts.push(`— ${set.notes}`);
     return parts.join(' ');
   };
 
@@ -301,6 +308,9 @@ export function RoutinesView() {
                         {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary-dark)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary-dark)' }} />}
                       </div>
                       <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', marginTop: '2px' }}>{r.notes || 'No notes added.'}</p>
+                      <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginTop: '2px' }}>
+                        v{r.version ?? 1} · week {r.current_week ?? 1} of {r.program_weeks ?? 1}{r.start_date ? ` · starts ${r.start_date}` : ''}{r.is_archived ? ' · archived' : ''}
+                      </p>
                       {completionStats.byRoutine[r.id] && (
                         <p style={{ fontSize: '11px', color: 'var(--accent)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 600 }}>
                           <CalendarCheck size={12} />
@@ -388,7 +398,7 @@ export function RoutinesView() {
                                 >
                                   <div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px' }}>
-                                      <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary-dark)' }}>{sec.name}</div>
+                                      <div style={{ fontWeight: 800, fontSize: '13px', color: 'var(--text-primary-dark)' }}>{sec.name} <span style={{ fontSize: '10px', color: 'var(--text-secondary-dark)' }}>W{sec.week_number ?? 1}{sec.phase ? ` · ${sec.phase}` : ''}</span></div>
                                       {completionStats.bySection[sec.id] && (
                                         <span
                                           title={`Last completed ${completionStats.bySection[sec.id].last}`}

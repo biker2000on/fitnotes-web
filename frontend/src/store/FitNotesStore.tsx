@@ -294,6 +294,9 @@ export function useFitNotesController() {
   const [logDistance, setLogDistance] = useState('5');
   const [logDuration, setLogDuration] = useState('30');
   const [logComment, setLogComment] = useState('');
+  const [logRpe, setLogRpe] = useState('');
+  const [logRir, setLogRir] = useState('');
+  const [logSetType, setLogSetType] = useState('working');
   const [editingLog, setEditingLog] = useState<TrainingLog | null>(null);
   const [exerciseComments, setExerciseComments] = useState<ExerciseComment[]>([]);
   const [graphFavourites, setGraphFavourites] = useState<GraphFavourite[]>([]);
@@ -390,6 +393,10 @@ export function useFitNotesController() {
   const [editExDefaultRestTime, setEditExDefaultRestTime] = useState('90');
   const [editExWeightUnit, setEditExWeightUnit] = useState('1');
   const [editExIsFavourite, setEditExIsFavourite] = useState(false);
+  const [editExGuidance, setEditExGuidance] = useState({
+    aliases: '', instructions: '', video_url: '', equipment: '', primary_muscles: '',
+    regressions: '', progressions: '', substitutions: '',
+  });
 
   // Superset Manager modal states
   const [showSupersetManagerModal, setShowSupersetManagerModal] = useState(false);
@@ -1580,10 +1587,16 @@ export function useFitNotesController() {
         distance,
         duration_seconds: duration,
         comment: logComment || null,
+        rpe: logRpe ? parseFloat(logRpe) : null,
+        rir: logRir ? parseFloat(logRir) : null,
+        set_type: logSetType || 'working',
       };
       await db.execute('UPDATE training_logs', [updatedLog]);
       setEditingLog(null);
       setLogComment('');
+      setLogRpe('');
+      setLogRir('');
+      setLogSetType('working');
       await refreshData();
       triggerToast('Set updated.');
       return;
@@ -1601,6 +1614,9 @@ export function useFitNotesController() {
       distance,
       duration_seconds: duration,
       comment: logComment || null,
+      rpe: logRpe ? parseFloat(logRpe) : null,
+      rir: logRir ? parseFloat(logRir) : null,
+      set_type: logSetType || 'working',
     };
 
     await db.execute('INSERT INTO training_logs', [newLog]);
@@ -1609,6 +1625,9 @@ export function useFitNotesController() {
     }
     setAllLogs(prev => [...prev.filter(l => l.id !== newLog.id), newLog]);
     setLogComment('');
+    setLogRpe('');
+    setLogRir('');
+    setLogSetType('working');
     await refreshData(newLog.date);
     if (pr) triggerToast(`New PR! ${selectedExercise.name}`, 'success');
     if (settings.rest_timer_auto_start) {
@@ -1657,6 +1676,9 @@ export function useFitNotesController() {
     }
 
     setLogComment(log.comment || '');
+    setLogRpe(log.rpe?.toString() || '');
+    setLogRir(log.rir?.toString() || '');
+    setLogSetType(log.set_type || 'working');
 
     // Focus the first relevant input
     setTimeout(() => {
@@ -1675,6 +1697,9 @@ export function useFitNotesController() {
   const handleCancelEdit = () => {
     setEditingLog(null);
     setLogComment('');
+    setLogRpe('');
+    setLogRir('');
+    setLogSetType('working');
   };
 
   // Fill the entry form from the most recent prior set of the selected exercise.
@@ -2021,7 +2046,12 @@ export function useFitNotesController() {
     };
 
     const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
-    const routineSecs = sections.filter(s => s.routine_id === routineId && (!sectionId || s.id === sectionId) && !s.is_deleted).sort(bySortOrder);
+    const routine = routines.find(r => r.id === routineId);
+    const activeWeek = Math.max(1, routine?.current_week ?? 1);
+    const routineSecs = sections.filter(s =>
+      s.routine_id === routineId && !s.is_deleted &&
+      (sectionId ? s.id === sectionId : (s.week_number ?? 1) === activeWeek)
+    ).sort(bySortOrder);
     let totalSetsLogged = 0;
 
     for (const sec of routineSecs) {
@@ -2034,6 +2064,15 @@ export function useFitNotesController() {
         const setList = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
         const exSets = setList.filter(x => x.routine_section_exercise_id === se.id && !x.is_deleted).sort(bySortOrder);
         const lastSessionLogs = findLastSessionLogs(se.exercise_id);
+        const shouldProgress = Boolean(
+          se.progression_enabled && exSets.length > 0 && lastSessionLogs.length > 0 &&
+          exSets.every((s, i) => {
+            const prior = lastSessionLogs[i] ?? lastSessionLogs[lastSessionLogs.length - 1];
+            const repTarget = s.max_reps ?? s.reps;
+            return prior?.is_complete && (repTarget == null || (prior.reps ?? 0) >= repTarget) &&
+              (s.target_rir == null || (prior.rir ?? -1) >= s.target_rir);
+          })
+        );
 
         // One empty set so the exercise still shows up in the workout to log against
         // (matches the reference app's "Log All" placeholder for don't-populate exercises).
@@ -2051,13 +2090,25 @@ export function useFitNotesController() {
           for (let i = 0; i < exSets.length; i++) {
             const s = exSets[i];
             const inherit = lastSessionLogs[i] ?? lastSessionLogs[lastSessionLogs.length - 1];
+            const baseWeight = s.metric_weight ?? inherit?.metric_weight ?? null;
+            const baseReps = s.reps ?? s.min_reps ?? inherit?.reps ?? null;
+            const progressedWeight = shouldProgress && baseWeight != null
+              ? baseWeight + (se.progression_increment ?? exercises.find(ex => ex.id === se.exercise_id)?.weight_increment ?? 2.5)
+              : baseWeight;
+            const progressedReps = shouldProgress && baseWeight == null && baseReps != null
+              ? Math.min(s.max_reps ?? Number.MAX_SAFE_INTEGER, baseReps + (se.progression_reps_step ?? 1))
+              : baseReps;
             await insertLogFromSource(se.exercise_id, {
-              metric_weight: s.metric_weight ?? inherit?.metric_weight ?? null,
-              reps: s.reps ?? inherit?.reps ?? null,
+              metric_weight: progressedWeight,
+              reps: progressedReps,
               distance: s.distance ?? inherit?.distance ?? null,
               duration_seconds: s.duration_seconds ?? inherit?.duration_seconds ?? null,
               unit: s.unit ?? defaultUnit,
-            }, { routine_section_exercise_set_id: s.id });
+            }, {
+              routine_section_exercise_set_id: s.id,
+              set_type: s.set_type || 'working',
+              rir: s.target_rir ?? null,
+            });
             sectionSetsLogged++;
             totalSetsLogged++;
           }
@@ -2276,27 +2327,30 @@ export function useFitNotesController() {
     const durStr = log.duration_seconds !== null ? `${Math.floor(log.duration_seconds / 60)}m ${log.duration_seconds % 60}s` : '';
     const distanceTimeStr = distStr && durStr ? `${distStr} in ${durStr}` : distStr || durStr;
 
+    let value = '';
     switch (id) {
       case 0: // Weight & Reps
-        if (!hasWeightValue && repsStr) return repsStr;
-        return `${weightStr} x ${repsStr}`;
+        value = !hasWeightValue && repsStr ? repsStr : `${weightStr} x ${repsStr}`;
+        break;
       case 1: // Distance & Time (FitNotes Android/Cardio)
-        return distanceTimeStr;
+        value = distanceTimeStr; break;
       case 2: // Reps Only
-        return `${repsStr}`;
+        value = repsStr; break;
       case 3: // Distance & Time
-        return distanceTimeStr;
+        value = distanceTimeStr; break;
       case 4: // Distance Only
-        return `${distStr}`;
+        value = distStr; break;
       case 5: // Time Only
-        return `${durStr}`;
+        value = durStr; break;
       case 6: // Weight & Distance
-        return `${weightStr} for ${distStr}`;
+        value = `${weightStr} for ${distStr}`; break;
       case 7: // Weight & Time
-        return `${weightStr} for ${durStr}`;
+        value = `${weightStr} for ${durStr}`; break;
       default:
-        return `${weightStr} x ${repsStr}`;
+        value = `${weightStr} x ${repsStr}`;
     }
+    const effort = [log.set_type && log.set_type !== 'working' ? log.set_type : '', log.rpe != null ? `RPE ${log.rpe}` : '', log.rir != null ? `RIR ${log.rir}` : ''].filter(Boolean).join(' · ');
+    return effort ? `${value} (${effort})` : value;
   };
 
   // Workout comment mutator
@@ -2366,6 +2420,11 @@ export function useFitNotesController() {
     setEditExDefaultRestTime(ex.default_rest_time?.toString() || '90');
     setEditExWeightUnit(ex.weight_unit_id?.toString() || '1');
     setEditExIsFavourite(ex.is_favourite);
+    setEditExGuidance({
+      aliases: ex.aliases || '', instructions: ex.instructions || '', video_url: ex.video_url || '',
+      equipment: ex.equipment || '', primary_muscles: ex.primary_muscles || '',
+      regressions: ex.regressions || '', progressions: ex.progressions || '', substitutions: ex.substitutions || '',
+    });
     setShowEditExModal(true);
   };
 
@@ -2461,6 +2520,14 @@ export function useFitNotesController() {
         default_rest_time: parseInt(editExDefaultRestTime) || undefined,
         weight_unit_id: parseInt(editExWeightUnit) || undefined,
         is_favourite: editExIsFavourite,
+        aliases: editExGuidance.aliases || null,
+        instructions: editExGuidance.instructions || null,
+        video_url: editExGuidance.video_url || null,
+        equipment: editExGuidance.equipment || null,
+        primary_muscles: editExGuidance.primary_muscles || null,
+        regressions: editExGuidance.regressions || null,
+        progressions: editExGuidance.progressions || null,
+        substitutions: editExGuidance.substitutions || null,
       };
       await db.execute('INSERT INTO exercises', [updated]);
       setShowEditExModal(false);
@@ -2503,6 +2570,35 @@ export function useFitNotesController() {
       },
       { approveLabel: 'Delete', tone: 'danger' },
     );
+  };
+
+  const handleMergeExercises = async (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) {
+      triggerToast('Choose two different exercises.', 'error');
+      return false;
+    }
+    if (!tokenRef.current) {
+      triggerToast('Sign in before merging exercises.', 'error');
+      return false;
+    }
+    // Push pending offline edits first so the server performs the merge against
+    // the complete dataset, then pull the moved references and tombstone.
+    await triggerSync();
+    const activeToken = await refreshAuthToken(tokenRef.current);
+    const response = await fetch(`${getApiBaseUrl()}/api/exercises/merge`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${activeToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => ({}));
+      triggerToast(detail.error || 'Exercise merge failed.', 'error');
+      return false;
+    }
+    await triggerSync();
+    await refreshData();
+    triggerToast('Exercise history, routines, goals and aliases merged.');
+    return true;
   };
 
   // Active workout supersets linker
@@ -2638,7 +2734,7 @@ export function useFitNotesController() {
     triggerToast('Superset cleared.');
   };
 
-  const handleCreateRoutineSuperset = async (sectionId: string, exerciseIds: string[]) => {
+  const handleCreateRoutineSuperset = async (sectionId: string, exerciseIds: string[], name = supersetName) => {
     if (exerciseIds.length < 2) {
       triggerToast('Please select at least 2 exercises to create a superset!', 'error');
       return;
@@ -2649,7 +2745,7 @@ export function useFitNotesController() {
     const groupId = uuidv4();
     const newGroup: WorkoutGroup = {
       id: groupId,
-      name: `Superset`,
+      name: name.trim() || 'Superset',
       date: '',
       routine_section_id: sectionId,
       colour: colourVal,
@@ -2675,6 +2771,15 @@ export function useFitNotesController() {
       await loadEditorData(editingRoutine.id);
     }
     triggerToast('Routine superset created successfully!');
+  };
+
+  const handleUpdateRoutineGroupName = async (groupId: string, name: string) => {
+    const group = workoutGroups.find(g => g.id === groupId && !g.is_deleted);
+    const next = name.trim();
+    if (!group || !next || next === group.name) return;
+    await db.execute('UPDATE workout_groups', [{ ...group, name: next }]);
+    await refreshData();
+    triggerToast('Superset name updated.');
   };
 
   const handleClearRoutineGroup = async (groupId: string) => {
@@ -2710,7 +2815,11 @@ export function useFitNotesController() {
       id: uuidv4(),
       name: newRoutineName,
       notes: newRoutineNotes || undefined,
-      category: newRoutineCategory.trim() || null
+      category: newRoutineCategory.trim() || null,
+      version: 1,
+      program_weeks: 1,
+      current_week: 1,
+      is_archived: false,
     };
     await db.execute('INSERT INTO routines', [newRoutine]);
 
@@ -2719,7 +2828,8 @@ export function useFitNotesController() {
       id: uuidv4(),
       routine_id: newRoutine.id,
       name: 'Day 1',
-      sort_order: 1
+      sort_order: 1,
+      week_number: 1,
     };
     await db.execute('INSERT INTO routine_sections', [newSection]);
 
@@ -2750,7 +2860,7 @@ export function useFitNotesController() {
   // previous value while the local database refreshes and syncs upstream.
   const handleUpdateRoutineDetails = async (
     routineId: string,
-    details: { name?: string; notes?: string },
+    details: Partial<Pick<Routine, 'name' | 'notes' | 'version' | 'program_weeks' | 'current_week' | 'start_date' | 'is_archived'>>,
   ) => {
     const target = editingRoutine?.id === routineId
       ? editingRoutine
@@ -2764,8 +2874,15 @@ export function useFitNotesController() {
     }
 
     const notes = details.notes !== undefined ? details.notes.trim() : target.notes;
-    const updated: Routine = { ...target, name, notes: notes || undefined };
-    if (updated.name === target.name && (updated.notes ?? '') === (target.notes ?? '')) return;
+    const updated: Routine = {
+      ...target, ...details, name, notes: notes || undefined,
+      version: Math.max(1, details.version ?? target.version ?? 1),
+      program_weeks: Math.max(1, details.program_weeks ?? target.program_weeks ?? 1),
+      current_week: Math.min(
+        Math.max(1, details.current_week ?? target.current_week ?? 1),
+        Math.max(1, details.program_weeks ?? target.program_weeks ?? 1),
+      ),
+    };
 
     await db.execute('UPDATE routines', [updated]);
     setEditingRoutine(updated);
@@ -2833,7 +2950,7 @@ export function useFitNotesController() {
 
   // Duplicate a routine template with all of its days, exercises, predefined
   // sets, and routine supersets (mirrors the reference app's "Copy Routine").
-  const handleCopyRoutine = async (routineId: string) => {
+  const copyRoutine = async (routineId: string, asVersion: boolean) => {
     const source = routines.find(r => r.id === routineId);
     if (!source) return;
 
@@ -2856,7 +2973,9 @@ export function useFitNotesController() {
     const groupExs = allGroupExs.filter(ge => groupIds.includes(ge.workout_group_id) && !ge.is_deleted);
 
     const newRoutineId = uuidv4();
-    await db.execute('INSERT INTO routines', [{ ...source, id: newRoutineId, name: `${source.name} (Copy)` }]);
+    const nextVersion = (source.version ?? 1) + 1;
+    const newName = asVersion ? `${source.name.replace(/ v\d+$/i, '')} v${nextVersion}` : `${source.name} (Copy)`;
+    await db.execute('INSERT INTO routines', [{ ...source, id: newRoutineId, name: newName, version: asVersion ? nextVersion : 1, is_archived: false }]);
 
     const sectionIdMap = new Map<string, string>();
     for (const section of sections) {
@@ -2893,8 +3012,11 @@ export function useFitNotesController() {
     }
 
     await refreshData();
-    triggerToast(`Copied routine as "${source.name} (Copy)".`);
+    triggerToast(asVersion ? `Created program version ${nextVersion}.` : `Copied routine as "${newName}".`);
   };
+
+  const handleCopyRoutine = (routineId: string) => copyRoutine(routineId, false);
+  const handleCreateRoutineVersion = (routineId: string) => copyRoutine(routineId, true);
 
   // Import / Load Routine template into current daily logs
   const handleImportRoutine = async (routineId: string) => {
@@ -2965,7 +3087,8 @@ export function useFitNotesController() {
       id: uuidv4(),
       routine_id: editingRoutine.id,
       name: `Day ${editorSections.length + 1}`,
-      sort_order: editorSections.length + 1
+      sort_order: editorSections.length + 1,
+      week_number: editingRoutine.current_week ?? 1,
     };
     await db.execute('INSERT INTO routine_sections', [newSection]);
     await loadEditorData(editingRoutine.id);
@@ -3000,6 +3123,9 @@ export function useFitNotesController() {
       exercise_id: exerciseId,
       sort_order: secExs.length + 1,
       populate_sets_type: 1
+      ,progression_enabled: false,
+      progression_increment: null,
+      progression_reps_step: 1,
     };
     await db.execute('INSERT INTO routine_section_exercises', [newRse]);
     
@@ -3032,6 +3158,12 @@ export function useFitNotesController() {
       distance: lastSet?.distance ?? null,
       duration_seconds: lastSet?.duration_seconds ?? null,
       unit: lastSet?.unit ?? (userUnit === 'kg' ? 1 : 2)
+      ,min_reps: lastSet?.min_reps ?? null,
+      max_reps: lastSet?.max_reps ?? null,
+      set_type: lastSet?.set_type ?? 'working',
+      target_rir: lastSet?.target_rir ?? null,
+      tempo: lastSet?.tempo ?? null,
+      notes: lastSet?.notes ?? null,
     };
     await db.execute('INSERT INTO routine_section_exercise_sets', [newSet]);
     if (editingRoutine) {
@@ -3060,7 +3192,7 @@ export function useFitNotesController() {
     triggerToast('Set deleted from template exercise.');
   };
 
-  const handleUpdateTemplateSetValues = async (setId: string, values: Partial<Pick<RoutineSectionExerciseSet, 'metric_weight' | 'reps' | 'distance' | 'duration_seconds'>>) => {
+  const handleUpdateTemplateSetValues = async (setId: string, values: Partial<Pick<RoutineSectionExerciseSet, 'metric_weight' | 'reps' | 'distance' | 'duration_seconds' | 'min_reps' | 'max_reps' | 'set_type' | 'target_rir' | 'tempo' | 'notes'>>) => {
     const allSets = await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets');
     const target = allSets.find(s => s.id === setId);
     if (target) {
@@ -3073,6 +3205,20 @@ export function useFitNotesController() {
         await loadEditorData(editingRoutine.id);
       }
     }
+  };
+
+  const handleUpdateRoutineSectionExercise = async (rseId: string, values: Partial<RoutineSectionExercise>) => {
+    const target = editorSectionExercises.find(se => se.id === rseId);
+    if (!target) return;
+    await db.execute('UPDATE routine_section_exercises', [{ ...target, ...values }]);
+    if (editingRoutine) await loadEditorData(editingRoutine.id);
+  };
+
+  const handleUpdateSectionSchedule = async (sectionId: string, values: Partial<Pick<RoutineSection, 'week_number' | 'day_of_week' | 'phase'>>) => {
+    const target = editorSections.find(section => section.id === sectionId);
+    if (!target) return;
+    await db.execute('UPDATE routine_sections', [{ ...target, ...values }]);
+    if (editingRoutine) await loadEditorData(editingRoutine.id);
   };
 
   const handleUpdateSectionName = async (sectionId: string, name: string) => {
@@ -3500,7 +3646,7 @@ export function useFitNotesController() {
     importStatus, setImportStatus, exporting, setExporting, categories, setCategories, exercises, setExercises,
     currentLogs, setCurrentLogs, bodyWeights, setBodyWeights, workoutComment, setWorkoutComment, routines, setRoutines,
     workoutTime, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
-    replaceTargetExerciseId, setReplaceTargetExerciseId, handleReplaceExercise, handleCopyRoutine,
+    replaceTargetExerciseId, setReplaceTargetExerciseId, handleReplaceExercise, handleCopyRoutine, handleCreateRoutineVersion,
     showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,
     showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
@@ -3518,6 +3664,7 @@ export function useFitNotesController() {
     showCommandPalette, setShowCommandPalette, showShortcutsHelp, setShowShortcutsHelp, editingExercise, setEditingExercise, editExName, setEditExName,
     editExCategory, setEditExCategory, editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
     editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit, editExIsFavourite, setEditExIsFavourite,
+    editExGuidance, setEditExGuidance,
     showSupersetManagerModal, setShowSupersetManagerModal, selectedExIdsForSuperset, setSelectedExIdsForSuperset,
     supersetColor, setSupersetColor, supersetName, setSupersetName, targetSupersetGroupId, setTargetSupersetGroupId,
     allLogs, setAllLogs, showCalendarPreviewModal, setShowCalendarPreviewModal,
@@ -3535,7 +3682,7 @@ export function useFitNotesController() {
     fetchWithingsStatus, connectWithings, disconnectWithings, syncWithings,
     historyExerciseId, setHistoryExerciseId, uuidv4,
     settings, updateSetting,
-    logComment, setLogComment, handleCopyPreviousSet, handleClearDay, shareWorkout,
+    logComment, setLogComment, logRpe, setLogRpe, logRir, setLogRir, logSetType, setLogSetType, handleCopyPreviousSet, handleClearDay, shareWorkout,
     editingLog, setEditingLog, handleSelectLogForEdit, handleCancelEdit,
     exerciseComments, saveExerciseComment,
     graphFavourites, saveGraphFavourite, deleteGraphFavourite,
@@ -3546,11 +3693,11 @@ export function useFitNotesController() {
     handleCopyWorkoutConfirm, handleImportRoutinePopulated, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     handleDragEnd, formatLogValue, handleSaveComment, toggleCategoryExpand, handleToggleExerciseFavourite, openExerciseEditor,
     handleMarkAllComplete, handleMarkExerciseComplete,
-    handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise,
+    handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise, handleMergeExercises,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
-    handleCreateRoutineSuperset, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
+    handleCreateRoutineSuperset, handleUpdateRoutineGroupName, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
     loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
-    handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateSectionName, handleDeleteSection,
+    handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateRoutineSectionExercise, handleUpdateSectionName, handleUpdateSectionSchedule, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
     saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord, calculatePlatesSolver,
   };

@@ -263,6 +263,7 @@ export default function App() {
     editingCatName, setEditingCatName, editingCatColor, setEditingCatColor, handleUpdateCategory, handleDeleteCategory,
     showEditExModal, setShowEditExModal, editingExercise, editExName, setEditExName, editExCategory, setEditExCategory,
     editExType, setEditExType, editExNotes, setEditExNotes, editExWeightIncrement, setEditExWeightIncrement,
+    editExGuidance, setEditExGuidance,
     editExDefaultRestTime, setEditExDefaultRestTime, editExWeightUnit, setEditExWeightUnit,
     editExIsFavourite, setEditExIsFavourite, handleUpdateExercise, handleDeleteExercise,
     showCommandPalette, showSupersetManagerModal, setShowSupersetManagerModal,
@@ -1008,6 +1009,20 @@ export default function App() {
                 <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Exercise Notes / Tips</label>
                 <input type="text" placeholder="e.g. Keep shoulder blades retracted" value={editExNotes} onChange={(e) => setEditExNotes(e.target.value)} />
               </div>
+
+              <details style={{ border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '10px' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Guidance, video & alternatives</summary>
+                <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
+                  <input type="text" placeholder="Aliases (comma separated)" value={editExGuidance.aliases} onChange={(e) => setEditExGuidance({ ...editExGuidance, aliases: e.target.value })} />
+                  <textarea placeholder="Step-by-step instructions and coaching cues" value={editExGuidance.instructions} onChange={(e) => setEditExGuidance({ ...editExGuidance, instructions: e.target.value })} rows={4} />
+                  <input type="url" placeholder="Reference video URL" value={editExGuidance.video_url} onChange={(e) => setEditExGuidance({ ...editExGuidance, video_url: e.target.value })} />
+                  <input type="text" placeholder="Equipment" value={editExGuidance.equipment} onChange={(e) => setEditExGuidance({ ...editExGuidance, equipment: e.target.value })} />
+                  <input type="text" placeholder="Primary muscles" value={editExGuidance.primary_muscles} onChange={(e) => setEditExGuidance({ ...editExGuidance, primary_muscles: e.target.value })} />
+                  <input type="text" placeholder="Regressions" value={editExGuidance.regressions} onChange={(e) => setEditExGuidance({ ...editExGuidance, regressions: e.target.value })} />
+                  <input type="text" placeholder="Progressions" value={editExGuidance.progressions} onChange={(e) => setEditExGuidance({ ...editExGuidance, progressions: e.target.value })} />
+                  <input type="text" placeholder="Substitutions" value={editExGuidance.substitutions} onChange={(e) => setEditExGuidance({ ...editExGuidance, substitutions: e.target.value })} />
+                </div>
+              </details>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
                 <input type="checkbox" id="editExFav" checked={editExIsFavourite} onChange={(e) => setEditExIsFavourite(e.target.checked)} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />

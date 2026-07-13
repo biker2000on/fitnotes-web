@@ -145,7 +145,7 @@ export function WorkoutLogView() {
     setSelectedExIdsForSuperset, setShowSupersetManagerModal,
     workoutGroups, groupExercises, exercises, categories, selectedDate, setSelectedDate, handleClearGroup,
     workoutComment, setWorkoutComment, handleSaveComment,
-    settings, logComment, setLogComment, handleCopyPreviousSet, handleClearDay,
+    settings, logComment, setLogComment, logRpe, setLogRpe, logRir, setLogRir, logSetType, setLogSetType, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout, triggerToast,
     editingLog, handleSelectLogForEdit, handleCancelEdit,
     setHistoryExerciseId,
@@ -449,6 +449,18 @@ export function WorkoutLogView() {
               </div>
 
               <div className="mobile-modal-scroll">
+            {(selectedExercise.instructions || selectedExercise.video_url || selectedExercise.regressions || selectedExercise.progressions || selectedExercise.substitutions) && (
+              <details style={{ marginBottom: '12px', border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '9px 11px', fontSize: '12px' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Exercise guidance</summary>
+                {selectedExercise.instructions && <p style={{ whiteSpace: 'pre-wrap' }}>{selectedExercise.instructions}</p>}
+                {selectedExercise.equipment && <p><strong>Equipment:</strong> {selectedExercise.equipment}</p>}
+                {selectedExercise.primary_muscles && <p><strong>Muscles:</strong> {selectedExercise.primary_muscles}</p>}
+                {selectedExercise.regressions && <p><strong>Regressions:</strong> {selectedExercise.regressions}</p>}
+                {selectedExercise.progressions && <p><strong>Progressions:</strong> {selectedExercise.progressions}</p>}
+                {selectedExercise.substitutions && <p><strong>Substitutions:</strong> {selectedExercise.substitutions}</p>}
+                {selectedExercise.video_url && <a href={selectedExercise.video_url} target="_blank" rel="noreferrer">Open reference video</a>}
+              </details>
+            )}
             {/* Dynamic inputs based on exercise type */}
             <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', width: '100%' }}>
               {typeHasWeight(selectedExercise.exercise_type_id) && (
@@ -512,6 +524,11 @@ export function WorkoutLogView() {
 
             {/* Set comment + quick actions */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select aria-label="Set type" value={logSetType} onChange={(e) => setLogSetType(e.target.value)} style={{ width: '120px', padding: '8px' }}>
+                <option value="working">Working</option><option value="warmup">Warm-up</option><option value="amrap">AMRAP</option><option value="failure">Failure</option><option value="drop">Drop set</option>
+              </select>
+              <input aria-label="RPE" type="number" min="1" max="10" step="0.5" value={logRpe} onChange={(e) => setLogRpe(e.target.value)} placeholder="RPE" style={{ width: '72px', padding: '8px' }} />
+              <input aria-label="RIR" type="number" min="0" max="10" step="0.5" value={logRir} onChange={(e) => setLogRir(e.target.value)} placeholder="RIR" style={{ width: '72px', padding: '8px' }} />
               <input
                 id="log-comment-input"
                 type="text"

@@ -17,7 +17,7 @@ export function ExercisesView() {
     newExCategory, setNewExCategory, newExType, setNewExType, handleCreateExercise,
     expandedCategories, toggleCategoryExpand,
     handleToggleExerciseFavourite, openExerciseEditor, setHistoryExerciseId,
-    refreshData, triggerToast, triggerConfirm,
+    refreshData, triggerToast, triggerConfirm, handleMergeExercises,
   } = useFitNotesStore();
 
   const [sortMode, setSortMode] = useState<ExerciseSortMode>(() => {
@@ -28,6 +28,33 @@ export function ExercisesView() {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [favouritesOnly, setFavouritesOnly] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeSourceId, setMergeSourceId] = useState('');
+  const [mergeTargetId, setMergeTargetId] = useState('');
+  const [mergeBusy, setMergeBusy] = useState(false);
+
+  const duplicateGroups = useMemo(() => {
+    const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const groups = new Map<string, Exercise[]>();
+    exercises.filter(ex => !ex.is_deleted).forEach(ex => {
+      const key = normalize(ex.name);
+      groups.set(key, [...(groups.get(key) || []), ex]);
+    });
+    return [...groups.values()].filter(group => group.length > 1);
+  }, [exercises]);
+
+  const mergeExercises = async () => {
+    setMergeBusy(true);
+    try {
+      if (await handleMergeExercises(mergeSourceId, mergeTargetId)) {
+        setShowMergeModal(false);
+        setMergeSourceId('');
+        setMergeTargetId('');
+      }
+    } finally {
+      setMergeBusy(false);
+    }
+  };
 
   // Bulk-edit selection mode
   const [bulkMode, setBulkMode] = useState(false);
@@ -139,6 +166,8 @@ export function ExercisesView() {
       const haystack = [
         ex.name,
         ex.notes ?? '',
+        ex.aliases ?? '', ex.instructions ?? '', ex.equipment ?? '', ex.primary_muscles ?? '',
+        ex.regressions ?? '', ex.progressions ?? '', ex.substitutions ?? '',
         cat?.name ?? '',
         getExerciseTypeLabel(ex.exercise_type_id),
       ].join(' ').toLowerCase();
@@ -247,6 +276,7 @@ export function ExercisesView() {
             </span>
             <span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
             {stats?.lastUsed && <span>last {stats.lastUsed} - {stats.workouts}x</span>}
+            {ex.equipment && <span>{ex.equipment}</span>}
           </div>
           <div className="exercise-catalog-actions">
             <button
@@ -266,6 +296,17 @@ export function ExercisesView() {
             </button>
           </div>
         </div>
+        {(ex.instructions || ex.video_url || ex.regressions || ex.progressions || ex.substitutions) && (
+          <details style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+            <summary style={{ cursor: 'pointer' }}>Guidance</summary>
+            {ex.instructions && <p style={{ whiteSpace: 'pre-wrap' }}>{ex.instructions}</p>}
+            {ex.primary_muscles && <p><strong>Muscles:</strong> {ex.primary_muscles}</p>}
+            {ex.regressions && <p><strong>Regressions:</strong> {ex.regressions}</p>}
+            {ex.progressions && <p><strong>Progressions:</strong> {ex.progressions}</p>}
+            {ex.substitutions && <p><strong>Substitutions:</strong> {ex.substitutions}</p>}
+            {ex.video_url && <a href={ex.video_url} target="_blank" rel="noreferrer">Open reference video</a>}
+          </details>
+        )}
       </div>
     );
   };
@@ -300,6 +341,37 @@ export function ExercisesView() {
     </div>
   );
 
+  const renderMergeModal = () => (
+    <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowMergeModal(false)}>
+      <div className="modal-content mobile-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '560px' }}>
+        <div className="mobile-modal-header">
+          <h2>Merge duplicate exercises</h2>
+          <button className="icon-btn" onClick={() => setShowMergeModal(false)} aria-label="Close merge dialog"><X size={20} /></button>
+        </div>
+        <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px' }}>All logs, routines, goals, comments and group links move to the exercise you keep. The removed name becomes an alias.</p>
+        {duplicateGroups.length > 0 && (
+          <div style={{ marginBottom: '12px', fontSize: '12px' }}>
+            <strong>{duplicateGroups.length} likely duplicate group{duplicateGroups.length === 1 ? '' : 's'}:</strong>{' '}
+            {duplicateGroups.slice(0, 5).map(group => group.map(x => x.name).join(' / ')).join('; ')}
+          </div>
+        )}
+        <label>Duplicate to remove</label>
+        <select value={mergeSourceId} onChange={(e) => setMergeSourceId(e.target.value)}>
+          <option value="">Select duplicate…</option>
+          {[...exercises].filter(ex => !ex.is_deleted).sort((a, b) => a.name.localeCompare(b.name)).map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+        </select>
+        <label style={{ display: 'block', marginTop: '12px' }}>Canonical exercise to keep</label>
+        <select value={mergeTargetId} onChange={(e) => setMergeTargetId(e.target.value)}>
+          <option value="">Select exercise to keep…</option>
+          {[...exercises].filter(ex => !ex.is_deleted && ex.id !== mergeSourceId).sort((a, b) => a.name.localeCompare(b.name)).map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+        </select>
+        <button className="btn btn-primary" disabled={mergeBusy || !mergeSourceId || !mergeTargetId} onClick={mergeExercises} style={{ width: '100%', marginTop: '18px' }}>
+          {mergeBusy ? 'Merging…' : 'Merge into canonical exercise'}
+        </button>
+      </div>
+    </div>
+  );
+
   const hasFilters = Boolean(query.trim() || categoryFilter || favouritesOnly);
   const favourites = sortExercises(filteredExercises.filter(x => x.is_favourite));
 
@@ -309,6 +381,9 @@ export function ExercisesView() {
         <div className="exercise-catalog-header">
           <div className="card-title" style={{ margin: 0 }}><Dumbbell size={16} /> Exercises ({filteredExercises.length})</div>
           <div className="exercise-catalog-controls">
+            <button className="btn btn-secondary" onClick={() => setShowMergeModal(true)} title="Consolidate duplicate exercise history">
+              Merge{duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}
+            </button>
             <button
               className={`btn ${bulkMode ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
@@ -423,6 +498,7 @@ export function ExercisesView() {
       </div>
 
       {showCreateModal && renderCreateModal()}
+      {showMergeModal && renderMergeModal()}
 
       {bulkMode && (
         <div style={{

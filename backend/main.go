@@ -119,6 +119,7 @@ func main() {
 			r.Post("/auth/refresh", handlers.RefreshTokenHandler)
 			r.Post("/auth/oidc/unlink", handlers.OidcUnlinkHandler)
 			r.Post("/sync", handlers.SyncHandler)
+			r.Post("/exercises/merge", handlers.MergeExercisesHandler)
 			r.Post("/import-fitnotes", handlers.ImportFitNotesHandler)
 			r.Get("/export-fitnotes", handlers.ExportFitNotesHandler)
 			r.Get("/export-csv", handlers.ExportCSVHandler)

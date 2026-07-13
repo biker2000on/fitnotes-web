@@ -98,6 +98,10 @@ func runMigrations(pool *pgxpool.Pool) error {
 		return fmt.Errorf("failed to apply parity migration: %w", err)
 	}
 	log.Println("Parity migration applied.")
+	if err := applyMigration(ctx, pool, "000003_programming.up.sql"); err != nil {
+		return fmt.Errorf("failed to apply programming migration: %w", err)
+	}
+	log.Println("Programming migration applied.")
 	return nil
 }
 
