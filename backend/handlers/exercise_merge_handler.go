@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 
@@ -59,7 +60,7 @@ func MergeExercisesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE exercises AS target SET
-			aliases = concat_ws(', ', NULLIF(target.aliases, ''), $1),
+			aliases = concat_ws(', ', NULLIF(target.aliases, ''), $1::text),
 			notes = COALESCE(NULLIF(target.notes, ''), source.notes),
 			weight_increment = COALESCE(target.weight_increment, source.weight_increment),
 			default_rest_time = COALESCE(target.default_rest_time, source.default_rest_time),
@@ -75,6 +76,7 @@ func MergeExercisesHandler(w http.ResponseWriter, r *http.Request) {
 			last_modified = CURRENT_TIMESTAMP
 		FROM exercises AS source
 		WHERE target.id = $2 AND target.user_id = $3 AND source.id = $4 AND source.user_id = $3`, aliases, req.TargetID, userID, req.SourceID); err != nil {
+		log.Printf("exercise merge metadata update failed: %v", err)
 		http.Error(w, `{"error":"failed to preserve aliases"}`, http.StatusInternalServerError)
 		return
 	}

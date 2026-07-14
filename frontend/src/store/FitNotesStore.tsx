@@ -2581,6 +2581,63 @@ export function useFitNotesController() {
       triggerToast('Sign in before merging exercises.', 'error');
       return false;
     }
+
+    const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    // Older browser installs retain the built-in `e-*` catalog after the
+    // user's server catalog is pulled. Those records are intentionally never
+    // synced, so consolidate them locally instead of submitting an invalid ID
+    // to the UUID-only merge endpoint.
+    if (!isUuid(sourceId)) {
+      const source = exercises.find(ex => ex.id === sourceId);
+      const target = exercises.find(ex => ex.id === targetId);
+      if (!source || !target) {
+        triggerToast('One of the exercises is no longer available.', 'error');
+        return false;
+      }
+
+      const aliasParts = [target.aliases, source.name, source.aliases]
+        .flatMap(value => (value || '').split(','))
+        .map(value => value.trim())
+        .filter(Boolean);
+      const aliases = [...new Set(aliasParts)].join(', ');
+      const guidanceFields = ['notes', 'instructions', 'video_url', 'equipment', 'primary_muscles', 'regressions', 'progressions', 'substitutions'] as const;
+      const mergedTarget: Exercise = {
+        ...target,
+        aliases,
+        is_favourite: target.is_favourite || source.is_favourite,
+        weight_increment: target.weight_increment ?? source.weight_increment,
+        default_rest_time: target.default_rest_time ?? source.default_rest_time,
+        weight_unit_id: target.weight_unit_id ?? source.weight_unit_id,
+      };
+      for (const field of guidanceFields) {
+        if (!mergedTarget[field] && source[field]) mergedTarget[field] = source[field];
+      }
+      await db.execute('UPDATE exercises', [mergedTarget]);
+
+      const referenceTables = [
+        'training_logs', 'routine_section_exercises', 'workout_group_exercises',
+        'goals', 'barbells', 'exercise_comments', 'graph_favourites',
+      ];
+      for (const table of referenceTables) {
+        const rows = await db.query<any>(`SELECT * FROM ${table}`);
+        for (const row of rows.filter(item => item.exercise_id === sourceId)) {
+          await db.execute(`UPDATE ${table}`, [{ ...row, exercise_id: targetId }]);
+        }
+      }
+
+      await db.execute('UPDATE exercises', [{ ...source, is_deleted: true }]);
+      await triggerSync();
+      await refreshData();
+      triggerToast('Exercise history, routines, goals and aliases merged.');
+      return true;
+    }
+
+    if (!isUuid(targetId)) {
+      triggerToast('Keep the server-backed exercise record when merging.', 'error');
+      return false;
+    }
+
     // Push pending offline edits first so the server performs the merge against
     // the complete dataset, then pull the moved references and tombstone.
     await triggerSync();

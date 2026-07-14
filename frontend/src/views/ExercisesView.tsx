@@ -10,6 +10,8 @@ import type { Exercise } from '../types';
 
 type ExerciseSortMode = 'name' | 'lastUsed' | 'workouts';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function ExercisesView() {
   const {
     categories, exercises, allLogs,
@@ -165,7 +167,15 @@ export function ExercisesView() {
       (ex.is_favourite ? 2 : 0);
 
     return duplicateGroups.flatMap(group => {
-      const ranked = [...group].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+      // Signed-in browser stores can still contain the old built-in `e-*`
+      // starter rows alongside their server UUID equivalents. Always keep a
+      // server-backed row so accepting the recommendation never tries to send
+      // a legacy ID to the UUID-only API.
+      const ranked = [...group].sort((a, b) =>
+        Number(UUID_RE.test(b.id)) - Number(UUID_RE.test(a.id)) ||
+        score(b) - score(a) ||
+        a.name.localeCompare(b.name)
+      );
       const target = ranked[0];
       return ranked.slice(1).map(source => ({
         id: [source.id, target.id].sort().join('::'),
