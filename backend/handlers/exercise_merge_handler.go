@@ -58,8 +58,23 @@ func MergeExercisesHandler(w http.ResponseWriter, r *http.Request) {
 		aliases += ", " + strings.TrimSpace(*sourceAliases)
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE exercises SET aliases = concat_ws(', ', NULLIF(aliases, ''), $1), last_modified = CURRENT_TIMESTAMP
-		WHERE id = $2 AND user_id = $3`, aliases, req.TargetID, userID); err != nil {
+		UPDATE exercises AS target SET
+			aliases = concat_ws(', ', NULLIF(target.aliases, ''), $1),
+			notes = COALESCE(NULLIF(target.notes, ''), source.notes),
+			weight_increment = COALESCE(target.weight_increment, source.weight_increment),
+			default_rest_time = COALESCE(target.default_rest_time, source.default_rest_time),
+			weight_unit_id = COALESCE(target.weight_unit_id, source.weight_unit_id),
+			is_favourite = target.is_favourite OR source.is_favourite,
+			instructions = COALESCE(NULLIF(target.instructions, ''), source.instructions),
+			video_url = COALESCE(NULLIF(target.video_url, ''), source.video_url),
+			equipment = COALESCE(NULLIF(target.equipment, ''), source.equipment),
+			primary_muscles = COALESCE(NULLIF(target.primary_muscles, ''), source.primary_muscles),
+			regressions = COALESCE(NULLIF(target.regressions, ''), source.regressions),
+			progressions = COALESCE(NULLIF(target.progressions, ''), source.progressions),
+			substitutions = COALESCE(NULLIF(target.substitutions, ''), source.substitutions),
+			last_modified = CURRENT_TIMESTAMP
+		FROM exercises AS source
+		WHERE target.id = $2 AND target.user_id = $3 AND source.id = $4 AND source.user_id = $3`, aliases, req.TargetID, userID, req.SourceID); err != nil {
 		http.Error(w, `{"error":"failed to preserve aliases"}`, http.StatusInternalServerError)
 		return
 	}

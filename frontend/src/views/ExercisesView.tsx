@@ -1,7 +1,7 @@
 // ExercisesView.tsx - Exercise catalog: filter exercises, create custom
 // exercises in a modal, favourite/edit, bulk edit, and open per-exercise history.
 import { useEffect, useMemo, useState } from 'react';
-import { CheckSquare, Dumbbell, History as HistoryIcon, Plus, Search, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckSquare, Dumbbell, History as HistoryIcon, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -17,7 +17,7 @@ export function ExercisesView() {
     newExCategory, setNewExCategory, newExType, setNewExType, handleCreateExercise,
     expandedCategories, toggleCategoryExpand,
     handleToggleExerciseFavourite, openExerciseEditor, setHistoryExerciseId,
-    refreshData, triggerToast, triggerConfirm, handleMergeExercises,
+    refreshData, triggerToast, triggerConfirm, handleMergeExercises, userEmail,
   } = useFitNotesStore();
 
   const [sortMode, setSortMode] = useState<ExerciseSortMode>(() => {
@@ -29,9 +29,25 @@ export function ExercisesView() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [favouritesOnly, setFavouritesOnly] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
+  const [showMergeReview, setShowMergeReview] = useState(false);
+  const [mergeReviewFilter, setMergeReviewFilter] = useState<'recommended' | 'denied'>('recommended');
+  const [dismissedMergePairs, setDismissedMergePairs] = useState<Set<string>>(new Set());
+  const [preferredMergeTargets, setPreferredMergeTargets] = useState<Record<string, string>>({});
+  const [reviewMergeBusyId, setReviewMergeBusyId] = useState('');
+  const [acceptedMergeCount, setAcceptedMergeCount] = useState(0);
   const [mergeSourceId, setMergeSourceId] = useState('');
   const [mergeTargetId, setMergeTargetId] = useState('');
   const [mergeBusy, setMergeBusy] = useState(false);
+  const mergeDismissalKey = `fn_merge_dismissals_${userEmail || 'guest'}`;
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(mergeDismissalKey) || '[]');
+      setDismissedMergePairs(new Set(Array.isArray(saved) ? saved : []));
+    } catch {
+      setDismissedMergePairs(new Set());
+    }
+  }, [mergeDismissalKey]);
 
   const duplicateGroups = useMemo(() => {
     const normalize = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -121,11 +137,12 @@ export function ExercisesView() {
 
   // Per-exercise stats derived from logs (last-used date + distinct workout count).
   const exStats = useMemo(() => {
-    const m: Record<string, { lastUsed: string; workouts: number }> = {};
+    const m: Record<string, { lastUsed: string; workouts: number; sets: number }> = {};
     for (const l of allLogs) {
       if (l.is_deleted) continue;
-      const s = m[l.exercise_id] || (m[l.exercise_id] = { lastUsed: '', workouts: 0 });
+      const s = m[l.exercise_id] || (m[l.exercise_id] = { lastUsed: '', workouts: 0, sets: 0 });
       if (l.date > s.lastUsed) s.lastUsed = l.date;
+      s.sets += 1;
     }
     const days: Record<string, Set<string>> = {};
     for (const l of allLogs) {
@@ -135,6 +152,62 @@ export function ExercisesView() {
     for (const id in days) m[id].workouts = days[id].size;
     return m;
   }, [allLogs]);
+
+  const mergeRecommendations = useMemo(() => {
+    const guidanceScore = (ex: Exercise) => [
+      ex.notes, ex.aliases, ex.instructions, ex.video_url, ex.equipment,
+      ex.primary_muscles, ex.regressions, ex.progressions, ex.substitutions,
+    ].filter(value => Boolean(value?.trim())).length;
+    const score = (ex: Exercise) =>
+      (exStats[ex.id]?.sets ?? 0) * 100 +
+      (exStats[ex.id]?.workouts ?? 0) * 20 +
+      guidanceScore(ex) * 5 +
+      (ex.is_favourite ? 2 : 0);
+
+    return duplicateGroups.flatMap(group => {
+      const ranked = [...group].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name));
+      const target = ranked[0];
+      return ranked.slice(1).map(source => ({
+        id: [source.id, target.id].sort().join('::'),
+        source,
+        target,
+        reason: source.name === target.name
+          ? 'Exact duplicate name'
+          : 'Same name after ignoring capitalization, spaces, and punctuation',
+      }));
+    });
+  }, [duplicateGroups, exStats]);
+
+  const activeMergeRecommendations = mergeRecommendations.filter(rec => !dismissedMergePairs.has(rec.id));
+  const deniedMergeRecommendations = mergeRecommendations.filter(rec => dismissedMergePairs.has(rec.id));
+
+  const setMergeDismissed = (recommendationId: string, dismissed: boolean) => {
+    setDismissedMergePairs(current => {
+      const next = new Set(current);
+      if (dismissed) next.add(recommendationId);
+      else next.delete(recommendationId);
+      localStorage.setItem(mergeDismissalKey, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const acceptMergeRecommendation = async (recommendation: typeof mergeRecommendations[number]) => {
+    const targetId = preferredMergeTargets[recommendation.id] || recommendation.target.id;
+    const sourceId = targetId === recommendation.target.id ? recommendation.source.id : recommendation.target.id;
+    setReviewMergeBusyId(recommendation.id);
+    try {
+      if (await handleMergeExercises(sourceId, targetId)) {
+        setAcceptedMergeCount(count => count + 1);
+        setPreferredMergeTargets(current => {
+          const next = { ...current };
+          delete next[recommendation.id];
+          return next;
+        });
+      }
+    } finally {
+      setReviewMergeBusyId('');
+    }
+  };
 
   const sortExercises = (list: Exercise[]) => {
     const copy = [...list];
@@ -375,14 +448,112 @@ export function ExercisesView() {
   const hasFilters = Boolean(query.trim() || categoryFilter || favouritesOnly);
   const favourites = sortExercises(filteredExercises.filter(x => x.is_favourite));
 
+  if (showMergeReview) {
+    const reviewItems = mergeReviewFilter === 'recommended' ? activeMergeRecommendations : deniedMergeRecommendations;
+    const exerciseSummary = (ex: Exercise) => {
+      const category = categories.find(cat => cat.id === ex.category_id)?.name || 'Misc';
+      const populatedGuidance = [ex.instructions, ex.video_url, ex.equipment, ex.primary_muscles, ex.regressions, ex.progressions, ex.substitutions].filter(Boolean).length;
+      return { category, populatedGuidance, stats: exStats[ex.id] };
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+        <div className="card" style={{ padding: '18px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div>
+              <button className="btn btn-secondary" onClick={() => setShowMergeReview(false)} style={{ marginBottom: '12px' }}><ArrowLeft size={15} /> Exercises</button>
+              <h2 style={{ margin: 0 }}>Duplicate exercise review</h2>
+              <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', marginBottom: 0 }}>
+                Review each suggested fix. Accept consolidates all history into the selected record; Deny hides only that recommendation.
+              </p>
+            </div>
+            <button className="btn btn-secondary" onClick={() => setShowMergeModal(true)}>Manual merge</button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginTop: '16px' }}>
+            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(99,102,241,0.08)' }}><strong>{activeMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Recommended fixes</span></div>
+            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(245,158,11,0.08)' }}><strong>{deniedMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Denied</span></div>
+            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)' }}><strong>{acceptedMergeCount}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Accepted this session</span></div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+            <button className={`btn ${mergeReviewFilter === 'recommended' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMergeReviewFilter('recommended')}>Recommended ({activeMergeRecommendations.length})</button>
+            <button className={`btn ${mergeReviewFilter === 'denied' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setMergeReviewFilter('denied')}>Denied ({deniedMergeRecommendations.length})</button>
+          </div>
+        </div>
+
+        {reviewItems.length === 0 ? (
+          <div className="card" style={{ padding: '42px 20px', textAlign: 'center' }}>
+            <Check size={30} color="var(--success)" style={{ marginBottom: '8px' }} />
+            <h3 style={{ margin: '0 0 6px' }}>{mergeReviewFilter === 'recommended' ? 'No recommended fixes remaining' : 'No denied recommendations'}</h3>
+            <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', margin: 0 }}>
+              {mergeReviewFilter === 'recommended' ? 'The current exercise catalog has no unresolved exact-name duplicates.' : 'Denied recommendations can be restored here later.'}
+            </p>
+          </div>
+        ) : reviewItems.map(recommendation => {
+          const selectedTargetId = preferredMergeTargets[recommendation.id] || recommendation.target.id;
+          const keep = selectedTargetId === recommendation.target.id ? recommendation.target : recommendation.source;
+          const remove = keep.id === recommendation.target.id ? recommendation.source : recommendation.target;
+          const keepSummary = exerciseSummary(keep);
+          const removeSummary = exerciseSummary(remove);
+          const busy = reviewMergeBusyId === recommendation.id;
+
+          const recordPanel = (ex: Exercise, summary: ReturnType<typeof exerciseSummary>, role: 'keep' | 'remove') => (
+            <div style={{ flex: '1 1 280px', padding: '14px', border: `1px solid ${role === 'keep' ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.35)'}`, borderRadius: '12px', background: role === 'keep' ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.035)' }}>
+              <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: role === 'keep' ? 'var(--success)' : 'var(--danger)', marginBottom: '5px' }}>{role === 'keep' ? 'Keep this record' : 'Merge and remove'}</div>
+              <div style={{ fontSize: '16px', fontWeight: 800 }}>{ex.name}</div>
+              <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', marginTop: '2px' }}>Record …{ex.id.slice(-8)}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', marginTop: '6px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <span>{summary.category}</span><span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
+                <span>{summary.stats?.sets ?? 0} sets</span><span>{summary.stats?.workouts ?? 0} workouts</span>
+                <span>{summary.populatedGuidance} guidance fields</span>
+              </div>
+              {summary.stats?.lastUsed && <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginTop: '5px' }}>Last used {summary.stats.lastUsed}</div>}
+              {ex.aliases && <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginTop: '5px' }}>Aliases: {ex.aliases}</div>}
+              {ex.notes && <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginTop: '5px' }}>{ex.notes}</div>}
+            </div>
+          );
+
+          return (
+            <div className="card" key={recommendation.id} style={{ padding: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '12px' }}>
+                <div><strong>{recommendation.reason}</strong><div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginTop: '3px' }}>The record with more history and guidance is selected by default.</div></div>
+                <label style={{ fontSize: '12px' }}>Record to keep
+                  <select value={selectedTargetId} onChange={(e) => setPreferredMergeTargets(current => ({ ...current, [recommendation.id]: e.target.value }))} style={{ marginLeft: '8px', width: '210px', padding: '6px' }}>
+                    <option value={recommendation.target.id}>{recommendation.target.name} · {exStats[recommendation.target.id]?.sets ?? 0} sets · …{recommendation.target.id.slice(-6)}</option>
+                    <option value={recommendation.source.id}>{recommendation.source.name} · {exStats[recommendation.source.id]?.sets ?? 0} sets · …{recommendation.source.id.slice(-6)}</option>
+                  </select>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                {recordPanel(keep, keepSummary, 'keep')}
+                {recordPanel(remove, removeSummary, 'remove')}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px', flexWrap: 'wrap' }}>
+                {mergeReviewFilter === 'recommended' ? <>
+                  <button className="btn btn-secondary" disabled={busy} onClick={() => setMergeDismissed(recommendation.id, true)}>Deny recommendation</button>
+                  <button className="btn btn-primary" disabled={busy} onClick={() => acceptMergeRecommendation(recommendation)}>{busy ? 'Merging…' : 'Accept merge'}</button>
+                </> : (
+                  <button className="btn btn-secondary" onClick={() => setMergeDismissed(recommendation.id, false)}>Restore recommendation</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {showMergeModal && renderMergeModal()}
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
       <div className="card exercise-database-card">
         <div className="exercise-catalog-header">
           <div className="card-title" style={{ margin: 0 }}><Dumbbell size={16} /> Exercises ({filteredExercises.length})</div>
           <div className="exercise-catalog-controls">
-            <button className="btn btn-secondary" onClick={() => setShowMergeModal(true)} title="Consolidate duplicate exercise history">
-              Merge{duplicateGroups.length > 0 ? ` (${duplicateGroups.length})` : ''}
+            <button className="btn btn-secondary" onClick={() => setShowMergeReview(true)} title="Review recommended duplicate fixes">
+              Review duplicates{activeMergeRecommendations.length > 0 ? ` (${activeMergeRecommendations.length})` : ''}
             </button>
             <button
               className={`btn ${bulkMode ? 'btn-primary' : 'btn-secondary'}`}
