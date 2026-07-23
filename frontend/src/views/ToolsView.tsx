@@ -21,7 +21,7 @@ export function ToolsView() {
   const round = (n: number) => Math.round(n * 2) / 2; // nearest 0.5
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '760px', margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
       <div className="card-title" style={{ margin: 0 }}><Calculator size={18} /> Tools</div>
 
       <div className="card" style={{ gap: '14px' }}>

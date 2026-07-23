@@ -84,7 +84,7 @@ export function MeasurementsView() {
   };
 
   return (
-    <div className="cols-side" style={{ maxWidth: '1000px', margin: '0 auto', width: '100%' }}>
+    <div className="cols-side" style={{ width: '100%' }}>
       {/* Measurement list */}
       <div className="card" style={{ gap: '8px', alignContent: 'start' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -497,37 +497,39 @@ export default function App() {
           </header>
         )}
 
-        {/* -------------------- LOG TAB -------------------- */}
-        {activeTab === 'log' && <WorkoutLogView />}
+        <div className="main-panel">
+          {/* -------------------- LOG TAB -------------------- */}
+          {activeTab === 'log' && <WorkoutLogView />}
 
-        {/* -------------------- CALENDAR TAB -------------------- */}
-        {activeTab === 'calendar' && <CalendarView />}
+          {/* -------------------- CALENDAR TAB -------------------- */}
+          {activeTab === 'calendar' && <CalendarView />}
 
-        {/* -------------------- EXERCISES CATALOG TAB -------------------- */}
-        {activeTab === 'exercises' && <ExercisesView />}
+          {/* -------------------- EXERCISES CATALOG TAB -------------------- */}
+          {activeTab === 'exercises' && <ExercisesView />}
 
-        {/* -------------------- ROUTINES TAB -------------------- */}
-        {activeTab === 'routines' && <RoutinesView />}
+          {/* -------------------- ROUTINES TAB -------------------- */}
+          {activeTab === 'routines' && <RoutinesView />}
 
-        {/* -------------------- ROUTINE DAY EDITOR TAB -------------------- */}
-        {activeTab === 'routine-editor' && editingRoutine && <RoutineEditorView />}
+          {/* -------------------- ROUTINE DAY EDITOR TAB -------------------- */}
+          {activeTab === 'routine-editor' && editingRoutine && <RoutineEditorView />}
 
-        {/* -------------------- BODYWEIGHT TAB -------------------- */}
-        {activeTab === 'body' && <BodyView />}
+          {/* -------------------- BODYWEIGHT TAB -------------------- */}
+          {activeTab === 'body' && <BodyView />}
 
-        {/* -------------------- MEASUREMENTS TAB -------------------- */}
-        {activeTab === 'measurements' && <MeasurementsView />}
+          {/* -------------------- MEASUREMENTS TAB -------------------- */}
+          {activeTab === 'measurements' && <MeasurementsView />}
 
-        {/* -------------------- GOALS TAB -------------------- */}
-        {activeTab === 'goals' && <GoalsView />}
+          {/* -------------------- GOALS TAB -------------------- */}
+          {activeTab === 'goals' && <GoalsView />}
 
-        {/* -------------------- ANALYSIS/GRAPHS TAB -------------------- */}
-        {activeTab === 'analysis' && <AnalysisView />}
+          {/* -------------------- ANALYSIS/GRAPHS TAB -------------------- */}
+          {activeTab === 'analysis' && <AnalysisView />}
 
-        {/* -------------------- SYNC / LOGIN TAB -------------------- */}
-        {activeTab === 'tools' && <ToolsView />}
-        {activeTab === 'settings' && <SettingsView />}
-        {activeTab === 'sync' && <SyncView />}
+          {/* -------------------- SYNC / LOGIN TAB -------------------- */}
+          {activeTab === 'tools' && <ToolsView />}
+          {activeTab === 'settings' && <SettingsView />}
+          {activeTab === 'sync' && <SyncView />}
+        </div>
       </main>
 
       {/* 3. Global Plate Calculator Modal Drawer */}

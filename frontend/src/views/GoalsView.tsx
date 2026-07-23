@@ -125,7 +125,7 @@ export function GoalsView() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="card-title" style={{ margin: 0 }}><Target size={18} /> Goals</div>
         <button className="btn btn-primary" onClick={() => { setEditingId(null); setExerciseId(''); setTarget(''); setTargetReps(''); setTargetDate(''); setShowForm(s => !s); }}>

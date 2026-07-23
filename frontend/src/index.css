@@ -28,6 +28,9 @@
   --warning: #f59e0b;
   --danger: #ef4444;
 
+  /* Shared desktop content boundary */
+  --main-panel-max-width: 1120px;
+
   /* Fonts */
   --font-family: 'Plus Jakarta Sans', 'Outfit', system-ui, -apple-system, sans-serif;
   
@@ -247,6 +250,13 @@ body.light-theme .nav-item {
   gap: 32px;
 }
 
+.main-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--main-panel-max-width);
+  margin: 0 auto;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -254,7 +264,7 @@ body.light-theme .nav-item {
   /* Keep the header aligned with the centered content column instead of
      stretching across ultra-wide viewports. */
   width: 100%;
-  max-width: 1200px;
+  max-width: var(--main-panel-max-width);
   margin: 0 auto;
 }
 
@@ -299,6 +309,107 @@ body.light-theme .title-section p {
   gap: 8px;
 }
 
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-panel {
+  padding: 0;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.settings-panel > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 72px;
+  padding: 16px 20px;
+  min-width: 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-panel > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+  border-radius: 10px;
+}
+
+.settings-panel-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-panel-title {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.settings-panel-description {
+  display: block;
+  color: var(--text-secondary-dark);
+  font-size: 16px;
+  line-height: 1.4;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.settings-panel-chevron {
+  color: var(--text-secondary-dark);
+  transition: transform var(--transition-fast);
+}
+
+.settings-panel[open] .settings-panel-chevron {
+  transform: rotate(180deg);
+}
+
+.settings-panel-content {
+  padding: 0 20px 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.settings-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-select {
+  width: 180px;
+}
+
+.settings-number {
+  width: 120px;
+}
+
+body.light-theme .settings-panel-description,
+body.light-theme .settings-panel-chevron {
+  color: var(--text-secondary-light);
+}
+
+body.light-theme .settings-panel-content,
+body.light-theme .settings-row {
+  border-color: var(--border-light);
+}
+
 /* Workout Logging Screen Grid */
 .workout-grid {
   display: grid;
@@ -306,7 +417,7 @@ body.light-theme .title-section p {
   gap: 24px;
   align-items: start;
   width: 100%;
-  max-width: 960px;
+  max-width: none;
   margin: 0 auto;
   transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease;
   will-change: transform, opacity;
@@ -1959,6 +2070,30 @@ body.light-theme .filter-combobox-clear:hover {
 }
 
 @media (max-width: 600px) {
+  .settings-panel > summary {
+    min-height: 64px;
+    padding: 14px 16px;
+  }
+
+  .settings-panel-content {
+    padding: 0 16px 8px;
+  }
+
+  .settings-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .settings-row > :last-child {
+    width: 100%;
+  }
+
+  .settings-select,
+  .settings-number {
+    width: 100%;
+  }
+
   .muscle-volume-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }

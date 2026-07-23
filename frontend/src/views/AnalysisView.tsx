@@ -113,7 +113,7 @@ export function AnalysisView() {
   const niceDate = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%' }}>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button className={`btn ${tab === 'graph' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('graph')}><LineIcon size={16} /> Exercise</button>
         <button className={`btn ${tab === 'muscles' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('muscles')}><Activity size={16} /> Muscle Volume</button>

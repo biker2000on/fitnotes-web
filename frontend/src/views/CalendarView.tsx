@@ -32,7 +32,7 @@ export function CalendarView() {
 
   const styleTag = (
     <style>{`
-      .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; max-width: 1200px; margin: 0 auto; padding: 4px; }
+      .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; padding: 4px; }
       .calendar-left-pane { flex: 1.3; min-width: 0; align-self: flex-start; }
       .calendar-right-pane {
         flex: 0.7; min-width: 320px; background: rgba(30, 41, 59, 0.4);
