@@ -176,6 +176,11 @@ fn parse_setting_value(value: &str) -> Value {
     if value.eq_ignore_ascii_case("false") {
         return Value::Bool(false);
     }
+    // Stringified nulls from the key-value store must sync as real nulls, or
+    // the Go decoder rejects them for numeric-nullable settings fields.
+    if value.is_empty() || value == "null" || value == "undefined" {
+        return Value::Null;
+    }
     if let Ok(i) = value.parse::<i64>() {
         return Value::Number(i.into());
     }

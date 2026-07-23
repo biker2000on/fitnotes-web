@@ -213,6 +213,11 @@ export function isBuiltInSeedRow(table: string, row: any): boolean {
 export const parseSettingsValue = (value: unknown): unknown => {
   if (value === 'true') return true;
   if (value === 'false') return false;
+  // The settings key-value store stringifies writes, so a null setting (e.g.
+  // body_weight_goal_weight with no goal) round-trips as the literal string
+  // "null". Surface those as real nulls - pushing the string into the sync
+  // API fails Go's decoder for numeric-nullable fields (400 invalid payload).
+  if (value === 'null' || value === 'undefined' || value === '') return null;
   if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
     return Number(value);
   }
@@ -220,7 +225,11 @@ export const parseSettingsValue = (value: unknown): unknown => {
 };
 
 // Rebuild the Settings singleton object from key-value rows (the storage shape
-// used by both the Tauri sqlite DB and the web SQLite WASM DB).
+// used by both the Tauri sqlite DB and the web SQLite WASM DB). Values are
+// coerced to the JS types DEFAULT_SETTINGS declares: the kv store stringifies
+// everything, and parseSettingsValue alone cannot tell a bool stored as "1"
+// (e.g. metric migrated from legacy data) from a real number - pushing that
+// number into the sync API fails Go's bool decoding with a 400.
 export const settingsFromKeyValueRows = (rows: Array<{ key: string; value: unknown }>): Record<string, unknown> => {
   const settings = { ...DEFAULT_SETTINGS, is_dirty: 0 } as Record<string, unknown>;
   rows.forEach(row => {
@@ -232,6 +241,16 @@ export const settingsFromKeyValueRows = (rows: Array<{ key: string; value: unkno
       settings[row.key] = parseSettingsValue(row.value);
     }
   });
+  for (const [key, def] of Object.entries(DEFAULT_SETTINGS)) {
+    const v = settings[key];
+    if (v === null || v === undefined) continue;
+    if (typeof def === 'boolean' && typeof v !== 'boolean') {
+      settings[key] = v === 1 || v === '1' || v === 'true' || v === true;
+    } else if (typeof def === 'number' && typeof v !== 'number') {
+      const n = Number(v);
+      if (!Number.isNaN(n)) settings[key] = n;
+    }
+  }
   return settings;
 };
 
@@ -243,22 +262,21 @@ export interface SqlStatement { sql: string; params: any[] }
 // Mirrors the historical TauriNativeDriver behavior exactly.
 export function buildShorthandStatements(sql: string, params: any[]): SqlStatement[] | null {
   const normalized = sql.toLowerCase().trim();
-  const isShorthand = (
+  const hasObjectParam = (
     params.length === 1 &&
     typeof params[0] === 'object' &&
     params[0] !== null &&
-    !Array.isArray(params[0]) &&
-    !normalized.includes('values') &&
-    !normalized.includes('set') &&
-    !normalized.includes('(')
+    !Array.isArray(params[0])
   );
-  if (!isShorthand) return null;
+  if (!hasObjectParam) return null;
 
   const item = params[0];
-  const parts = normalized.split(/\s+/);
-  const table = parts[0] === 'update' ? parts[1] : parts[2]; // e.g. "exercises"
 
-  if (table === 'settings') {
+  // Settings shorthand must be matched explicitly BEFORE the generic gate:
+  // "settings" contains the substring "set", which the gate excludes (it is
+  // meant to reject real SQL with SET clauses). With the generic gate alone,
+  // settings writes fall through to raw SQL and fail.
+  if (/^(insert\s+into|update|replace\s+into)\s+settings$/.test(normalized)) {
     const statements: SqlStatement[] = [];
     for (const [k, v] of Object.entries(item)) {
       if (k === 'is_dirty' || k === 'last_modified') continue;
@@ -269,6 +287,16 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
     statements.push({ sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`, params: ['settings_last_modified', new Date().toISOString()] });
     return statements;
   }
+
+  const isShorthand = (
+    !normalized.includes('values') &&
+    !normalized.includes('set') &&
+    !normalized.includes('(')
+  );
+  if (!isShorthand) return null;
+
+  const parts = normalized.split(/\s+/);
+  const table = parts[0] === 'update' ? parts[1] : parts[2]; // e.g. "exercises"
 
   const columns = TABLE_COLUMNS[table];
   if (!columns) return null;
