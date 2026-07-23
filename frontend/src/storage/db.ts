@@ -1,111 +1,38 @@
 // db.ts - Unified Offline-First Database Driver & Sync Coordinator
+//
+// Three drivers implement the same DBDriver interface:
+//  - TauriNativeDriver: mobile/desktop app, real SQLite via Rust IPC.
+//  - SqliteWasmDriver: web browsers, real SQLite (WASM) persisted to OPFS.
+//  - BrowserLocalDriver: legacy localStorage mock, kept as the fallback for
+//    browsers without OPFS support (and for second tabs, since the OPFS pool
+//    takes exclusive file handles).
 import { invoke } from '@tauri-apps/api/core';
 import { DEFAULT_SETTINGS } from '../lib/settings';
+import {
+  DBDriver,
+  AuthExpiredError,
+  UUID_FIELDS,
+  buildShorthandStatements,
+  isBuiltInSeedRow,
+  normalizeForSync,
+  normalizeTimestamp,
+  settingsFromKeyValueRows,
+  virtualDefaultBarbells,
+  virtualDefaultMeasurements,
+  virtualDefaultPlates,
+} from './shared';
+import { SqliteWasmDriver } from './sqliteDriver';
 
-export interface DBDriver {
-  query<T>(sql: string, params?: any[]): Promise<T[]>;
-  execute(sql: string, params?: any[]): Promise<void>;
-  // Resolves with the number of rows pulled from the server, or null when the
-  // driver cannot tell (lets callers skip UI refreshes after no-op syncs).
-  sync(apiToken: string, apiBaseUrl: string): Promise<number | null>;
-  invalidateCache(preserveDirty: boolean): Promise<void>;
-  onChange(listener: () => void): () => void;
-}
-
-export class AuthExpiredError extends Error {
-  constructor(message = 'Session expired. Please sign in again.') {
-    super(message);
-    this.name = 'AuthExpiredError';
-  }
-}
+export type { DBDriver } from './shared';
+export { AuthExpiredError } from './shared';
 
 // Check if running inside Tauri WebView
 const isTauri = () => {
   return typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__ !== undefined;
 };
 
-// Default body measurements shown to guests with an empty local store (mirrors
-// FitNotes defaults). unit_id: 1 = cm, 2 = inches, 3 = percent.
-// Fixed UUIDs keep selection stable across reloads and remain valid if a record
-// logged against one is later persisted and synced (server measurement_records
-// references measurements(id) as UUID). Logged-in users pull real server-seeded
-// measurements instead, so these virtual rows only surface before any exist.
-const DEFAULT_MEASUREMENTS: Array<{ id: string; name: string; unit_id: number }> = [
-  { id: '00000000-0000-4000-8000-000000000001', name: 'Body Fat', unit_id: 3 },
-  { id: '00000000-0000-4000-8000-000000000002', name: 'Neck', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000003', name: 'Shoulders', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000004', name: 'Chest', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000005', name: 'Waist', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000006', name: 'Hips', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000007', name: 'Thigh', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000008', name: 'Calf', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-000000000009', name: 'Bicep', unit_id: 1 },
-  { id: '00000000-0000-4000-8000-00000000000a', name: 'Forearm', unit_id: 1 },
-];
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const isUuid = (value: unknown): value is string => (
-  typeof value === 'string' && UUID_RE.test(value)
-);
-
-const legacyIdToUuid = (id: string): string => {
-  let hash = 2166136261;
-  for (let i = 0; i < id.length; i += 1) {
-    hash ^= id.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  const hex = Array.from({ length: 32 }, (_, i) => {
-    hash ^= id.charCodeAt(i % id.length) + i;
-    hash = Math.imul(hash, 16777619);
-    return ((hash >>> ((i % 4) * 8)) & 0xf).toString(16);
-  });
-
-  hex[12] = '4';
-  hex[16] = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
-  const value = hex.join('');
-  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
-};
-
-const normalizeUuid = (value: unknown): unknown => {
-  if (value == null || value === '') return null;
-  if (isUuid(value)) return value;
-  if (typeof value === 'string') return legacyIdToUuid(value);
-  return value;
-};
-
-const normalizeTimestamp = (value: unknown): string => {
-  if (typeof value === 'string') {
-    const parsed = Date.parse(value);
-    if (!Number.isNaN(parsed)) return new Date(parsed).toISOString();
-  }
-  return new Date().toISOString();
-};
-
-const normalizeSignedInt32 = (value: unknown): unknown => {
-  if (typeof value !== 'number') return value;
-  return value > 2147483647 ? value - 4294967296 : value;
-};
-
-const normalizeForSync = (item: any, uuidFields: string[] = []) => {
-  const normalized = { ...item };
-  delete normalized.user_id;
-  normalized.id = normalizeUuid(normalized.id);
-  normalized.last_modified = normalizeTimestamp(normalized.last_modified);
-
-  uuidFields.forEach(field => {
-    normalized[field] = normalizeUuid(normalized[field]);
-  });
-  if ('colour' in normalized) {
-    normalized.colour = normalizeSignedInt32(normalized.colour);
-  }
-
-  return normalized;
-};
-
 // In-Memory/LocalStorage Local Database Driver for Browser Mode
-class BrowserLocalDriver implements DBDriver {
+export class BrowserLocalDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
 
   onChange(listener: () => void): () => void {
@@ -165,14 +92,7 @@ class BrowserLocalDriver implements DBDriver {
     if (normalized.startsWith('select * from plates')) {
       const items = this.getStore('plates').filter(x => !x.is_deleted);
       if (items.length === 0) {
-        // Return default plates if empty
-        return [
-          { id: 'p1', weight: 20, unit: 1, count: 6, enabled: true, colour: 4278190080, width_ratio: 0.18, height_ratio: 0.9, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false },
-          { id: 'p2', weight: 15, unit: 1, count: 2, enabled: true, colour: 4293926400, width_ratio: 0.16, height_ratio: 0.85, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false },
-          { id: 'p3', weight: 10, unit: 1, count: 4, enabled: true, colour: 4278222848, width_ratio: 0.14, height_ratio: 0.75, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false },
-          { id: 'p4', weight: 5, unit: 1, count: 4, enabled: true, colour: 4294901760, width_ratio: 0.12, height_ratio: 0.6, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false },
-          { id: 'p5', weight: 2.5, unit: 1, count: 4, enabled: true, colour: 4286578688, width_ratio: 0.1, height_ratio: 0.5, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false }
-        ] as T[];
+        return virtualDefaultPlates() as T[];
       }
       return items as T[];
     }
@@ -180,7 +100,7 @@ class BrowserLocalDriver implements DBDriver {
     if (normalized.startsWith('select * from barbells')) {
       const items = this.getStore('barbells').filter(x => !x.is_deleted);
       if (items.length === 0) {
-        return [{ id: 'b1', weight: 20, unit: 1, exercise_id: null, last_modified: new Date().toISOString(), is_deleted: false, is_dirty: false }] as T[];
+        return virtualDefaultBarbells() as T[];
       }
       return items as T[];
     }
@@ -269,11 +189,7 @@ class BrowserLocalDriver implements DBDriver {
     if (normalized.startsWith('select * from measurements')) {
       const items = this.getStore('measurements').filter(x => !x.is_deleted);
       if (items.length === 0) {
-        return DEFAULT_MEASUREMENTS.map((m, i) => ({
-          id: m.id, name: m.name, unit_id: m.unit_id, goal_type: null, goal_value: null,
-          custom: false, enabled: true, sort_order: i,
-          last_modified: new Date().toISOString(), is_deleted: false, is_dirty: 0,
-        })) as T[];
+        return virtualDefaultMeasurements() as T[];
       }
       return items.sort((a, b) => a.sort_order - b.sort_order) as T[];
     }
@@ -331,106 +247,29 @@ class BrowserLocalDriver implements DBDriver {
       return;
     }
 
-    const insertOrReplace = (table: string, item: any) => {
+    // Settings is a per-user singleton, not a list - merge into the stored row.
+    if (normalized.startsWith('insert into settings') || normalized.startsWith('update settings') || normalized.startsWith('replace into settings')) {
+      const raw = localStorage.getItem('fn_settings');
+      const current = raw ? JSON.parse(raw) : { ...DEFAULT_SETTINGS };
+      const merged = { ...current, ...params[0], is_dirty: 1, last_modified: new Date().toISOString() };
+      localStorage.setItem('fn_settings', JSON.stringify(merged));
+      this.notifyListeners();
+      return;
+    }
+
+    // Shorthand insert/update: match "INSERT INTO <table>" / "UPDATE <table>"
+    // for any known synced table and upsert the row object.
+    const parts = normalized.split(/\s+/);
+    const table = parts[0] === 'update' ? parts[1] : parts[2];
+    if (table && params.length === 1 && typeof params[0] === 'object' && params[0] !== null) {
       const store = this.getStore(table);
+      const item = { ...params[0] };
       const idx = store.findIndex(x => x.id === item.id);
       item.is_dirty = 1;
       item.last_modified = new Date().toISOString();
       if (idx >= 0) store[idx] = item;
       else store.push(item);
       this.setStore(table, store);
-    };
-
-    if (normalized.startsWith('insert into categories') || normalized.startsWith('update categories') || normalized.startsWith('replace into categories')) {
-      insertOrReplace('categories', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into exercises') || normalized.startsWith('update exercises') || normalized.startsWith('replace into exercises')) {
-      insertOrReplace('exercises', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into training_logs') || normalized.startsWith('update training_logs') || normalized.startsWith('replace into training_logs')) {
-      insertOrReplace('training_logs', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into body_weights') || normalized.startsWith('update body_weights') || normalized.startsWith('replace into body_weights')) {
-      insertOrReplace('body_weights', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into plates') || normalized.startsWith('update plates') || normalized.startsWith('replace into plates')) {
-      insertOrReplace('plates', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into barbells') || normalized.startsWith('update barbells') || normalized.startsWith('replace into barbells')) {
-      insertOrReplace('barbells', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into workout_comments') || normalized.startsWith('update workout_comments') || normalized.startsWith('replace into workout_comments')) {
-      insertOrReplace('workout_comments', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into routines') || normalized.startsWith('update routines') || normalized.startsWith('replace into routines')) {
-      insertOrReplace('routines', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into routine_sections') || normalized.startsWith('update routine_sections') || normalized.startsWith('replace into routine_sections')) {
-      insertOrReplace('routine_sections', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into routine_section_exercises') || normalized.startsWith('update routine_section_exercises') || normalized.startsWith('replace into routine_section_exercises')) {
-      insertOrReplace('routine_section_exercises', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into routine_section_exercise_sets') || normalized.startsWith('update routine_section_exercise_sets') || normalized.startsWith('replace into routine_section_exercise_sets')) {
-      insertOrReplace('routine_section_exercise_sets', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into workout_groups') || normalized.startsWith('update workout_groups') || normalized.startsWith('replace into workout_groups')) {
-      insertOrReplace('workout_groups', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into workout_group_exercises') || normalized.startsWith('update workout_group_exercises') || normalized.startsWith('replace into workout_group_exercises')) {
-      insertOrReplace('workout_group_exercises', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into workout_routines') || normalized.startsWith('update workout_routines') || normalized.startsWith('replace into workout_routines')) {
-      insertOrReplace('workout_routines', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into goals') || normalized.startsWith('update goals') || normalized.startsWith('replace into goals')) {
-      insertOrReplace('goals', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into measurement_records') || normalized.startsWith('update measurement_records') || normalized.startsWith('replace into measurement_records')) {
-      insertOrReplace('measurement_records', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into measurements') || normalized.startsWith('update measurements') || normalized.startsWith('replace into measurements')) {
-      insertOrReplace('measurements', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into exercise_comments') || normalized.startsWith('update exercise_comments') || normalized.startsWith('replace into exercise_comments')) {
-      insertOrReplace('exercise_comments', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into workout_times') || normalized.startsWith('update workout_times') || normalized.startsWith('replace into workout_times')) {
-      insertOrReplace('workout_times', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into custom_units') || normalized.startsWith('update custom_units') || normalized.startsWith('replace into custom_units')) {
-      insertOrReplace('custom_units', params[0]);
-    }
-
-    else if (normalized.startsWith('insert into graph_favourites') || normalized.startsWith('update graph_favourites') || normalized.startsWith('replace into graph_favourites')) {
-      insertOrReplace('graph_favourites', params[0]);
-    }
-
-    // Settings is a per-user singleton, not a list - merge into the stored row.
-    else if (normalized.startsWith('insert into settings') || normalized.startsWith('update settings') || normalized.startsWith('replace into settings')) {
-      const raw = localStorage.getItem('fn_settings');
-      const current = raw ? JSON.parse(raw) : { ...DEFAULT_SETTINGS };
-      const merged = { ...current, ...params[0], is_dirty: 1, last_modified: new Date().toISOString() };
-      localStorage.setItem('fn_settings', JSON.stringify(merged));
     }
 
     this.notifyListeners();
@@ -467,28 +306,28 @@ class BrowserLocalDriver implements DBDriver {
     const payload = {
       last_sync_timestamp: lastSync,
       categories: getDirty('categories'),
-      exercises: getDirty('exercises', ['category_id']),
+      exercises: getDirty('exercises', UUID_FIELDS.exercises),
       // Routine templates: parents must precede children so the server upserts
       // them in FK-safe order (routines -> sections -> exercises -> sets).
       routines: getDirty('routines'),
-      routine_sections: getDirty('routine_sections', ['routine_id']),
-      routine_section_exercises: getDirty('routine_section_exercises', ['routine_section_id', 'exercise_id']),
-      routine_section_exercise_sets: getDirty('routine_section_exercise_sets', ['routine_section_exercise_id']),
-      training_logs: getDirty('training_logs', ['exercise_id', 'routine_section_exercise_set_id']),
+      routine_sections: getDirty('routine_sections', UUID_FIELDS.routine_sections),
+      routine_section_exercises: getDirty('routine_section_exercises', UUID_FIELDS.routine_section_exercises),
+      routine_section_exercise_sets: getDirty('routine_section_exercise_sets', UUID_FIELDS.routine_section_exercise_sets),
+      training_logs: getDirty('training_logs', UUID_FIELDS.training_logs),
       body_weights: getDirty('body_weights'),
       plates: getDirty('plates'),
-      barbells: getDirty('barbells', ['exercise_id']),
+      barbells: getDirty('barbells', UUID_FIELDS.barbells),
       workout_comments: getDirty('workout_comments'),
-      workout_groups: getDirty('workout_groups', ['routine_section_id']),
-      workout_group_exercises: getDirty('workout_group_exercises', ['exercise_id', 'routine_section_id', 'workout_group_id']),
-      workout_routines: getDirty('workout_routines', ['routine_id', 'routine_section_id']),
-      goals: getDirty('goals', ['exercise_id']),
+      workout_groups: getDirty('workout_groups', UUID_FIELDS.workout_groups),
+      workout_group_exercises: getDirty('workout_group_exercises', UUID_FIELDS.workout_group_exercises),
+      workout_routines: getDirty('workout_routines', UUID_FIELDS.workout_routines),
+      goals: getDirty('goals', UUID_FIELDS.goals),
       measurements: getDirty('measurements'),
-      measurement_records: getDirty('measurement_records', ['measurement_id']),
-      exercise_comments: getDirty('exercise_comments', ['exercise_id']),
+      measurement_records: getDirty('measurement_records', UUID_FIELDS.measurement_records),
+      exercise_comments: getDirty('exercise_comments', UUID_FIELDS.exercise_comments),
       workout_times: getDirty('workout_times'),
       custom_units: getDirty('custom_units'),
-      graph_favourites: getDirty('graph_favourites', ['exercise_id']),
+      graph_favourites: getDirty('graph_favourites', UUID_FIELDS.graph_favourites),
       settings: dirtySettings,
     };
 
@@ -518,7 +357,7 @@ class BrowserLocalDriver implements DBDriver {
       const applyUpdates = (table: string, serverItems: any[]) => {
         pulledCount += serverItems.length;
         const localItems = this.getStore(table);
-        
+
         // 1. Clear dirty state for successfully pushed items
         localItems.forEach(x => {
           if (x.is_dirty === 1) {
@@ -635,17 +474,6 @@ class BrowserLocalDriver implements DBDriver {
   }
 }
 
-function isBuiltInSeedRow(table: string, row: any): boolean {
-  const id = String(row?.id ?? '');
-  if (table === 'categories') return /^c-\d+$/.test(id);
-  if (table === 'exercises') return id.startsWith('e-');
-  if (table === 'routines') return id === 'r-ppl-push';
-  if (table === 'routine_sections') return id === 'rs-push';
-  if (table === 'routine_section_exercises') return id.startsWith('rse-');
-  if (table === 'routine_section_exercise_sets') return id.startsWith('rses-');
-  return false;
-}
-
 // Tauri native sqlite driver implementation that makes IPC calls to Rust side
 class TauriNativeDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
@@ -663,125 +491,25 @@ class TauriNativeDriver implements DBDriver {
     });
   }
 
-  private parseSettingsValue(value: unknown): unknown {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    if (typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
-      return Number(value);
-    }
-    return value;
-  }
-
   async query<T>(sql: string, params: any[] = []): Promise<T[]> {
     const normalized = sql.toLowerCase().trim();
     if (normalized === 'select * from settings') {
       const rows = await (invoke as any)('tauri_query', { sql, params }) as Array<{ key: string; value: unknown }>;
-      const settings = { ...DEFAULT_SETTINGS, is_dirty: 0 } as Record<string, unknown>;
-
-      rows.forEach(row => {
-        if (row.key === 'settings_is_dirty') {
-          settings.is_dirty = Number(row.value) || 0;
-        } else if (row.key === 'settings_last_modified') {
-          settings.last_modified = row.value;
-        } else if (row.key !== 'last_sync_timestamp') {
-          settings[row.key] = this.parseSettingsValue(row.value);
-        }
-      });
-
-      return [settings] as T[];
+      return [settingsFromKeyValueRows(rows)] as T[];
     }
 
     return (invoke as any)('tauri_query', { sql, params }) as Promise<T[]>;
   }
 
   async execute(sql: string, params: any[] = []): Promise<void> {
-    let finalSql = sql;
-    let finalParams = params;
-
-    const normalized = sql.toLowerCase().trim();
-    const isShorthand = (
-      params.length === 1 && 
-      typeof params[0] === 'object' && 
-      params[0] !== null && 
-      !Array.isArray(params[0]) &&
-      !normalized.includes('values') &&
-      !normalized.includes('set') &&
-      !normalized.includes('(')
-    );
-
-    if (isShorthand) {
-      const item = params[0];
-      const parts = normalized.split(/\s+/);
-      const table = parts[0] === 'update' ? parts[1] : parts[2]; // e.g. "exercises"
-      
-      if (table === 'settings') {
-        const enriched = params[0];
-        for (const [k, v] of Object.entries(enriched)) {
-          if (k === 'is_dirty' || k === 'last_modified') continue;
-          const valStr = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
-          await (invoke as any)('tauri_execute', {
-            sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
-            params: [k, valStr]
-          });
-        }
-        await (invoke as any)('tauri_execute', {
-          sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
-          params: ['settings_is_dirty', '1']
-        });
-        await (invoke as any)('tauri_execute', {
-          sql: `INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`,
-          params: ['settings_last_modified', new Date().toISOString()]
-        });
-        this.notifyListeners();
-        return;
+    const statements = buildShorthandStatements(sql, params);
+    if (statements) {
+      for (const stmt of statements) {
+        await (invoke as any)('tauri_execute', { sql: stmt.sql, params: stmt.params });
       }
-
-      const tableColumns: Record<string, string[]> = {
-        categories: ["id", "name", "colour", "sort_order", "last_modified", "is_deleted", "is_dirty"],
-        exercises: ["id", "name", "category_id", "exercise_type_id", "notes", "weight_increment", "default_rest_time", "weight_unit_id", "is_favourite", "aliases", "instructions", "video_url", "equipment", "primary_muscles", "regressions", "progressions", "substitutions", "last_modified", "is_deleted", "is_dirty"],
-        training_logs: ["id", "exercise_id", "date", "metric_weight", "reps", "unit", "routine_section_exercise_set_id", "is_personal_record", "is_complete", "distance", "duration_seconds", "comment", "rpe", "rir", "set_type", "last_modified", "is_deleted", "is_dirty"],
-        body_weights: ["id", "date", "measured_at", "body_weight_metric", "body_fat", "comments", "last_modified", "is_deleted", "is_dirty"],
-        plates: ["id", "weight", "unit", "count", "enabled", "colour", "width_ratio", "height_ratio", "last_modified", "is_deleted", "is_dirty"],
-        barbells: ["id", "weight", "unit", "exercise_id", "last_modified", "is_deleted", "is_dirty"],
-        workout_comments: ["id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],
-        routines: ["id", "name", "notes", "category", "version", "program_weeks", "current_week", "start_date", "is_archived", "last_modified", "is_deleted", "is_dirty"],
-        routine_sections: ["id", "routine_id", "name", "sort_order", "week_number", "day_of_week", "phase", "last_modified", "is_deleted", "is_dirty"],
-        routine_section_exercises: ["id", "routine_section_id", "exercise_id", "sort_order", "populate_sets_type", "progression_enabled", "progression_increment", "progression_reps_step", "last_modified", "is_deleted", "is_dirty"],
-        routine_section_exercise_sets: ["id", "routine_section_exercise_id", "metric_weight", "reps", "sort_order", "distance", "duration_seconds", "unit", "min_reps", "max_reps", "set_type", "target_rir", "tempo", "notes", "last_modified", "is_deleted", "is_dirty"],
-        workout_groups: ["id", "name", "date", "colour", "routine_section_id", "auto_jump_enabled", "rest_timer_auto_start_enabled", "last_modified", "is_deleted", "is_dirty"],
-        workout_group_exercises: ["id", "exercise_id", "date", "routine_section_id", "workout_group_id", "last_modified", "is_deleted", "is_dirty"],
-        workout_routines: ["id", "date", "routine_id", "routine_section_id", "last_modified", "is_deleted", "is_dirty"],
-        goals: ["id", "type_id", "exercise_id", "metric_weight", "reps", "unit", "title", "target_date", "sort_order", "distance", "duration_seconds", "start_date", "last_modified", "is_deleted", "is_dirty"],
-        measurements: ["id", "name", "unit_id", "goal_type", "goal_value", "custom", "enabled", "sort_order", "last_modified", "is_deleted", "is_dirty"],
-        measurement_records: ["id", "measurement_id", "date", "time", "value", "comment", "last_modified", "is_deleted", "is_dirty"],
-        exercise_comments: ["id", "exercise_id", "date", "comment", "last_modified", "is_deleted", "is_dirty"],
-        workout_times: ["id", "date", "start_time", "end_time", "duration_seconds", "last_modified", "is_deleted", "is_dirty"],
-        custom_units: ["id", "name", "abbreviation", "type", "conversion_to_base", "last_modified", "is_deleted", "is_dirty"],
-        graph_favourites: ["id", "exercise_id", "graph_type", "time_period", "rep_filter", "last_modified", "is_deleted", "is_dirty"]
-      };
-
-      const columns = tableColumns[table];
-      if (columns) {
-        const enriched = { 
-          ...item, 
-          is_dirty: 1, 
-          last_modified: new Date().toISOString() 
-        };
-
-        if (normalized.startsWith('insert into') || normalized.startsWith('replace into') || normalized.startsWith('insert or replace into')) {
-          const placeholders = columns.map(() => '?').join(', ');
-          finalSql = `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`;
-          finalParams = columns.map(col => enriched[col] !== undefined ? enriched[col] : null);
-        } else if (normalized.startsWith('update')) {
-          const setClause = columns.filter(col => col !== 'id').map(col => `${col} = ?`).join(', ');
-          finalSql = `UPDATE ${table} SET ${setClause} WHERE id = ?`;
-          finalParams = columns.filter(col => col !== 'id').map(col => enriched[col] !== undefined ? enriched[col] : null);
-          finalParams.push(enriched.id);
-        }
-      }
+    } else {
+      await (invoke as any)('tauri_execute', { sql, params });
     }
-
-    await (invoke as any)('tauri_execute', { sql: finalSql, params: finalParams });
     this.notifyListeners();
   }
 
@@ -804,6 +532,24 @@ class TauriNativeDriver implements DBDriver {
   }
 }
 
-// Export active driver singleton based on runtime platform
-export const db: DBDriver = isTauri() ? new TauriNativeDriver() : new BrowserLocalDriver();
+// Export active driver singleton based on runtime platform.
+// Browsers get real SQLite (WASM + OPFS) with the localStorage mock as a
+// runtime fallback for unsupported browsers / second tabs.
+const createDriver = (): DBDriver => {
+  if (isTauri()) return new TauriNativeDriver();
+  const opfsCapable = typeof Worker !== 'undefined'
+    && typeof navigator !== 'undefined'
+    && !!navigator.storage?.getDirectory
+    && typeof window !== 'undefined'
+    && window.isSecureContext;
+  if (opfsCapable) return new SqliteWasmDriver(new BrowserLocalDriver());
+  return new BrowserLocalDriver();
+};
+
+export const db: DBDriver = createDriver();
 export { isTauri };
+
+// Dev console access for debugging the active driver.
+if (import.meta.env.DEV && typeof window !== 'undefined') {
+  (window as any).__fitnotesDb = db;
+}

@@ -7,6 +7,8 @@ import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { getLocalDateString } from '../lib/date';
 import { FilterCombobox } from '../components/FilterCombobox';
+import { aggregateMuscleTargets } from '../lib/muscles';
+import { MuscleDiagramDetails } from '../components/MuscleDiagram';
 import type { RoutineSection } from '../types';
 
 export function CalendarView() {
@@ -480,6 +482,19 @@ export function CalendarView() {
               );
             })
           )}
+
+          {logsForSelectedDate.length > 0 && (() => {
+            const dayExerciseIds = new Set(logsForSelectedDate.map(l => l.exercise_id));
+            const targets = aggregateMuscleTargets(exercises.filter(e => dayExerciseIds.has(e.id)));
+            return (
+              <MuscleDiagramDetails
+                primary={targets.primary}
+                secondary={targets.secondary}
+                height={180}
+                showLegend
+              />
+            );
+          })()}
         </div>
 
         {workoutComment && (

@@ -102,6 +102,10 @@ func runMigrations(pool *pgxpool.Pool) error {
 		return fmt.Errorf("failed to apply programming migration: %w", err)
 	}
 	log.Println("Programming migration applied.")
+	if err := applyMigration(ctx, pool, "000004_muscles.up.sql"); err != nil {
+		return fmt.Errorf("failed to apply muscles migration: %w", err)
+	}
+	log.Println("Muscles migration applied.")
 	return nil
 }
 

@@ -44,8 +44,9 @@ type Exercise struct {
 	Instructions    *string    `json:"instructions"`
 	VideoURL        *string    `json:"video_url"`
 	Equipment       *string    `json:"equipment"`
-	PrimaryMuscles  *string    `json:"primary_muscles"`
-	Regressions     *string    `json:"regressions"`
+	PrimaryMuscles   *string   `json:"primary_muscles"`
+	SecondaryMuscles *string   `json:"secondary_muscles"`
+	Regressions      *string   `json:"regressions"`
 	Progressions    *string    `json:"progressions"`
 	Substitutions   *string    `json:"substitutions"`
 	LastModified    time.Time  `json:"last_modified"`

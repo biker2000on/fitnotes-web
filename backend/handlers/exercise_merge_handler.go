@@ -70,6 +70,7 @@ func MergeExercisesHandler(w http.ResponseWriter, r *http.Request) {
 			video_url = COALESCE(NULLIF(target.video_url, ''), source.video_url),
 			equipment = COALESCE(NULLIF(target.equipment, ''), source.equipment),
 			primary_muscles = COALESCE(NULLIF(target.primary_muscles, ''), source.primary_muscles),
+			secondary_muscles = COALESCE(NULLIF(target.secondary_muscles, ''), source.secondary_muscles),
 			regressions = COALESCE(NULLIF(target.regressions, ''), source.regressions),
 			progressions = COALESCE(NULLIF(target.progressions, ''), source.progressions),
 			substitutions = COALESCE(NULLIF(target.substitutions, ''), source.substitutions),

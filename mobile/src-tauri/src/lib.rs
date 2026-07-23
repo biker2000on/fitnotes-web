@@ -792,6 +792,7 @@ async fn tauri_sync(
                     "video_url",
                     "equipment",
                     "primary_muscles",
+                    "secondary_muscles",
                     "regressions",
                     "progressions",
                     "substitutions",
@@ -1306,7 +1307,8 @@ fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
     for (column, definition) in [
         ("aliases", "aliases TEXT"), ("instructions", "instructions TEXT"),
         ("video_url", "video_url TEXT"), ("equipment", "equipment TEXT"),
-        ("primary_muscles", "primary_muscles TEXT"), ("regressions", "regressions TEXT"),
+        ("primary_muscles", "primary_muscles TEXT"), ("secondary_muscles", "secondary_muscles TEXT"),
+        ("regressions", "regressions TEXT"),
         ("progressions", "progressions TEXT"), ("substitutions", "substitutions TEXT"),
     ] {
         add_column_if_missing(conn, "exercises", column, definition)?;

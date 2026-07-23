@@ -346,8 +346,8 @@ func pullCategories(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time
 
 func pushExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.Exercise) error {
 	query := `
-		INSERT INTO exercises (id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, aliases, instructions, video_url, equipment, primary_muscles, regressions, progressions, substitutions, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		INSERT INTO exercises (id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, aliases, instructions, video_url, equipment, primary_muscles, secondary_muscles, regressions, progressions, substitutions, last_modified, is_deleted)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET
 			name = EXCLUDED.name,
 			category_id = EXCLUDED.category_id,
@@ -362,6 +362,7 @@ func pushExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []mod
 			video_url = EXCLUDED.video_url,
 			equipment = EXCLUDED.equipment,
 			primary_muscles = EXCLUDED.primary_muscles,
+			secondary_muscles = EXCLUDED.secondary_muscles,
 			regressions = EXCLUDED.regressions,
 			progressions = EXCLUDED.progressions,
 			substitutions = EXCLUDED.substitutions,
@@ -371,7 +372,7 @@ func pushExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []mod
 		  AND exercises.last_modified < EXCLUDED.last_modified
 	`
 	for _, item := range items {
-		_, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.CategoryID, item.ExerciseTypeID, item.Notes, item.WeightIncrement, item.DefaultRestTime, item.WeightUnitID, item.IsFavourite, item.Aliases, item.Instructions, item.VideoURL, item.Equipment, item.PrimaryMuscles, item.Regressions, item.Progressions, item.Substitutions, item.LastModified, item.IsDeleted)
+		_, err := tx.Exec(ctx, query, item.ID, userID, item.Name, item.CategoryID, item.ExerciseTypeID, item.Notes, item.WeightIncrement, item.DefaultRestTime, item.WeightUnitID, item.IsFavourite, item.Aliases, item.Instructions, item.VideoURL, item.Equipment, item.PrimaryMuscles, item.SecondaryMuscles, item.Regressions, item.Progressions, item.Substitutions, item.LastModified, item.IsDeleted)
 		if err != nil {
 			return err
 		}
@@ -381,7 +382,7 @@ func pushExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []mod
 
 func pullExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.Exercise, error) {
 	rows, err := tx.Query(ctx,
-		"SELECT id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, aliases, instructions, video_url, equipment, primary_muscles, regressions, progressions, substitutions, last_modified, is_deleted FROM exercises WHERE user_id = $1 AND last_modified > $2",
+		"SELECT id, user_id, name, category_id, exercise_type_id, notes, weight_increment, default_rest_time, weight_unit_id, is_favourite, aliases, instructions, video_url, equipment, primary_muscles, secondary_muscles, regressions, progressions, substitutions, last_modified, is_deleted FROM exercises WHERE user_id = $1 AND last_modified > $2",
 		userID, since,
 	)
 	if err != nil {
@@ -392,7 +393,7 @@ func pullExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.
 	var list []models.Exercise
 	for rows.Next() {
 		var item models.Exercise
-		err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.CategoryID, &item.ExerciseTypeID, &item.Notes, &item.WeightIncrement, &item.DefaultRestTime, &item.WeightUnitID, &item.IsFavourite, &item.Aliases, &item.Instructions, &item.VideoURL, &item.Equipment, &item.PrimaryMuscles, &item.Regressions, &item.Progressions, &item.Substitutions, &item.LastModified, &item.IsDeleted)
+		err := rows.Scan(&item.ID, &item.UserID, &item.Name, &item.CategoryID, &item.ExerciseTypeID, &item.Notes, &item.WeightIncrement, &item.DefaultRestTime, &item.WeightUnitID, &item.IsFavourite, &item.Aliases, &item.Instructions, &item.VideoURL, &item.Equipment, &item.PrimaryMuscles, &item.SecondaryMuscles, &item.Regressions, &item.Progressions, &item.Substitutions, &item.LastModified, &item.IsDeleted)
 		if err != nil {
 			return nil, err
 		}

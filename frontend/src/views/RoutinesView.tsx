@@ -5,6 +5,8 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { aggregateMuscleTargets } from '../lib/muscles';
+import { MuscleDiagramDetails } from '../components/MuscleDiagram';
 import type { RoutineSection, RoutineSectionExercise, RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise } from '../types';
 import { POPULATE_SETS_TYPE } from '../types';
 
@@ -17,8 +19,14 @@ export function RoutinesView() {
     routines, setShowCreateRoutineModal, setEditingRoutine, setActiveTab,
     setActiveRoutineForPopulate, setActiveSectionForPopulate, exercises, handleDeleteRoutine,
     handleCopyRoutine,
-    workoutRoutines, displayWeight, settings,
+    workoutRoutines, displayWeight, settings, setHistoryExerciseId,
   } = useFitNotesStore();
+
+  // Resolve routine-template exercise links to catalog exercises for muscle aggregation.
+  const catalogExercisesFor = (links: RoutineSectionExercise[]) => {
+    const ids = new Set(links.map(l => l.exercise_id));
+    return exercises.filter(e => ids.has(e.id));
+  };
 
   const [expandedRoutineId, setExpandedRoutineId] = useState<string | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
@@ -365,6 +373,19 @@ export function RoutinesView() {
                         <div style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', padding: '12px 0' }}>No workout days added to this routine yet. Edit the template to add days.</div>
                       ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {(() => {
+                            const targets = aggregateMuscleTargets(catalogExercisesFor(routineDetails.exercises));
+                            return (
+                              <MuscleDiagramDetails
+                                primary={targets.primary}
+                                secondary={targets.secondary}
+                                label="Muscles (whole routine)"
+                                defaultOpen={false}
+                                height={170}
+                                showLegend
+                              />
+                            );
+                          })()}
                           <h4 style={{ fontSize: '11px', fontWeight: 800, textTransform: 'uppercase', color: 'var(--primary)', letterSpacing: '0.5px', margin: 0 }}>Workout Day Splits (Select to Start)</h4>
                           
                           <div className="routine-splits-grid">
@@ -450,7 +471,15 @@ export function RoutinesView() {
                                             <div key={se.id} style={{ borderLeft: groupColor ? `3px solid ${groupColor}` : '3px solid transparent', paddingLeft: groupColor ? '6px' : 0 }}>
                                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary-dark)' }}>
                                                 <Dumbbell size={12} style={{ flexShrink: 0, opacity: 0.5 }} />
-                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: 'var(--text-primary-dark)' }}>{exName}</span>
+                                                <span
+                                                  style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, color: 'var(--text-primary-dark)', cursor: ex ? 'pointer' : 'default' }}
+                                                  title={ex ? 'History, records & muscles' : undefined}
+                                                  onClick={(e) => {
+                                                    if (!ex) return;
+                                                    e.stopPropagation();
+                                                    setHistoryExerciseId(ex.id);
+                                                  }}
+                                                >{exName}</span>
                                                 {group && (
                                                   <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: groupColor || 'var(--primary)', backgroundColor: groupColor ? `${groupColor}20` : 'rgba(99, 102, 241, 0.12)', borderRadius: '4px', padding: '2px 5px' }}>
                                                     {groupLabel}
@@ -473,6 +502,21 @@ export function RoutinesView() {
                                         })
                                       )}
                                     </div>
+
+                                    {secExs.length > 0 && (() => {
+                                      const targets = aggregateMuscleTargets(catalogExercisesFor(secExs));
+                                      return (
+                                        <div style={{ marginTop: '8px' }}>
+                                          <MuscleDiagramDetails
+                                            primary={targets.primary}
+                                            secondary={targets.secondary}
+                                            label="Muscles (this day)"
+                                            defaultOpen={false}
+                                            height={130}
+                                          />
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   <button

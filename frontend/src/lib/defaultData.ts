@@ -61,7 +61,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-seated-dumbbell-press",
@@ -72,7 +74,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-lateral-dumbbell-raise",
@@ -83,7 +87,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Side Delts",
+    "secondary_muscles": "Traps"
   },
   {
     "id": "e-front-dumbbell-raise",
@@ -94,7 +100,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts",
+    "secondary_muscles": "Side Delts, Chest"
   },
   {
     "id": "e-push-press",
@@ -105,7 +113,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps, Quads, Glutes"
   },
   {
     "id": "e-behind-the-neck-barbell-press",
@@ -116,7 +126,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-hammer-strength-shoulder-press",
@@ -127,7 +139,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-seated-dumbbell-lateral-raise",
@@ -138,7 +152,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Side Delts",
+    "secondary_muscles": "Traps"
   },
   {
     "id": "e-lateral-machine-raise",
@@ -149,7 +165,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Side Delts",
+    "secondary_muscles": "Traps"
   },
   {
     "id": "e-rear-delt-dumbbell-raise",
@@ -160,7 +178,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Rear Delts",
+    "secondary_muscles": "Upper Back, Traps"
   },
   {
     "id": "e-rear-delt-machine-fly",
@@ -171,7 +191,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Rear Delts",
+    "secondary_muscles": "Upper Back, Traps"
   },
   {
     "id": "e-arnold-dumbbell-press",
@@ -182,7 +204,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-one-arm-standing-dumbbell-press",
@@ -193,7 +217,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps, Obliques"
   },
   {
     "id": "e-cable-face-pull",
@@ -204,7 +230,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Rear Delts, Upper Back",
+    "secondary_muscles": "Traps, Biceps"
   },
   {
     "id": "e-log-press",
@@ -215,7 +243,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps, Upper Back"
   },
   {
     "id": "e-smith-machine-overhead-press",
@@ -226,7 +256,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Front Delts, Side Delts",
+    "secondary_muscles": "Triceps, Traps"
   },
   {
     "id": "e-close-grip-barbell-bench-press",
@@ -237,7 +269,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps, Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-v-bar-push-down",
@@ -248,7 +282,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-parallel-bar-triceps-dip",
@@ -259,7 +295,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps, Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-lying-triceps-extension",
@@ -270,7 +308,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-rope-push-down",
@@ -281,7 +321,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-cable-overhead-triceps-extension",
@@ -292,7 +334,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-ez-bar-skullcrusher",
@@ -303,7 +347,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-dumbbell-overhead-triceps-extension",
@@ -314,7 +360,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-ring-dip",
@@ -325,7 +373,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps, Chest",
+    "secondary_muscles": "Front Delts, Abs"
   },
   {
     "id": "e-smith-machine-close-grip-bench-press",
@@ -336,7 +386,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Triceps, Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-barbell-curl",
@@ -347,7 +399,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-ez-bar-curl",
@@ -358,7 +412,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-dumbbell-curl",
@@ -369,7 +425,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-seated-incline-dumbbell-curl",
@@ -380,7 +438,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-seated-machine-curl",
@@ -391,7 +451,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-dumbbell-hammer-curl",
@@ -402,7 +464,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps, Forearms",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-cable-curl",
@@ -413,7 +477,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-ez-bar-preacher-curl",
@@ -424,7 +490,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-dumbbell-concentration-curl",
@@ -435,7 +503,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-dumbbell-preacher-curl",
@@ -446,7 +516,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Biceps",
+    "secondary_muscles": "Forearms"
   },
   {
     "id": "e-flat-barbell-bench-press",
@@ -457,7 +529,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts, Triceps"
   },
   {
     "id": "e-flat-dumbbell-bench-press",
@@ -468,7 +542,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts, Triceps"
   },
   {
     "id": "e-incline-barbell-bench-press",
@@ -479,7 +555,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest, Front Delts",
+    "secondary_muscles": "Triceps"
   },
   {
     "id": "e-decline-barbell-bench-press",
@@ -490,7 +568,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Triceps, Front Delts"
   },
   {
     "id": "e-incline-dumbbell-bench-press",
@@ -501,7 +581,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest, Front Delts",
+    "secondary_muscles": "Triceps"
   },
   {
     "id": "e-flat-dumbbell-fly",
@@ -512,7 +594,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-incline-dumbbell-fly",
@@ -523,7 +607,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-cable-crossover",
@@ -534,7 +620,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-incline-hammer-strength-chest-press",
@@ -545,7 +633,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest, Front Delts",
+    "secondary_muscles": "Triceps"
   },
   {
     "id": "e-decline-hammer-strength-chest-press",
@@ -556,7 +646,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Triceps, Front Delts"
   },
   {
     "id": "e-seated-machine-fly",
@@ -567,7 +659,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Chest",
+    "secondary_muscles": "Front Delts"
   },
   {
     "id": "e-deadlift",
@@ -578,7 +672,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Glutes, Hamstrings, Lower Back",
+    "secondary_muscles": "Quads, Traps, Forearms, Lats"
   },
   {
     "id": "e-pull-up",
@@ -589,7 +685,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats",
+    "secondary_muscles": "Biceps, Upper Back, Forearms"
   },
   {
     "id": "e-chin-up",
@@ -600,7 +698,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Biceps",
+    "secondary_muscles": "Upper Back, Forearms"
   },
   {
     "id": "e-neutral-chin-up",
@@ -611,7 +711,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Biceps",
+    "secondary_muscles": "Upper Back, Forearms"
   },
   {
     "id": "e-dumbbell-row",
@@ -622,7 +724,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts, Forearms"
   },
   {
     "id": "e-barbell-row",
@@ -633,7 +737,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts, Lower Back, Forearms"
   },
   {
     "id": "e-pendlay-row",
@@ -644,7 +750,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts, Lower Back"
   },
   {
     "id": "e-lat-pulldown",
@@ -655,7 +763,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats",
+    "secondary_muscles": "Biceps, Upper Back, Forearms"
   },
   {
     "id": "e-hammer-strength-row",
@@ -666,7 +776,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts"
   },
   {
     "id": "e-seated-cable-row",
@@ -677,7 +789,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts, Forearms"
   },
   {
     "id": "e-t-bar-row",
@@ -688,7 +802,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Upper Back",
+    "secondary_muscles": "Biceps, Rear Delts, Lower Back"
   },
   {
     "id": "e-barbell-shrug",
@@ -699,7 +815,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Traps",
+    "secondary_muscles": "Forearms, Neck"
   },
   {
     "id": "e-machine-shrug",
@@ -710,7 +828,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Traps",
+    "secondary_muscles": "Forearms, Neck"
   },
   {
     "id": "e-straight-arm-cable-pushdown",
@@ -721,7 +841,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats",
+    "secondary_muscles": "Triceps, Abs"
   },
   {
     "id": "e-rack-pull",
@@ -732,7 +854,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Glutes, Lower Back",
+    "secondary_muscles": "Hamstrings, Traps, Forearms, Lats"
   },
   {
     "id": "e-good-morning",
@@ -743,7 +867,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings, Glutes, Lower Back",
+    "secondary_muscles": "Abs"
   },
   {
     "id": "e-barbell-squat",
@@ -754,7 +880,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Glutes",
+    "secondary_muscles": "Hamstrings, Adductors, Lower Back, Abs"
   },
   {
     "id": "e-barbell-front-squat",
@@ -765,7 +893,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads",
+    "secondary_muscles": "Glutes, Adductors, Abs, Upper Back"
   },
   {
     "id": "e-leg-press",
@@ -776,7 +906,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Glutes",
+    "secondary_muscles": "Hamstrings, Adductors"
   },
   {
     "id": "e-leg-extension-machine",
@@ -787,7 +919,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads",
+    "secondary_muscles": "Hip Flexors"
   },
   {
     "id": "e-seated-leg-curl-machine",
@@ -798,7 +932,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings",
+    "secondary_muscles": "Calves"
   },
   {
     "id": "e-standing-calf-raise-machine",
@@ -809,7 +945,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Calves",
+    "secondary_muscles": ""
   },
   {
     "id": "e-donkey-calf-raise",
@@ -820,7 +958,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Calves",
+    "secondary_muscles": ""
   },
   {
     "id": "e-barbell-calf-raise",
@@ -831,7 +971,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Calves",
+    "secondary_muscles": ""
   },
   {
     "id": "e-barbell-glute-bridge",
@@ -842,7 +984,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Glutes",
+    "secondary_muscles": "Hamstrings, Quads"
   },
   {
     "id": "e-glute-ham-raise",
@@ -853,7 +997,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings, Glutes",
+    "secondary_muscles": "Lower Back, Calves"
   },
   {
     "id": "e-lying-leg-curl-machine",
@@ -864,7 +1010,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings",
+    "secondary_muscles": "Calves"
   },
   {
     "id": "e-romanian-deadlift",
@@ -875,7 +1023,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings, Glutes",
+    "secondary_muscles": "Lower Back, Forearms, Traps"
   },
   {
     "id": "e-stiff-legged-deadlift",
@@ -886,7 +1036,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Hamstrings, Glutes, Lower Back",
+    "secondary_muscles": "Forearms, Traps"
   },
   {
     "id": "e-sumo-deadlift",
@@ -897,7 +1049,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Glutes, Quads, Adductors",
+    "secondary_muscles": "Hamstrings, Lower Back, Traps, Forearms"
   },
   {
     "id": "e-seated-calf-raise",
@@ -908,7 +1062,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Calves",
+    "secondary_muscles": ""
   },
   {
     "id": "e-ab-wheel-rollout",
@@ -919,7 +1075,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques, Lats, Hip Flexors"
   },
   {
     "id": "e-cable-crunch",
@@ -930,7 +1088,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques"
   },
   {
     "id": "e-crunch",
@@ -941,7 +1101,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques"
   },
   {
     "id": "e-crunch-machine",
@@ -952,7 +1114,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques"
   },
   {
     "id": "e-decline-crunch",
@@ -963,7 +1127,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques, Hip Flexors"
   },
   {
     "id": "e-dragon-flag",
@@ -974,7 +1140,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques, Hip Flexors, Lats"
   },
   {
     "id": "e-garhammer",
@@ -985,7 +1153,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Hip Flexors, Obliques"
   },
   {
     "id": "e-hanging-leg-raise",
@@ -996,7 +1166,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs, Hip Flexors",
+    "secondary_muscles": "Obliques, Forearms"
   },
   {
     "id": "e-plank",
@@ -1007,7 +1179,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Abs",
+    "secondary_muscles": "Obliques, Lower Back"
   },
   {
     "id": "e-side-plank",
@@ -1018,7 +1192,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Obliques",
+    "secondary_muscles": "Abs, Abductors"
   },
   {
     "id": "e-cycling",
@@ -1029,7 +1205,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Glutes",
+    "secondary_muscles": "Hamstrings, Calves"
   },
   {
     "id": "e-walking",
@@ -1040,7 +1218,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Hamstrings, Calves",
+    "secondary_muscles": "Glutes, Hip Flexors"
   },
   {
     "id": "e-rowing-machine",
@@ -1051,7 +1231,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Quads",
+    "secondary_muscles": "Upper Back, Biceps, Hamstrings, Glutes"
   },
   {
     "id": "e-stationary-bike",
@@ -1062,7 +1244,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Glutes",
+    "secondary_muscles": "Hamstrings, Calves"
   },
   {
     "id": "e-swimming",
@@ -1073,7 +1257,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Lats, Chest",
+    "secondary_muscles": "Triceps, Front Delts, Upper Back"
   },
   {
     "id": "e-running-treadmill",
@@ -1084,7 +1270,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Hamstrings, Calves",
+    "secondary_muscles": "Glutes, Hip Flexors"
   },
   {
     "id": "e-running-outdoor",
@@ -1095,7 +1283,9 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Hamstrings, Calves",
+    "secondary_muscles": "Glutes, Hip Flexors"
   },
   {
     "id": "e-elliptical-trainer",
@@ -1106,6 +1296,8 @@ export const DEFAULT_EXERCISES: Exercise[] = [
     "weight_increment": 2.5,
     "default_rest_time": 90,
     "weight_unit_id": 0,
-    "is_favourite": false
+    "is_favourite": false,
+    "primary_muscles": "Quads, Glutes",
+    "secondary_muscles": "Hamstrings, Calves"
   }
 ];

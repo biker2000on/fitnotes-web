@@ -8,6 +8,8 @@ import { X, Trophy, History as HistoryIcon, LineChart, ZoomOut } from 'lucide-re
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { personalRecords, sessionSummaries, exerciseGraphSeries } from '../lib/stats';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { exerciseMuscleTargets } from '../lib/muscles';
+import { MuscleDiagramDetails } from './MuscleDiagram';
 import type { TrainingLog } from '../types';
 
 type Tab = 'history' | 'records' | 'graph';
@@ -200,6 +202,17 @@ export function ExerciseHistoryDrawer() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {(() => {
+            const targets = exerciseMuscleTargets(exercise);
+            return (
+              <MuscleDiagramDetails
+                primary={targets.primary}
+                secondary={targets.secondary}
+                label="Muscles Targeted"
+                height={150}
+              />
+            );
+          })()}
           {tab === 'history' && (
             summaries.length === 0 ? (
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>No history yet.</p>

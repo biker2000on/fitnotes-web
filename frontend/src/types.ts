@@ -24,6 +24,7 @@ export interface Exercise {
   video_url?: string | null;
   equipment?: string | null;
   primary_muscles?: string | null;
+  secondary_muscles?: string | null;
   regressions?: string | null;
   progressions?: string | null;
   substitutions?: string | null;

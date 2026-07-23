@@ -6,12 +6,15 @@ import {
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
   RefreshCw, WifiOff, ArrowLeftRight, Square, Play,
 } from 'lucide-react';
-import { useEffect, useState, useRef, type FocusEvent } from 'react';
+import { useEffect, useMemo, useState, useRef, type FocusEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { aggregateMuscleTargets } from '../lib/muscles';
+import { formatSessionSets, getProgressionSuggestion } from '../lib/progression';
+import { MuscleDiagramDetails } from '../components/MuscleDiagram';
 import type { RoutineSection } from '../types';
 import { addDays } from '../lib/date';
 
@@ -143,7 +146,7 @@ export function WorkoutLogView() {
     handleMarkAllComplete, handleMarkExerciseComplete,
     setShowPlateCalc, setShowCommandPalette, setShowRoutineImportModal, setShowCopyWorkoutDrawer,
     setSelectedExIdsForSuperset, setShowSupersetManagerModal,
-    workoutGroups, groupExercises, exercises, categories, selectedDate, setSelectedDate, handleClearGroup,
+    workoutGroups, groupExercises, exercises, categories, selectedDate, setSelectedDate, handleClearGroup, allLogs,
     workoutComment, setWorkoutComment, handleSaveComment,
     settings, logComment, setLogComment, logRpe, setLogRpe, logRir, setLogRir, logSetType, setLogSetType, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout, triggerToast,
@@ -307,6 +310,19 @@ export function WorkoutLogView() {
   }, [workoutRoutines]);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const selectedExerciseLogs = selectedExercise ? currentLogs.filter(x => x.exercise_id === selectedExercise.id) : [];
+
+  // Progressive-overload hint for the selected exercise (ghost values from the
+  // last session + a next-load recommendation).
+  const progression = useMemo(() => {
+    if (!selectedExercise) return null;
+    return getProgressionSuggestion(allLogs, selectedExercise, userUnit, selectedDate);
+  }, [allLogs, selectedExercise, userUnit, selectedDate]);
+
+  const applyProgressionSuggestion = () => {
+    if (!progression) return;
+    if (progression.suggestedWeight != null) setLogWeight(String(progression.suggestedWeight));
+    if (progression.suggestedReps != null) setLogReps(String(progression.suggestedReps));
+  };
   const selectInputContents = (event: FocusEvent<HTMLInputElement>) => {
     event.currentTarget.select();
   };
@@ -398,6 +414,11 @@ export function WorkoutLogView() {
                 <div style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', marginTop: '6px' }}>
                   {selectedExerciseLogs.length} set{selectedExerciseLogs.length === 1 ? '' : 's'} logged today
                 </div>
+                {progression && (
+                  <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>
+                    Last ({progression.lastSessionDate}): {formatSessionSets(progression.lastSessionSets)} {userUnit}
+                  </div>
+                )}
               </div>
               <div className="selected-exercise-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 <button className="btn btn-primary" onClick={() => setShowEntryModal(true)}>
@@ -449,6 +470,32 @@ export function WorkoutLogView() {
               </div>
 
               <div className="mobile-modal-scroll">
+            {progression && !editingLog && (
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px',
+                border: '1px solid var(--border-dark)', borderLeft: '3px solid var(--primary)',
+                borderRadius: '10px', padding: '10px 12px', fontSize: '12px',
+              }}>
+                <div style={{ color: 'var(--text-secondary-dark)' }}>
+                  Last session ({progression.lastSessionDate}): {formatSessionSets(progression.lastSessionSets)} {userUnit}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600 }}>
+                    <TrendingUp size={13} style={{ verticalAlign: '-2px', marginRight: '4px' }} />
+                    {progression.message}
+                  </span>
+                  {progression.suggestedWeight != null && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '4px 10px', fontSize: '12px' }}
+                      onClick={applyProgressionSuggestion}
+                    >
+                      Use {progression.suggestedWeight} {userUnit}{progression.suggestedReps != null ? ` × ${progression.suggestedReps}` : ''}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {(selectedExercise.instructions || selectedExercise.video_url || selectedExercise.regressions || selectedExercise.progressions || selectedExercise.substitutions) && (
               <details style={{ marginBottom: '12px', border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '9px 11px', fontSize: '12px' }}>
                 <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Exercise guidance</summary>
@@ -1134,6 +1181,20 @@ export function WorkoutLogView() {
             })()}
           </div>
         )}
+
+        {/* Per-day muscles worked, aggregated from every exercise logged today */}
+        {currentLogs.length > 0 && (() => {
+          const todayExerciseIds = new Set(currentLogs.filter(l => !l.is_deleted).map(l => l.exercise_id));
+          const targets = aggregateMuscleTargets(exercises.filter(ex => todayExerciseIds.has(ex.id)));
+          return (
+            <MuscleDiagramDetails
+              primary={targets.primary}
+              secondary={targets.secondary}
+              height={195}
+              showLegend
+            />
+          );
+        })()}
       </div>
     </div>
   );

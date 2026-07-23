@@ -6,6 +6,8 @@ import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
 import { getExerciseTypeLabel } from '../lib/units';
+import { exerciseMuscleTargets } from '../lib/muscles';
+import MuscleDiagram from '../components/MuscleDiagram';
 import type { Exercise } from '../types';
 
 type ExerciseSortMode = 'name' | 'lastUsed' | 'workouts';
@@ -379,11 +381,21 @@ export function ExercisesView() {
             </button>
           </div>
         </div>
-        {(ex.instructions || ex.video_url || ex.regressions || ex.progressions || ex.substitutions) && (
+        {(ex.instructions || ex.video_url || ex.regressions || ex.progressions || ex.substitutions || ex.primary_muscles || ex.secondary_muscles) && (
           <details style={{ marginTop: '6px', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
             <summary style={{ cursor: 'pointer' }}>Guidance</summary>
+            {(() => {
+              const targets = exerciseMuscleTargets(ex);
+              if (targets.primary.size === 0 && targets.secondary.size === 0) return null;
+              return (
+                <div style={{ margin: '10px 0' }}>
+                  <MuscleDiagram primary={targets.primary} secondary={targets.secondary} height={170} />
+                </div>
+              );
+            })()}
             {ex.instructions && <p style={{ whiteSpace: 'pre-wrap' }}>{ex.instructions}</p>}
-            {ex.primary_muscles && <p><strong>Muscles:</strong> {ex.primary_muscles}</p>}
+            {ex.primary_muscles && <p><strong>Primary muscles:</strong> {ex.primary_muscles}</p>}
+            {ex.secondary_muscles && <p><strong>Secondary muscles:</strong> {ex.secondary_muscles}</p>}
             {ex.regressions && <p><strong>Regressions:</strong> {ex.regressions}</p>}
             {ex.progressions && <p><strong>Progressions:</strong> {ex.progressions}</p>}
             {ex.substitutions && <p><strong>Substitutions:</strong> {ex.substitutions}</p>}
