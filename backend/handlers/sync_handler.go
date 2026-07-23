@@ -82,7 +82,11 @@ func SyncHandler(w http.ResponseWriter, r *http.Request) {
 
 	var req SyncRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error":"invalid sync payload"}`, http.StatusBadRequest)
+		// A type mismatch names the exact struct field (e.g. "cannot unmarshal
+		// number into ... field TrainingLog.set_type of type string") - log it
+		// so client payload bugs are diagnosable from the server side.
+		log.Printf("sync: payload decode failed for user %s: %v", userID, err)
+		http.Error(w, `{"error":"invalid sync payload: `+err.Error()+`"}`, http.StatusBadRequest)
 		return
 	}
 
