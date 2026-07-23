@@ -2,19 +2,25 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"backend/db"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type contextKey string
 
 const UserIDKey contextKey = "user_id"
+const AuthTypeKey contextKey = "auth_type"
 
 var jwtSecret = []byte(getJWTSecret())
 
@@ -116,6 +122,85 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		ctx = context.WithValue(ctx, AuthTypeKey, "session")
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// HashAPIKey returns the digest persisted for an API key. Keeping this helper
+// public makes it possible for creation and authentication to share exactly
+// the same representation without ever storing the plaintext credential.
+func HashAPIKey(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+func apiKeyFromRequest(r *http.Request) string {
+	if key := strings.TrimSpace(r.Header.Get("X-API-Key")); key != "" {
+		return key
+	}
+	parts := strings.Fields(r.Header.Get("Authorization"))
+	if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+		return parts[1]
+	}
+	return ""
+}
+
+// APIKeyAuthMiddleware authenticates integration requests and enforces the
+// current read-only contract at the HTTP method boundary.
+func APIKeyAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			http.Error(w, `{"error":"this API key is read-only"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		raw := apiKeyFromRequest(r)
+		if !strings.HasPrefix(raw, "fn_ro_") || len(raw) < 32 {
+			http.Error(w, `{"error":"valid read-only API key required"}`, http.StatusUnauthorized)
+			return
+		}
+
+		pool := db.GetDB()
+		if pool == nil {
+			http.Error(w, `{"error":"database unavailable"}`, http.StatusServiceUnavailable)
+			return
+		}
+
+		var userID uuid.UUID
+		err := pool.QueryRow(r.Context(), `
+			SELECT user_id
+			FROM api_keys
+			WHERE key_hash = $1
+			  AND access_mode = 'read_only'
+			  AND revoked_at IS NULL
+			  AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`,
+			HashAPIKey(raw),
+		).Scan(&userID)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				http.Error(w, `{"error":"invalid or revoked API key"}`, http.StatusUnauthorized)
+				return
+			}
+			http.Error(w, `{"error":"failed to validate API key"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Avoid a WAL write for every polling request. The short independent
+		// timeout keeps usage metadata from consuming the request's full budget.
+		usageCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+		_, _ = pool.Exec(usageCtx, `
+			UPDATE api_keys
+			SET last_used_at = CURRENT_TIMESTAMP
+			WHERE key_hash = $1
+			  AND (last_used_at IS NULL OR last_used_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes')`,
+			HashAPIKey(raw),
+		)
+		cancel()
+
+		ctx := context.WithValue(r.Context(), UserIDKey, userID)
+		ctx = context.WithValue(ctx, AuthTypeKey, "api_key_read_only")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

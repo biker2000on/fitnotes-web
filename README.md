@@ -37,6 +37,12 @@ Use a debug build for direct device installs. The release APK produced by
 `cargo tauri android build` is unsigned unless Android signing is configured,
 and Android will reject an unsigned release APK.
 
+## Integration API
+
+Signed-in users can create revocable read-only API keys under **Settings >
+Integrations**. See `docs/read-only-api.md` for authentication, endpoints, and
+examples.
+
 ## Notes for future agents
 
 - `adb` may not be on `PATH`; use `$env:ANDROID_HOME\platform-tools\adb.exe`.

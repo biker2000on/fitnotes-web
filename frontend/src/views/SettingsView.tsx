@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Settings as SettingsIcon } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import type { Settings } from '../types';
+import { ApiKeysPanel } from '../components/ApiKeysPanel';
 
 export function SettingsView() {
   const {
@@ -141,6 +142,7 @@ export function SettingsView() {
             </button>
           )}
         </Row>
+        <ApiKeysPanel />
       </Section>
 
       <Section title="Keyboard Shortcuts">

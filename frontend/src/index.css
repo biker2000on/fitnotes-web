@@ -1953,3 +1953,29 @@ body.light-theme .filter-combobox-clear:hover {
     width: 100%;
   }
 }
+
+.muscle-volume-row {
+  grid-template-columns: 120px minmax(120px, 1fr) 64px 84px;
+}
+
+@media (max-width: 600px) {
+  .muscle-volume-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .muscle-volume-row > :nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .muscle-volume-row > :nth-child(3) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .muscle-volume-row > :nth-child(4) {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    text-align: left !important;
+  }
+}

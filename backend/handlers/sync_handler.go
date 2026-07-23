@@ -43,7 +43,15 @@ type SyncRequest struct {
 
 func syncHTTPError(w http.ResponseWriter, label string, err error) {
 	log.Printf("sync error: %s: %v", label, err)
-	http.Error(w, `{"error":"`+label+`: `+err.Error()+`"}`, http.StatusInternalServerError)
+	writeSyncError(w, http.StatusInternalServerError, label)
+}
+
+func writeSyncError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+		log.Printf("sync: failed to encode error response: %v", err)
+	}
 }
 
 type SyncResponse struct {
@@ -86,7 +94,7 @@ func SyncHandler(w http.ResponseWriter, r *http.Request) {
 		// number into ... field TrainingLog.set_type of type string") - log it
 		// so client payload bugs are diagnosable from the server side.
 		log.Printf("sync: payload decode failed for user %s: %v", userID, err)
-		http.Error(w, `{"error":"invalid sync payload: `+err.Error()+`"}`, http.StatusBadRequest)
+		writeSyncError(w, http.StatusBadRequest, "invalid sync payload")
 		return
 	}
 

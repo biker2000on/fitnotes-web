@@ -2,13 +2,35 @@
 // personal records, and per-session summaries. Reused by the History/Records
 // drawer, the Goals progress bars, and the Analysis graphs.
 
-import type { TrainingLog } from '../types';
+import type { Exercise, TrainingLog } from '../types';
+import { ALL_MUSCLES, MUSCLE_DISPLAY, exerciseMuscleTargets, type MuscleKey } from './muscles';
 
 // Epley estimated one-rep max. Single rep == the lifted weight itself.
 export const estimated1RM = (weight: number, reps: number): number => {
   if (!weight || !reps || reps < 1) return 0;
   if (reps === 1) return weight;
   return weight * (1 + reps / 30);
+};
+
+// Estimate a failure-equivalent 1RM by treating logged RIR (or 10 - RPE) as
+// additional reps the lifter could have completed. Explicit RIR wins when both
+// values are present. Without effort data this is identical to estimated1RM.
+export const rpeAdjustedEstimated1RM = (
+  weight: number,
+  reps: number,
+  rpe?: number | null,
+  rir?: number | null,
+): number => {
+  if (!weight || !reps || reps < 1) return 0;
+  const validRir = Number.isFinite(rir) && Number(rir) >= 0 && Number(rir) <= 10;
+  const validRpe = Number.isFinite(rpe) && Number(rpe) >= 1 && Number(rpe) <= 10;
+  const reserve = validRir
+    ? Number(rir)
+    : validRpe
+      ? 10 - Number(rpe)
+      : 0;
+  const effectiveReps = reps + Math.max(0, Math.min(10, reserve));
+  return effectiveReps <= 1 ? weight : weight * (1 + effectiveReps / 30);
 };
 
 // Volume of a single weight/reps set.
@@ -268,4 +290,239 @@ export const workoutGraphSeries = (logs: TrainingLog[], by: WorkoutGroupBy): Wor
   return Array.from(m.values())
     .map(p => ({ period: p.period, sets: p.sets, reps: p.reps, volume: Math.round(p.volume), durationMin: Math.round(p.durationMin), workouts: p._days.size }))
     .sort((a, b) => a.period.localeCompare(b.period));
+};
+
+// --- Weekly muscle volume ---
+export const MUSCLE_VOLUME_TARGET_MIN = 10;
+export const MUSCLE_VOLUME_TARGET_MAX = 20;
+export const SECONDARY_MUSCLE_SET_WEIGHT = 0.5;
+
+export interface MuscleVolumeRow {
+  muscle: MuscleKey;
+  name: string;
+  sets: number;
+  previousSets: number;
+  delta: number;
+  targetMin: number;
+  targetMax: number;
+}
+
+const localDateKey = (date: Date): string =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+export const startOfWeek = (date = new Date(), firstDay = 1): Date => {
+  const result = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const offset = (result.getDay() - firstDay + 7) % 7;
+  result.setDate(result.getDate() - offset);
+  return result;
+};
+
+export const weeklyMuscleVolume = (
+  logs: TrainingLog[],
+  exercises: Exercise[],
+  weekStart = startOfWeek(),
+  requireComplete = true,
+): MuscleVolumeRow[] => {
+  const currentStart = localDateKey(weekStart);
+  const currentEndDate = new Date(weekStart);
+  currentEndDate.setDate(currentEndDate.getDate() + 7);
+  const currentEnd = localDateKey(currentEndDate);
+  const previousStartDate = new Date(weekStart);
+  previousStartDate.setDate(previousStartDate.getDate() - 7);
+  const previousStart = localDateKey(previousStartDate);
+
+  const exerciseMap = new Map(exercises.map(ex => [ex.id, ex]));
+  const current = new Map<MuscleKey, number>();
+  const previous = new Map<MuscleKey, number>();
+
+  for (const log of logs) {
+    if (log.is_deleted || (requireComplete && !log.is_complete) || (log.set_type && log.set_type !== 'working')) continue;
+    const bucket = log.date >= currentStart && log.date < currentEnd
+      ? current
+      : log.date >= previousStart && log.date < currentStart
+        ? previous
+        : null;
+    if (!bucket) continue;
+    const exercise = exerciseMap.get(log.exercise_id);
+    if (!exercise) continue;
+    const targets = exerciseMuscleTargets(exercise);
+    targets.primary.forEach(muscle => bucket.set(muscle, (bucket.get(muscle) ?? 0) + 1));
+    targets.secondary.forEach(muscle => bucket.set(muscle, (bucket.get(muscle) ?? 0) + SECONDARY_MUSCLE_SET_WEIGHT));
+  }
+
+  const r1 = (value: number) => Math.round(value * 10) / 10;
+  return ALL_MUSCLES
+    .map(muscle => {
+      const sets = r1(current.get(muscle) ?? 0);
+      const previousSets = r1(previous.get(muscle) ?? 0);
+      return {
+        muscle,
+        name: MUSCLE_DISPLAY[muscle],
+        sets,
+        previousSets,
+        delta: r1(sets - previousSets),
+        targetMin: MUSCLE_VOLUME_TARGET_MIN,
+        targetMax: MUSCLE_VOLUME_TARGET_MAX,
+      };
+    })
+    .filter(row => row.sets > 0 || row.previousSets > 0)
+    .sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name));
+};
+
+// --- Combined strength analytics ---
+export interface StrengthPoint {
+  date: string;
+  estimated1RM: number;
+  adjusted1RM: number;
+  maxWeight: number;
+  averageRpe: number | null;
+  isPR: boolean;
+}
+
+export interface StrengthPREvent {
+  id: string;
+  date: string;
+  weight: number;
+  reps: number;
+  estimated1RM: number;
+  adjusted1RM: number;
+  rpe: number | null;
+  rir: number | null;
+  kinds: Array<'rep' | 'e1rm'>;
+}
+
+const LBS_PER_KG = 2.20462;
+
+// Training logs retain the unit used when they were entered. Normalize before
+// comparing records so a historical pounds set is not compared numerically to
+// a kilograms set.
+const strengthWeightKg = (log: TrainingLog): number =>
+  (log.metric_weight as number) / (log.unit === 2 ? LBS_PER_KG : 1);
+
+const effortRpe = (log: TrainingLog): number | null => {
+  if (Number.isFinite(log.rpe) && Number(log.rpe) >= 1 && Number(log.rpe) <= 10) return Number(log.rpe);
+  if (Number.isFinite(log.rir) && Number(log.rir) >= 0 && Number(log.rir) <= 10) return 10 - Number(log.rir);
+  return null;
+};
+
+export const strengthAnalytics = (
+  logs: TrainingLog[],
+  maxRepsToInclude = 10,
+  requireComplete = true,
+): { series: StrengthPoint[]; timeline: StrengthPREvent[]; repMaxGrid: ActualRecord[] } => {
+  const weighted = activeWeightLogs(logs)
+    .filter(log => (!requireComplete || log.is_complete) && (!log.set_type || log.set_type === 'working'))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+  const byDate = new Map<string, TrainingLog[]>();
+  const bestByReps = new Map<number, ActualRecord>();
+  const timeline: StrengthPREvent[] = [];
+  let bestAdjusted = 0;
+
+  for (const log of weighted) {
+    const day = byDate.get(log.date) ?? [];
+    day.push(log);
+    byDate.set(log.date, day);
+  }
+
+  for (const [date, dayLogs] of byDate) {
+    const dayBestByReps = new Map<number, TrainingLog>();
+    let dayBestAdjusted: { log: TrainingLog; value: number } | null = null;
+    const events = new Map<string, StrengthPREvent>();
+
+    const addEvent = (log: TrainingLog, kind: StrengthPREvent['kinds'][number]) => {
+      const existing = events.get(log.id);
+      if (existing) {
+        if (!existing.kinds.includes(kind)) existing.kinds.push(kind);
+        return;
+      }
+      const weight = strengthWeightKg(log);
+      const reps = log.reps as number;
+      events.set(log.id, {
+        id: log.id,
+        date,
+        weight,
+        reps,
+        estimated1RM: Math.round(estimated1RM(weight, reps) * 10) / 10,
+        adjusted1RM: Math.round(rpeAdjustedEstimated1RM(weight, reps, log.rpe, log.rir) * 10) / 10,
+        rpe: log.rpe ?? null,
+        rir: log.rir ?? null,
+        kinds: [kind],
+      });
+    };
+
+    for (const log of dayLogs) {
+      const reps = log.reps as number;
+      const weight = strengthWeightKg(log);
+      const currentRepBest = dayBestByReps.get(reps);
+      const currentRepWeight = currentRepBest ? strengthWeightKg(currentRepBest) : 0;
+      if (!currentRepBest || weight > currentRepWeight
+        || (weight === currentRepWeight && log.id.localeCompare(currentRepBest.id) < 0)) {
+        dayBestByReps.set(reps, log);
+      }
+
+      if (reps <= maxRepsToInclude) {
+        const adjusted = rpeAdjustedEstimated1RM(weight, reps, log.rpe, log.rir);
+        if (!dayBestAdjusted || adjusted > dayBestAdjusted.value
+          || (adjusted === dayBestAdjusted.value && log.id.localeCompare(dayBestAdjusted.log.id) < 0)) {
+          dayBestAdjusted = { log, value: adjusted };
+        }
+      }
+    }
+
+    for (const [reps, log] of dayBestByReps) {
+      const weight = strengthWeightKg(log);
+      const priorRep = bestByReps.get(reps);
+      if (!priorRep || weight > priorRep.weight) {
+        bestByReps.set(reps, { reps, weight, date, logId: log.id });
+        addEvent(log, 'rep');
+      }
+    }
+
+    if (dayBestAdjusted && dayBestAdjusted.value > bestAdjusted) {
+      bestAdjusted = dayBestAdjusted.value;
+      addEvent(dayBestAdjusted.log, 'e1rm');
+    }
+
+    timeline.push(...events.values());
+  }
+
+  let runningBest = 0;
+  const series = Array.from(byDate.entries()).map(([date, dayLogs]) => {
+    let raw = 0;
+    let adjusted = 0;
+    let maxWeight = 0;
+    const rpes: number[] = [];
+    dayLogs.forEach(log => {
+      const weight = strengthWeightKg(log);
+      const reps = log.reps ?? 0;
+      maxWeight = Math.max(maxWeight, weight);
+      if (reps <= maxRepsToInclude) {
+        raw = Math.max(raw, estimated1RM(weight, reps));
+        adjusted = Math.max(adjusted, rpeAdjustedEstimated1RM(weight, reps, log.rpe, log.rir));
+      }
+      const effort = effortRpe(log);
+      if (effort !== null) rpes.push(effort);
+    });
+    const isPR = adjusted > runningBest;
+    runningBest = Math.max(runningBest, adjusted);
+    return {
+      date,
+      estimated1RM: Math.round(raw * 10) / 10,
+      adjusted1RM: Math.round(adjusted * 10) / 10,
+      maxWeight: Math.round(maxWeight * 10) / 10,
+      averageRpe: rpes.length > 0 ? Math.round((rpes.reduce((a, b) => a + b, 0) / rpes.length) * 10) / 10 : null,
+      isPR,
+    };
+  }).filter(point => point.estimated1RM > 0);
+
+  return {
+    series,
+    timeline: timeline.sort((a, b) => b.date.localeCompare(a.date)
+      || b.adjusted1RM - a.adjusted1RM
+      || b.weight - a.weight
+      || a.reps - b.reps
+      || a.id.localeCompare(b.id)),
+    repMaxGrid: Array.from(bestByReps.values())
+      .sort((a, b) => a.reps - b.reps),
+  };
 };

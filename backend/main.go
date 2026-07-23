@@ -43,6 +43,7 @@ func main() {
 	r.Use(chimiddleware.RealIP)
 	r.Use(chimiddleware.Logger)
 	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.GetHead)
 	r.Use(chimiddleware.Timeout(60 * time.Second))
 
 	// CORS Configuration (Crucial for Tauri mobile client and Web client interaction)
@@ -87,8 +88,8 @@ func main() {
 			}
 			return false
 		},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "Origin", "X-FitNotes-Client"},
+		AllowedMethods:   []string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key", "X-CSRF-Token", "Origin", "X-FitNotes-Client"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300, // Maximum value of Access-Control-Max-Age
@@ -118,6 +119,9 @@ func main() {
 			r.Get("/auth/me", handlers.MeHandler)
 			r.Post("/auth/refresh", handlers.RefreshTokenHandler)
 			r.Post("/auth/oidc/unlink", handlers.OidcUnlinkHandler)
+			r.Get("/api-keys", handlers.ListAPIKeysHandler)
+			r.Post("/api-keys", handlers.CreateAPIKeyHandler)
+			r.Delete("/api-keys/{id}", handlers.RevokeAPIKeyHandler)
 			r.Post("/sync", handlers.SyncHandler)
 			r.Post("/exercises/merge", handlers.MergeExercisesHandler)
 			r.Post("/import-fitnotes", handlers.ImportFitNotesHandler)
@@ -129,6 +133,16 @@ func main() {
 			r.Get("/withings/status", handlers.WithingsStatusHandler)
 			r.Post("/withings/sync", handlers.WithingsSyncHandler)
 			r.Delete("/withings/disconnect", handlers.WithingsDisconnectHandler)
+		})
+
+		// Explicitly versioned integration API. API keys are intentionally
+		// limited to these GET-only resources rather than the sync/write API.
+		r.Route("/v1", func(r chi.Router) {
+			r.Use(middleware.APIKeyAuthMiddleware)
+			r.Get("/", handlers.APIInfoHandler)
+			r.Get("/exercises", handlers.APIExercisesHandler)
+			r.Get("/workouts", handlers.APIWorkoutsHandler)
+			r.Get("/body-weights", handlers.APIBodyWeightsHandler)
 		})
 	})
 

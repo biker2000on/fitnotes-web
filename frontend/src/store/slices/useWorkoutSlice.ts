@@ -15,6 +15,12 @@ import type {
 } from '../../types';
 import type { LateDeps, TriggerToast, TriggerConfirm } from './types';
 
+const parseEffortInput = (raw: string, minimum: number): number | null => {
+  if (!raw.trim()) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= minimum && value <= 10 ? value : null;
+};
+
 export interface WorkoutSliceDeps {
   late: LateDeps;
   triggerToast: TriggerToast;
@@ -177,8 +183,8 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
         distance,
         duration_seconds: duration,
         comment: logComment || null,
-        rpe: logRpe ? parseFloat(logRpe) : null,
-        rir: logRir ? parseFloat(logRir) : null,
+        rpe: parseEffortInput(logRpe, 1),
+        rir: parseEffortInput(logRir, 0),
         set_type: logSetType || 'working',
       };
       await db.execute('UPDATE training_logs', [updatedLog]);
@@ -204,8 +210,8 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
       distance,
       duration_seconds: duration,
       comment: logComment || null,
-      rpe: logRpe ? parseFloat(logRpe) : null,
-      rir: logRir ? parseFloat(logRir) : null,
+      rpe: parseEffortInput(logRpe, 1),
+      rir: parseEffortInput(logRir, 0),
       set_type: logSetType || 'working',
     };
 

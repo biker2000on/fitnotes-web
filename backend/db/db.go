@@ -12,13 +12,13 @@ import (
 )
 
 var (
-	pool *pgxpool.Pool
-	once sync.Once
+	pool    *pgxpool.Pool
+	once    sync.Once
+	initErr error
 )
 
 // InitDB initializes the connection pool to the PostgreSQL database
 func InitDB() (*pgxpool.Pool, error) {
-	var err error
 	once.Do(func() {
 		connStr := os.Getenv("DATABASE_URL")
 		if connStr == "" {
@@ -27,7 +27,7 @@ func InitDB() (*pgxpool.Pool, error) {
 
 		config, pErr := pgxpool.ParseConfig(connStr)
 		if pErr != nil {
-			err = fmt.Errorf("unable to parse database url: %w", pErr)
+			initErr = fmt.Errorf("unable to parse database url: %w", pErr)
 			return
 		}
 
@@ -42,13 +42,13 @@ func InitDB() (*pgxpool.Pool, error) {
 
 		pool, pErr = pgxpool.NewWithConfig(ctx, config)
 		if pErr != nil {
-			err = fmt.Errorf("unable to connect to database: %w", pErr)
+			initErr = fmt.Errorf("unable to connect to database: %w", pErr)
 			return
 		}
 
 		// Ping to verify connection
 		if pErr = pool.Ping(ctx); pErr != nil {
-			err = fmt.Errorf("database ping failed: %w", pErr)
+			initErr = fmt.Errorf("database ping failed: %w", pErr)
 			pool.Close()
 			pool = nil
 			return
@@ -58,11 +58,14 @@ func InitDB() (*pgxpool.Pool, error) {
 
 		// Run database schema migrations
 		if mErr := runMigrations(pool); mErr != nil {
-			log.Printf("Warning: Database migrations failed: %v", mErr)
+			pool.Close()
+			pool = nil
+			initErr = fmt.Errorf("database migrations failed: %w", mErr)
+			return
 		}
 	})
 
-	return pool, err
+	return pool, initErr
 }
 
 // runMigrations automatically reads and executes initial SQL schemas if the database is empty
@@ -110,6 +113,10 @@ func runMigrations(pool *pgxpool.Pool) error {
 		return fmt.Errorf("failed to apply custom muscles migration: %w", err)
 	}
 	log.Println("Custom muscles migration applied.")
+	if err := applyMigration(ctx, pool, "000006_api_keys.up.sql"); err != nil {
+		return fmt.Errorf("failed to apply API keys migration: %w", err)
+	}
+	log.Println("API keys migration applied.")
 	return nil
 }
 

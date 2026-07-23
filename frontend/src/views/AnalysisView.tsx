@@ -4,9 +4,12 @@ import {
   ResponsiveContainer, AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { LineChart as LineIcon, PieChart as PieIcon, GitCompare, BarChart3, History as HistoryIcon, Star } from 'lucide-react';
+import { LineChart as LineIcon, PieChart as PieIcon, GitCompare, BarChart3, History as HistoryIcon, Star, Activity, Trophy } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
-import { exerciseGraphSeries, breakdown, periodStart, workoutGraphSeries, type BreakdownMetric, type BreakdownPeriod, type WorkoutGroupBy } from '../lib/stats';
+import {
+  exerciseGraphSeries, breakdown, periodStart, workoutGraphSeries, weeklyMuscleVolume, startOfWeek, strengthAnalytics,
+  type BreakdownMetric, type BreakdownPeriod, type WorkoutGroupBy,
+} from '../lib/stats';
 import { intColorToHex } from '../lib/colors';
 
 type Metric = 'volume' | 'maxWeight' | 'estimated1RM' | 'maxReps' | 'totalReps';
@@ -27,7 +30,7 @@ const trend = (vals: number[]): number[] => {
 
 export function AnalysisView() {
   const { exercises, categories, allLogs, userUnit, settings, analyticExerciseId, setAnalyticExerciseId, setHistoryExerciseId, graphFavourites, saveGraphFavourite, uuidv4 } = useFitNotesStore();
-  const [tab, setTab] = useState<'graph' | 'breakdown' | 'comparison' | 'workout'>('graph');
+  const [tab, setTab] = useState<'graph' | 'muscles' | 'strength' | 'breakdown' | 'comparison' | 'workout'>('graph');
   const [metric, setMetric] = useState<Metric>('volume');
   const [gFrom, setGFrom] = useState('');
   const [gTo, setGTo] = useState('');
@@ -54,6 +57,32 @@ export function AnalysisView() {
   const workoutData = useMemo(() => workoutGraphSeries(allLogs, wBy), [allLogs, wBy]);
 
   const repLimit = settings.estimated_1rm_max_apply_to_graph ? settings.estimated_1rm_max_reps_to_include : 999;
+  const strengthRepLimit = Math.max(1, repLimit);
+  const muscleWeekStart = useMemo(
+    () => startOfWeek(new Date(), Math.max(0, Math.min(6, settings.first_day_of_week - 1))),
+    [settings.first_day_of_week],
+  );
+  const muscleData = useMemo(
+    () => weeklyMuscleVolume(allLogs, exercises, muscleWeekStart, settings.mark_sets_complete),
+    [allLogs, exercises, muscleWeekStart, settings.mark_sets_complete],
+  );
+  const strengthData = useMemo(
+    () => strengthAnalytics(allLogs.filter(log => log.exercise_id === analyticExerciseId), strengthRepLimit, settings.mark_sets_complete),
+    [allLogs, analyticExerciseId, strengthRepLimit, settings.mark_sets_complete],
+  );
+  const displayStrengthWeight = (weightKg: number): number =>
+    Math.round((userUnit === 'lbs' ? weightKg * 2.20462 : weightKg) * 10) / 10;
+  const strengthSeries = useMemo(
+    () => strengthData.series.map(point => ({
+      ...point,
+      estimated1RM: displayStrengthWeight(point.estimated1RM),
+      adjusted1RM: displayStrengthWeight(point.adjusted1RM),
+      maxWeight: displayStrengthWeight(point.maxWeight),
+    })),
+    [strengthData.series, userUnit],
+  );
+  const latestStrength = strengthSeries[strengthSeries.length - 1];
+  const bestStrength = strengthSeries.reduce((best, point) => Math.max(best, point.adjusted1RM), 0);
   const series = useMemo(() => {
     let logs = allLogs.filter(l => l.exercise_id === analyticExerciseId);
     if (gFrom) logs = logs.filter(l => l.date >= gFrom);
@@ -87,6 +116,8 @@ export function AnalysisView() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '900px', margin: '0 auto', width: '100%' }}>
       <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         <button className={`btn ${tab === 'graph' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('graph')}><LineIcon size={16} /> Exercise</button>
+        <button className={`btn ${tab === 'muscles' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('muscles')}><Activity size={16} /> Muscle Volume</button>
+        <button className={`btn ${tab === 'strength' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('strength')}><Trophy size={16} /> Strength</button>
         <button className={`btn ${tab === 'breakdown' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('breakdown')}><PieIcon size={16} /> Breakdown</button>
         <button className={`btn ${tab === 'comparison' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('comparison')}><GitCompare size={16} /> Compare</button>
         <button className={`btn ${tab === 'workout' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('workout')}><BarChart3 size={16} /> Workout</button>
@@ -140,6 +171,148 @@ export function AnalysisView() {
                 </AreaChart>
               </ResponsiveContainer>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'muscles' && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '8px' }}>
+            <div>
+              <div className="card-title">Weekly Volume by Muscle</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+                Week of {muscleWeekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. {settings.mark_sets_complete ? 'Completed' : 'Logged'} working sets only; secondary muscles count as half a set.
+              </div>
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)' }}>
+              Reference band: 10–20 sets
+            </div>
+          </div>
+          {muscleData.length === 0 ? (
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '48px' }}>
+              {settings.mark_sets_complete ? 'Complete' : 'Log'} some working sets to populate this week’s muscle volume.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {muscleData.map(row => {
+                const pct = Math.min(100, (row.sets / row.targetMax) * 100);
+                const inBand = row.sets >= row.targetMin && row.sets <= row.targetMax;
+                const over = row.sets > row.targetMax;
+                const color = over ? 'var(--danger)' : inBand ? 'var(--success)' : 'var(--primary)';
+                return (
+                  <div key={row.muscle} className="muscle-volume-row" style={{ display: 'grid', gap: '10px', alignItems: 'center' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700 }}>{row.name}</span>
+                    <div style={{ height: '10px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', position: 'relative', overflow: 'hidden' }}>
+                      <span style={{ position: 'absolute', left: '50%', width: '50%', top: 0, bottom: 0, background: 'rgba(16,185,129,0.10)' }} />
+                      <span style={{ display: 'block', width: `${pct}%`, height: '100%', borderRadius: '999px', background: color, position: 'relative' }} />
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: 800, textAlign: 'right' }}>{row.sets}</span>
+                    <span style={{ fontSize: '11px', textAlign: 'right', color: row.delta > 0 ? 'var(--success)' : row.delta < 0 ? 'var(--danger)' : 'var(--text-secondary-dark)' }}>
+                      {row.delta > 0 ? '+' : ''}{row.delta} vs prior
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'strength' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <div className="card-title">PR, e1RM & Effort</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+                  RPE-adjusted e1RM uses explicit RIR first, then 10 − RPE as reserve reps; {strengthRepLimit >= 999 ? 'all rep ranges are included' : `sets above ${strengthRepLimit} reps are excluded from e1RM`}.
+                </div>
+              </div>
+              <select value={analyticExerciseId} onChange={e => setAnalyticExerciseId(e.target.value)} style={{ width: '220px', padding: '8px' }}>
+                {exercises.map(ex => <option key={ex.id} value={ex.id}>{ex.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Best adjusted e1RM</div>
+                <div style={{ fontSize: '22px', fontWeight: 800 }}>{Math.round(bestStrength * 10) / 10} <small>{userUnit}</small></div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Latest e1RM</div>
+                <div style={{ fontSize: '22px', fontWeight: 800 }}>{latestStrength?.estimated1RM ?? 0} <small>{userUnit}</small></div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Latest average RPE</div>
+                <div style={{ fontSize: '22px', fontWeight: 800 }}>{latestStrength?.averageRpe ?? '—'}</div>
+              </div>
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>PR events</div>
+                <div style={{ fontSize: '22px', fontWeight: 800 }}>{strengthData.timeline.length}</div>
+              </div>
+            </div>
+
+            <div style={{ width: '100%', height: 320 }}>
+              {strengthSeries.length === 0 ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '48px' }}>No completed weighted working sets for this exercise yet.</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={strengthSeries} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="date" tickFormatter={niceDate} stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
+                    <YAxis domain={settings.graph_start_at_zero ? [0, 'auto'] : ['auto', 'auto']} stroke="var(--text-secondary-dark)" style={{ fontSize: '11px' }} />
+                    <Tooltip labelFormatter={niceDate} contentStyle={{ backgroundColor: 'var(--bg-surface-dark)', borderColor: 'var(--border-dark)' }} />
+                    <Legend />
+                    <Line type="monotone" dataKey="estimated1RM" name="e1RM" stroke="var(--primary)" strokeWidth={2} dot={settings.graph_show_points ? { r: 2 } : false} />
+                    <Line type="monotone" dataKey="adjusted1RM" name="RPE-adjusted e1RM" stroke="var(--accent)" strokeWidth={3} dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      return <circle cx={cx} cy={cy} r={payload.isPR ? 5 : 2} fill={payload.isPR ? 'var(--success)' : 'var(--accent)'} />;
+                    }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+
+          <div className="cols-2">
+            <div className="card">
+              <div className="card-title">Rep Max Grid</div>
+              {strengthData.repMaxGrid.length === 0 ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>No rep records yet.</p>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
+                  {strengthData.repMaxGrid.map(record => (
+                    <div key={record.reps} style={{ padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', textAlign: 'center' }}>
+                      <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)' }}>{record.reps} rep{record.reps === 1 ? '' : 's'}</div>
+                      <div style={{ fontSize: '16px', fontWeight: 800 }}>{displayStrengthWeight(record.weight)}</div>
+                      <div style={{ fontSize: '9px', color: 'var(--text-secondary-dark)' }}>{userUnit}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <div className="card-title">PR Timeline</div>
+              {strengthData.timeline.length === 0 ? (
+                <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)' }}>No PR events yet.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '330px', overflowY: 'auto' }}>
+                  {strengthData.timeline.slice(0, 30).map(event => (
+                    <div key={event.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: 700 }}>{displayStrengthWeight(event.weight)} {userUnit} × {event.reps}</div>
+                        <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)' }}>
+                          {event.kinds.includes('e1rm') ? 'e1RM PR' : 'Rep PR'} · estimated {displayStrengthWeight(event.adjusted1RM)} {userUnit}
+                          {event.rpe !== null ? ` · RPE ${event.rpe}` : event.rir !== null ? ` · RIR ${event.rir}` : ''}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', whiteSpace: 'nowrap' }}>{niceDate(event.date)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
