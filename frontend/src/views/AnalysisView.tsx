@@ -324,7 +324,7 @@ export function AnalysisView() {
                     <Line type="monotone" dataKey="estimated1RM" name="e1RM" stroke="var(--primary)" strokeWidth={2} dot={settings.graph_show_points ? { r: 2 } : false} />
                     <Line type="monotone" dataKey="adjusted1RM" name="RPE-adjusted e1RM" stroke="var(--accent)" strokeWidth={3} dot={(props: any) => {
                       const { cx, cy, payload } = props;
-                      return <circle cx={cx} cy={cy} r={payload.isPR ? 5 : 2} fill={payload.isPR ? 'var(--success)' : 'var(--accent)'} />;
+                      return <circle key={payload.date} cx={cx} cy={cy} r={payload.isPR ? 5 : 2} fill={payload.isPR ? 'var(--success)' : 'var(--accent)'} />;
                     }} />
                   </LineChart>
                 </ResponsiveContainer>

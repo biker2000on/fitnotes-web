@@ -1,5 +1,11 @@
 # TODOs
 
+## Done (2026-07-29 insights pass)
+- ~~Bodyweight-relative strength standards: e1RM graded Untrained→Elite against BW-multiple bands for the classic barbell lifts (lib/standards.ts), shown on the Analysis Strength tab with progress to the next band.~~
+- ~~"Needs attention" feed on the workout log: stalled lifts (deload detection), goals due within 14 days, muscles under the weekly volume band last week, regular exercises untrained 3+ weeks (lib/attention.ts, AttentionCard).~~
+- ~~Year consistency heatmap: GitHub-style rolling-12-month grid shaded by session volume, with weekly streak stats (Analysis > Consistency tab, YearHeatmap).~~
+- ~~Goal progress math extracted to lib/goals.ts (shared by GoalsView and the attention feed).~~
+
 ## Done (2026-07-23 architecture + intelligence pass)
 - ~~SQLite WASM (OPFS) storage for web — replaced the localStorage SQL mock; real SQL, indexes, transactions, one-time localStorage migration, localStorage fallback for unsupported browsers/second tabs.~~
 - ~~PWA: manifest + service worker (autoUpdate), installable web app with offline shell.~~
@@ -18,16 +24,13 @@
 5. **Share workout/graph as image** + cardio pace/speed graphs.
 6. **Read/write API keys** — add mutation endpoints only after audit logging, rate limits, idempotency, and safer confirmation/revocation controls are designed.
 7. **Scoped API keys** — per-resource and per-action grants, optional expiry, and scope-aware management UI.
-8. **Bodyweight-relative strength standards** — lifts as multiples of bodyweight (Withings data), graded against strength standards (untrained → elite) on the e1RM trend.
-9. **"Needs attention" dashboard** — home card surfacing stalled lifts, muscle groups under their weekly volume band, goals nearing target date, and exercises untrained 3+ weeks; reuses existing plateau/volume detection.
-10. **Training monotony & strain** — Foster session-RPE model (load, monotony, strain) from existing RPE/RIR data, in the Analysis view.
-11. **Year consistency heatmap** — GitHub-style grid colored by volume or muscle group with streak stats; feeds the share-as-image item.
-12. **Progress photos** — private captures tied to body-measurement dates, side-by-side/slider compare; blob storage with lazy fetch, not in the normal sync payload.
-13. **Warm-up set generator** — ramp sets from target working weight, plate-calculator-aware, one-tap insert.
-14. **Interval/EMOM/circuit timer** — configurable work/rest/rounds, EMOM, Tabata in Tools.
-15. **Gym profiles for plate calculator** — per-gym plates/bars/dumbbell increments; progression suggestions round to loads achievable at the active gym.
-16. **Routine import from structured sources (ATG)** — map scraped ATG program markdown/JSON into routines (sections, exercises, predefined sets); test case for the program engine.
-17. **Joint/pain tracking** — per-joint discomfort log with severity, overlaid on exercise volume in Analysis to spot correlations.
+8. **Training monotony & strain** — Foster session-RPE model (load, monotony, strain) from existing RPE/RIR data, in the Analysis view.
+9. **Progress photos** — private captures tied to body-measurement dates, side-by-side/slider compare; blob storage with lazy fetch, not in the normal sync payload.
+10. **Warm-up set generator** — ramp sets from target working weight, plate-calculator-aware, one-tap insert.
+11. **Interval/EMOM/circuit timer** — configurable work/rest/rounds, EMOM, Tabata in Tools.
+12. **Gym profiles for plate calculator** — per-gym plates/bars/dumbbell increments; progression suggestions round to loads achievable at the active gym.
+13. **Routine import from structured sources (ATG)** — map scraped ATG program markdown/JSON into routines (sections, exercises, predefined sets); test case for the program engine.
+14. **Joint/pain tracking** — per-joint discomfort log with severity, overlaid on exercise volume in Analysis to spot correlations.
 
 ## Done (2026-07-02 parity + mobile pass)
 - ~~Per-exercise routine set types (copy previous / predefined / don't populate) honored when loading routines.~~
