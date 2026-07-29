@@ -45,14 +45,14 @@ export function EditExerciseModal() {
   };
 
   return (
-    <div className="modal-overlay" onClick={() => setShowEditExModal(false)}>
-      <div className="modal-content" style={{ maxWidth: '550px' }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+    <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowEditExModal(false)}>
+      <div className="modal-content mobile-modal-content" style={{ maxWidth: '550px' }} onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-modal-header">
           <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Dumbbell size={20} color="var(--primary)" /> Edit Exercise</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowEditExModal(false)}>Close</button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div className="mobile-modal-scroll">
           <div>
             <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Exercise Name</label>
             <input type="text" value={editExName} onChange={(e) => setEditExName(e.target.value)} />
