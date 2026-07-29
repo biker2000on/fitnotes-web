@@ -1,7 +1,8 @@
 // MuscleDiagram.tsx - Stylized front/back anatomy figures with muscle regions
 // tinted by involvement: primary (red), secondary (amber), untargeted (gray).
+// Pass onMuscleClick to make regions clickable (used by the exercise editor).
 import React from 'react';
-import type { MuscleKey } from '../lib/muscles';
+import { MUSCLE_DISPLAY, type MuscleKey } from '../lib/muscles';
 
 interface MuscleDiagramProps {
   primary: Set<MuscleKey> | MuscleKey[];
@@ -9,6 +10,7 @@ interface MuscleDiagramProps {
   height?: number;
   showLegend?: boolean;
   compact?: boolean;
+  onMuscleClick?: (muscle: MuscleKey) => void;
 }
 
 const COLOR_PRIMARY = '#e0393e';
@@ -80,9 +82,15 @@ function renderShapes(
   shapes: Partial<Record<MuscleKey, Shape[]>>,
   primary: Set<MuscleKey>,
   secondary: Set<MuscleKey>,
+  onMuscleClick?: (muscle: MuscleKey) => void,
 ) {
   return (Object.entries(shapes) as Array<[MuscleKey, Shape[]]>).map(([key, list]) => (
-    <g key={key}>
+    <g
+      key={key}
+      className={onMuscleClick ? 'muscle-region-clickable' : undefined}
+      onClick={onMuscleClick ? () => onMuscleClick(key) : undefined}
+    >
+      {onMuscleClick && <title>{MUSCLE_DISPLAY[key]}</title>}
       {list.map((s, i) => {
         const fill = shapeFill(key, primary, secondary);
         const active = fill !== COLOR_INACTIVE;
@@ -115,19 +123,20 @@ function renderShapes(
   ));
 }
 
-function Figure({ shapes, primary, secondary, label, height }: {
+function Figure({ shapes, primary, secondary, label, height, onMuscleClick }: {
   shapes: Partial<Record<MuscleKey, Shape[]>>;
   primary: Set<MuscleKey>;
   secondary: Set<MuscleKey>;
   label: string;
   height: number;
+  onMuscleClick?: (muscle: MuscleKey) => void;
 }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <svg viewBox="0 0 120 250" height={height} role="img" aria-label={`${label} muscle diagram`}>
         <path d={SILHOUETTE_HALF} fill={COLOR_BODY} stroke={COLOR_LINE} strokeWidth={0.8} />
         <path d={SILHOUETTE_HALF} fill={COLOR_BODY} stroke={COLOR_LINE} strokeWidth={0.8} transform="translate(120,0) scale(-1,1)" />
-        {renderShapes(shapes, primary, secondary)}
+        {renderShapes(shapes, primary, secondary, onMuscleClick)}
         {/* Ab segmentation lines for definition */}
         <g stroke={COLOR_LINE} strokeWidth={0.6} opacity={0.55}>
           <line x1={53} y1={77} x2={67} y2={77} />
@@ -164,7 +173,7 @@ export function MuscleDiagramDetails({ primary, secondary, label = 'Muscles Work
   );
 }
 
-export default function MuscleDiagram({ primary, secondary = [], height = 210, showLegend = true, compact = false }: MuscleDiagramProps) {
+export default function MuscleDiagram({ primary, secondary = [], height = 210, showLegend = true, compact = false, onMuscleClick }: MuscleDiagramProps) {
   const prim = primary instanceof Set ? primary : new Set(primary);
   const sec = secondary instanceof Set ? new Set(secondary) : new Set(secondary);
   prim.forEach(k => sec.delete(k));
@@ -172,8 +181,8 @@ export default function MuscleDiagram({ primary, secondary = [], height = 210, s
   return (
     <div className="muscle-diagram" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: compact ? 4 : 10 }}>
       <div style={{ display: 'flex', gap: compact ? 8 : 24, justifyContent: 'center' }}>
-        <Figure shapes={FRONT_SHAPES} primary={prim} secondary={sec} label="Front" height={height} />
-        <Figure shapes={BACK_SHAPES} primary={prim} secondary={sec} label="Back" height={height} />
+        <Figure shapes={FRONT_SHAPES} primary={prim} secondary={sec} label="Front" height={height} onMuscleClick={onMuscleClick} />
+        <Figure shapes={BACK_SHAPES} primary={prim} secondary={sec} label="Back" height={height} onMuscleClick={onMuscleClick} />
       </div>
       {showLegend && (
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center', fontSize: 12 }}>

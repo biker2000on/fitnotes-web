@@ -2136,3 +2136,12 @@ body.light-theme .filter-combobox-clear:hover {
     text-align: left !important;
   }
 }
+
+/* Clickable muscle regions in the exercise editor diagram */
+.muscle-region-clickable { cursor: pointer; }
+.muscle-region-clickable:hover path,
+.muscle-region-clickable:hover ellipse {
+  stroke: #e6e9ee;
+  stroke-width: 1.2;
+  opacity: 1;
+}

@@ -1,6 +1,8 @@
 // EditExerciseModal.tsx - Edit Exercise Modal (name, category, type, guidance, etc.).
 import { Dumbbell } from 'lucide-react';
 import { typeHasWeight } from '../../lib/units';
+import { ALL_MUSCLES, MUSCLE_DISPLAY, exerciseMuscleTargets, type MuscleKey } from '../../lib/muscles';
+import MuscleDiagram from '../MuscleDiagram';
 import { useFitNotesStore } from '../../store/FitNotesStore';
 
 export function EditExerciseModal() {
@@ -14,6 +16,33 @@ export function EditExerciseModal() {
   } = useFitNotesStore();
 
   if (!showEditExModal || !editingExercise) return null;
+
+  // Muscle targets parsed from the (possibly free-text) guidance fields.
+  // Clicking a region cycles none -> primary -> secondary -> none and writes
+  // canonical names back, keeping the text inputs below in sync.
+  const muscleTargets = exerciseMuscleTargets({
+    primary_muscles: editExGuidance.primary_muscles,
+    secondary_muscles: editExGuidance.secondary_muscles,
+  });
+  const cycleMuscle = (muscle: MuscleKey) => {
+    const primary = new Set(muscleTargets.primary);
+    const secondary = new Set(muscleTargets.secondary);
+    if (primary.has(muscle)) {
+      primary.delete(muscle);
+      secondary.add(muscle);
+    } else if (secondary.has(muscle)) {
+      secondary.delete(muscle);
+    } else {
+      primary.add(muscle);
+    }
+    const toText = (set: Set<MuscleKey>) =>
+      ALL_MUSCLES.filter(m => set.has(m)).map(m => MUSCLE_DISPLAY[m]).join(', ');
+    setEditExGuidance({
+      ...editExGuidance,
+      primary_muscles: toText(primary),
+      secondary_muscles: toText(secondary),
+    });
+  };
 
   return (
     <div className="modal-overlay" onClick={() => setShowEditExModal(false)}>
@@ -77,6 +106,24 @@ export function EditExerciseModal() {
             <input type="text" placeholder="e.g. Keep shoulder blades retracted" value={editExNotes} onChange={(e) => setEditExNotes(e.target.value)} />
           </div>
 
+          <div style={{ border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '12px' }}>
+            <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '2px' }}>Muscles Worked</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginBottom: '10px' }}>
+              Click a muscle to cycle: red = primary, yellow = secondary, click again to clear.
+            </div>
+            <MuscleDiagram
+              primary={muscleTargets.primary}
+              secondary={muscleTargets.secondary}
+              height={190}
+              showLegend={false}
+              onMuscleClick={cycleMuscle}
+            />
+            <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
+              <input type="text" placeholder="Primary muscles (e.g. Chest, Front Delts)" value={editExGuidance.primary_muscles} onChange={(e) => setEditExGuidance({ ...editExGuidance, primary_muscles: e.target.value })} />
+              <input type="text" placeholder="Secondary muscles (e.g. Triceps)" value={editExGuidance.secondary_muscles} onChange={(e) => setEditExGuidance({ ...editExGuidance, secondary_muscles: e.target.value })} />
+            </div>
+          </div>
+
           <details style={{ border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '10px' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Guidance, video & alternatives</summary>
             <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
@@ -84,8 +131,6 @@ export function EditExerciseModal() {
               <textarea placeholder="Step-by-step instructions and coaching cues" value={editExGuidance.instructions} onChange={(e) => setEditExGuidance({ ...editExGuidance, instructions: e.target.value })} rows={4} />
               <input type="url" placeholder="Reference video URL" value={editExGuidance.video_url} onChange={(e) => setEditExGuidance({ ...editExGuidance, video_url: e.target.value })} />
               <input type="text" placeholder="Equipment" value={editExGuidance.equipment} onChange={(e) => setEditExGuidance({ ...editExGuidance, equipment: e.target.value })} />
-              <input type="text" placeholder="Primary muscles (e.g. Chest, Front Delts)" value={editExGuidance.primary_muscles} onChange={(e) => setEditExGuidance({ ...editExGuidance, primary_muscles: e.target.value })} />
-              <input type="text" placeholder="Secondary muscles (e.g. Triceps)" value={editExGuidance.secondary_muscles} onChange={(e) => setEditExGuidance({ ...editExGuidance, secondary_muscles: e.target.value })} />
               <input type="text" placeholder="Regressions" value={editExGuidance.regressions} onChange={(e) => setEditExGuidance({ ...editExGuidance, regressions: e.target.value })} />
               <input type="text" placeholder="Progressions" value={editExGuidance.progressions} onChange={(e) => setEditExGuidance({ ...editExGuidance, progressions: e.target.value })} />
               <input type="text" placeholder="Substitutions" value={editExGuidance.substitutions} onChange={(e) => setEditExGuidance({ ...editExGuidance, substitutions: e.target.value })} />
