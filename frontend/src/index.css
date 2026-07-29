@@ -1194,6 +1194,10 @@ body.light-theme .set-th {
 
 .mobile-modal-content {
   max-height: min(88vh, 760px);
+  /* dvh tracks the viewport as the on-screen keyboard resizes it
+     (interactive-widget=resizes-content), keeping the logged-sets list
+     scrollable above the keyboard instead of hidden behind it. */
+  max-height: min(88dvh, 760px);
   overflow: hidden;
 }
 
@@ -1317,6 +1321,19 @@ body.light-theme .modal-content {
 
 .toast-notification {
   max-width: min(420px, calc(100vw - 32px));
+  /* Purely informational; never intercept taps aimed at content beneath it. */
+  pointer-events: none;
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 /* ---- Responsive helpers + mobile drawer (Tauri mobile / narrow webviews) ---- */
@@ -1462,11 +1479,15 @@ body.light-theme .modal-content {
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* Top placement on mobile: the bottom corner sits over the set rows being
+     edited (and the keyboard), so the toast was blocking the next tap. */
   .toast-notification {
     left: 16px !important;
     right: 16px !important;
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    bottom: auto !important;
+    top: calc(12px + env(safe-area-inset-top, 0px));
     justify-content: center;
+    animation: slideInDown var(--transition-normal) !important;
   }
 
   .header {
@@ -1665,6 +1686,7 @@ body.light-theme .modal-content {
     width: 100%;
     max-width: none !important;
     max-height: calc(92vh - env(safe-area-inset-top, 0px));
+    max-height: calc(92dvh - env(safe-area-inset-top, 0px));
     border-radius: 18px 18px 0 0;
     padding: 18px;
     padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));

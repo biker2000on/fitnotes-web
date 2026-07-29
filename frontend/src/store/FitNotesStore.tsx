@@ -157,7 +157,7 @@ export function useFitNotesController() {
     handleAddSet, handleSelectLogForEdit, handleCancelEdit, handleCopyPreviousSet, handleClearDay,
     handleReplaceExercise, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
     saveExerciseComment, handleToggleComplete, handleMarkAllComplete,
-    handleMarkExerciseComplete, handleDeleteSet, handleDeleteWorkoutRoutine, handleCopyWorkoutConfirm,
+    handleMarkExerciseComplete, handleBulkUpdateExerciseSets, handleDeleteSet, handleDeleteWorkoutRoutine, handleCopyWorkoutConfirm,
     recordWorkoutRoutine, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     formatLogValue, handleSaveComment, shareWorkout,
     handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
@@ -717,7 +717,24 @@ export function useFitNotesController() {
     setGoals(gls);
     setMeasurements(activeMeasurements);
     setExercises(activeExercises);
-    if (isVisibleDate) setCurrentLogs(logs);
+    if (isVisibleDate) {
+      // Keep on-screen row order stable across refreshes: any edit bumps
+      // last_modified, which the template-order fallback sort keys on, so a
+      // plain re-sort would rotate checked-off/edited sets to the end. Logs
+      // already displayed keep their positions; new ones append in sorted order.
+      setCurrentLogs(prev => {
+        const pos = new Map(prev.map((l, i) => [l.id, i]));
+        if (!logs.some(l => pos.has(l.id))) return logs;
+        return [...logs].sort((a, b) => {
+          const ai = pos.get(a.id);
+          const bi = pos.get(b.id);
+          if (ai !== undefined && bi !== undefined) return ai - bi;
+          if (ai !== undefined) return -1;
+          if (bi !== undefined) return 1;
+          return 0;
+        });
+      });
+    }
     setAllLogs(allLgs);
     setBodyWeights(weights);
     setRoutines(activeRoutines);
@@ -772,7 +789,12 @@ export function useFitNotesController() {
       const finalStoreLogs = [...otherStoreLogs, ...reorderedStoreLogs];
       localStorage.setItem('fn_training_logs', JSON.stringify(finalStoreLogs));
 
-      await refreshData();
+      // Apply the new order to state directly: refreshData now preserves the
+      // on-screen order, so it can't be used to pick up the reorder.
+      setCurrentLogs(prev => {
+        const queue = [...reordered];
+        return prev.map(l => (l.exercise_id === exerciseId ? queue.shift() ?? l : l));
+      });
       triggerToast('Sets reordered.');
       return;
     }
@@ -882,7 +904,7 @@ export function useFitNotesController() {
     handleAuth, handleLogout, triggerSync, handleBackupUpload, handleBackupDownload, handleCsvDownload, handleAddSet, handleToggleComplete, handleDeleteSet,
     handleCopyWorkoutConfirm, handleImportRoutinePopulated, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     handleDragEnd, formatLogValue, handleSaveComment, toggleCategoryExpand, handleToggleExerciseFavourite, openExerciseEditor,
-    handleMarkAllComplete, handleMarkExerciseComplete,
+    handleMarkAllComplete, handleMarkExerciseComplete, handleBulkUpdateExerciseSets,
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise, handleMergeExercises,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
     handleCreateRoutineSuperset, handleUpdateRoutineGroupName, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,

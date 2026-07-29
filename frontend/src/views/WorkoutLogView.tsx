@@ -6,7 +6,7 @@ import {
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
   RefreshCw, WifiOff, ArrowLeftRight, Square, Play,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, useRef, type FocusEvent } from 'react';
+import { useEffect, useMemo, useState, useRef, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
@@ -15,6 +15,7 @@ import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '..
 import { aggregateMuscleTargets } from '../lib/muscles';
 import { formatSessionSets, getProgressionSuggestion } from '../lib/progression';
 import { MuscleDiagramDetails } from '../components/MuscleDiagram';
+import { AttentionCard } from '../components/AttentionCard';
 import type { RoutineSection } from '../types';
 import { addDays } from '../lib/date';
 
@@ -150,13 +151,16 @@ export function WorkoutLogView() {
     workoutComment, setWorkoutComment, handleSaveComment,
     settings, logComment, setLogComment, logRpe, setLogRpe, logRir, setLogRir, logSetType, setLogSetType, handleCopyPreviousSet, handleClearDay,
     startRestTimer, shareWorkout, triggerToast,
-    editingLog, handleSelectLogForEdit, handleCancelEdit,
+    editingLog, setEditingLog, handleSelectLogForEdit, handleCancelEdit, handleBulkUpdateExerciseSets,
     setHistoryExerciseId,
     workoutRoutines, routines, handleDeleteWorkoutRoutine,
     setReplaceTargetExerciseId,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
+  // Bulk edit mode: the entry form's values apply to every set of the
+  // selected exercise on submit instead of adding/updating a single set.
+  const [bulkEditMode, setBulkEditMode] = useState(false);
 
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
   const isSwipingRef = useRef<boolean>(false);
@@ -378,20 +382,59 @@ export function WorkoutLogView() {
   }, [showEntryModal, showCommentsModal, editingLog]);
 
   const submitSet = async () => {
+    if (bulkEditMode) {
+      await handleBulkUpdateExerciseSets();
+      setBulkEditMode(false);
+      return;
+    }
     await handleAddSet();
+  };
+
+  // Enter submits, and while editing it advances to the next logged set of the
+  // exercise so a whole session can be corrected without touching the mouse.
+  const submitAndAdvance = async () => {
+    if (bulkEditMode || !editingLog) {
+      await submitSet();
+      return;
+    }
+    const idx = selectedExerciseLogs.findIndex(l => l.id === editingLog.id);
+    await handleAddSet();
+    const next = idx !== -1 ? selectedExerciseLogs[idx + 1] : undefined;
+    if (next) handleSelectLogForEdit(next);
+  };
+
+  const handleEntryKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // The global shortcut listener also submits on Enter in logging fields;
+      // stop propagation so this handler owns the event (else double-add).
+      e.stopPropagation();
+      submitAndAdvance();
+    }
   };
 
   const cancelEntry = () => {
     if (editingLog) handleCancelEdit();
+    setBulkEditMode(false);
     setShowEntryModal(false);
   };
 
+  const startBulkEdit = () => {
+    const first = selectedExerciseLogs[0];
+    if (!first) return;
+    handleSelectLogForEdit(first); // prefill the form from the first set
+    setEditingLog(null); // but stay out of single-set edit mode
+    setBulkEditMode(true);
+  };
+
   const openEntryForLog = (log: typeof currentLogs[number]) => {
+    setBulkEditMode(false);
     handleSelectLogForEdit(log);
     setShowEntryModal(true);
   };
 
   const openEntryForExercise = (exercise: typeof exercises[number]) => {
+    setBulkEditMode(false);
     setSelectedExercise(exercise);
     setShowEntryModal(true);
   };
@@ -451,6 +494,8 @@ export function WorkoutLogView() {
           </div>
         )}
 
+        <AttentionCard />
+
         {showEntryModal && selectedExercise && (
           <div className="modal-overlay mobile-modal-overlay" onClick={cancelEntry}>
             <div className="modal-content mobile-modal-content workout-entry-modal" onClick={(e) => e.stopPropagation()}>
@@ -461,7 +506,7 @@ export function WorkoutLogView() {
                     {selectedExercise.name}
                   </div>
                   <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>
-                    {editingLog ? 'Edit logged set' : 'Add a set'}
+                    {bulkEditMode ? `Bulk edit all ${selectedExerciseLogs.length} sets` : editingLog ? 'Edit logged set' : 'Add a set'}
                   </div>
                 </div>
                 <button className="btn btn-secondary icon-btn" onClick={cancelEntry} aria-label="Close set entry">
@@ -515,7 +560,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Weight ({userUnit})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String(Math.max(0, parseFloat(w) - (userUnit === 'kg' ? 2.5 : 5))))} tabIndex={-1}>-</button>
-                    <input id="log-weight-input" type="number" value={logWeight} onFocus={selectInputContents} onChange={(e) => setLogWeight(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
+                    <input id="log-weight-input" type="number" value={logWeight} onFocus={selectInputContents} onChange={(e) => setLogWeight(e.target.value)} onKeyDown={handleEntryKeyDown} placeholder="0.0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogWeight(w => String((parseFloat(w) || 0) + (userUnit === 'kg' ? 2.5 : 5)))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -525,7 +570,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Reps</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String(Math.max(0, parseInt(r) - 1)))} tabIndex={-1}>-</button>
-                    <input id="log-reps-input" type="number" value={logReps} onFocus={selectInputContents} onChange={(e) => setLogReps(e.target.value)} placeholder="0" style={{ textAlign: 'center' }} />
+                    <input id="log-reps-input" type="number" value={logReps} onFocus={selectInputContents} onChange={(e) => setLogReps(e.target.value)} onKeyDown={handleEntryKeyDown} placeholder="0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogReps(r => String((parseInt(r) || 0) + 1))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -535,7 +580,7 @@ export function WorkoutLogView() {
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Distance ({settings.distance_unit === 2 ? 'mi' : 'km'})</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String(Math.max(0, parseFloat(d) - 0.5)))} tabIndex={-1}>-</button>
-                    <input id="log-distance-input" type="number" value={logDistance} onFocus={selectInputContents} onChange={(e) => setLogDistance(e.target.value)} placeholder="0.0" style={{ textAlign: 'center' }} />
+                    <input id="log-distance-input" type="number" value={logDistance} onFocus={selectInputContents} onChange={(e) => setLogDistance(e.target.value)} onKeyDown={handleEntryKeyDown} placeholder="0.0" style={{ textAlign: 'center' }} />
                     <button className="btn btn-secondary" style={{ padding: '8px 12px', minWidth: '36px', height: '46px' }} onClick={() => setLogDistance(d => String((parseFloat(d) || 0) + 0.5))} tabIndex={-1}>+</button>
                   </div>
                 </div>
@@ -544,12 +589,12 @@ export function WorkoutLogView() {
                 <div style={{ flex: 1, minWidth: '160px' }}>
                   <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Duration (min/sec)</label>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                    <input id="log-duration-min-input" type="number" placeholder="Min" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onChange={(e) => {
+                    <input id="log-duration-min-input" type="number" placeholder="Min" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onKeyDown={handleEntryKeyDown} onChange={(e) => {
                       const m = parseInt(e.target.value) || 0;
                       const s = parseInt(logDuration) % 60 || 0;
                       setLogDuration((m * 60 + s).toString());
                     }} value={Math.floor(parseInt(logDuration) / 60) || ''} />
-                    <input id="log-duration-sec-input" type="number" placeholder="Sec" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onChange={(e) => {
+                    <input id="log-duration-sec-input" type="number" placeholder="Sec" style={{ flex: 1, textAlign: 'center' }} onFocus={selectInputContents} onKeyDown={handleEntryKeyDown} onChange={(e) => {
                       const m = Math.floor(parseInt(logDuration) / 60) || 0;
                       const s = parseInt(e.target.value) || 0;
                       setLogDuration((m * 60 + s).toString());
@@ -559,9 +604,14 @@ export function WorkoutLogView() {
               )}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button className="btn btn-primary" onClick={submitSet} style={{ height: '46px', whiteSpace: 'nowrap' }}>
-                  {editingLog ? <Check size={18} /> : <Plus size={18} />} {editingLog ? 'Update Set' : 'Add Set'}
+                  {editingLog || bulkEditMode ? <Check size={18} /> : <Plus size={18} />} {bulkEditMode ? 'Update All Sets' : editingLog ? 'Update Set' : 'Add Set'}
                 </button>
-                {editingLog && (
+                {bulkEditMode && (
+                  <button className="btn btn-secondary" onClick={() => setBulkEditMode(false)} style={{ height: '46px', whiteSpace: 'nowrap' }}>
+                    Cancel Bulk Edit
+                  </button>
+                )}
+                {editingLog && !bulkEditMode && (
                   <button className="btn btn-secondary" onClick={cancelEntry} style={{ height: '46px', whiteSpace: 'nowrap' }}>
                     Cancel Edit
                   </button>
@@ -574,13 +624,14 @@ export function WorkoutLogView() {
               <select aria-label="Set type" value={logSetType} onChange={(e) => setLogSetType(e.target.value)} style={{ width: '120px', padding: '8px' }}>
                 <option value="working">Working</option><option value="warmup">Warm-up</option><option value="amrap">AMRAP</option><option value="failure">Failure</option><option value="drop">Drop set</option>
               </select>
-              <input aria-label="RPE" type="number" min="1" max="10" step="0.5" value={logRpe} onChange={(e) => setLogRpe(e.target.value)} placeholder="RPE" style={{ width: '72px', padding: '8px' }} />
-              <input aria-label="RIR" type="number" min="0" max="10" step="0.5" value={logRir} onChange={(e) => setLogRir(e.target.value)} placeholder="RIR" style={{ width: '72px', padding: '8px' }} />
+              <input aria-label="RPE" type="number" min="1" max="10" step="0.5" value={logRpe} onChange={(e) => setLogRpe(e.target.value)} onKeyDown={handleEntryKeyDown} placeholder="RPE" style={{ width: '72px', padding: '8px' }} />
+              <input aria-label="RIR" type="number" min="0" max="10" step="0.5" value={logRir} onChange={(e) => setLogRir(e.target.value)} onKeyDown={handleEntryKeyDown} placeholder="RIR" style={{ width: '72px', padding: '8px' }} />
               <input
                 id="log-comment-input"
                 type="text"
                 value={logComment}
                 onChange={(e) => setLogComment(e.target.value)}
+                onKeyDown={handleEntryKeyDown}
                 placeholder="Set comment (optional)"
                 style={{ flex: 1, minWidth: '160px', padding: '8px' }}
               />
@@ -594,7 +645,14 @@ export function WorkoutLogView() {
 
             {/* Logged Sets list */}
             <div style={{ marginTop: '12px' }}>
-              <h3 style={{ fontSize: '14px', color: 'var(--text-secondary-dark)', fontWeight: 700, marginBottom: '12px' }}>Logged Sets</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ fontSize: '14px', color: 'var(--text-secondary-dark)', fontWeight: 700, margin: 0 }}>Logged Sets</h3>
+                {selectedExerciseLogs.length > 1 && !bulkEditMode && (
+                  <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={startBulkEdit}>
+                    Edit All Sets
+                  </button>
+                )}
+              </div>
               <DragDropContext onDragEnd={handleDragEnd}>
                 <Droppable droppableId="logged-sets-list">
                   {(provided) => (

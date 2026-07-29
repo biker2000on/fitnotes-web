@@ -51,7 +51,8 @@ export default defineConfig({
     exclude: ['@sqlite.org/sqlite-wasm'],
   },
   server: {
-    port: 3001,
+    // PORT lets a harness assign a free port; defaults to the usual 3001.
+    port: Number(process.env.PORT) || 3001,
     strictPort: true,
   },
   build: {

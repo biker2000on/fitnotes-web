@@ -369,6 +369,72 @@ export const weeklyMuscleVolume = (
     .sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name));
 };
 
+// --- Training consistency (year heatmap + streaks) ---
+export interface DayTotals { sets: number; volume: number; }
+
+// Per-date set/volume totals across all exercises. A logged set counts as
+// activity regardless of completion state.
+export const trainingDayTotals = (logs: TrainingLog[]): Map<string, DayTotals> => {
+  const totals = new Map<string, DayTotals>();
+  for (const l of logs) {
+    if (l.is_deleted) continue;
+    const t = totals.get(l.date) ?? { sets: 0, volume: 0 };
+    t.sets += 1;
+    t.volume += (l.metric_weight ?? 0) * (l.reps ?? 0);
+    totals.set(l.date, t);
+  }
+  return totals;
+};
+
+export interface ConsistencyStats {
+  trainingDays: number;
+  weeksActive: number;
+  currentStreakWeeks: number;
+  longestStreakWeeks: number;
+}
+
+// Weekly training streaks over a set of training dates. A week counts if it
+// has at least one training day; the in-progress week gets grace (an empty
+// current week doesn't break the streak until it's over).
+export const weeklyStreaks = (
+  trainingDates: Iterable<string>,
+  firstDay = 1,
+  today = new Date(),
+): ConsistencyStats => {
+  const weekKeys = new Set<string>();
+  let trainingDays = 0;
+  for (const date of trainingDates) {
+    trainingDays += 1;
+    weekKeys.add(localDateKey(startOfWeek(new Date(date + 'T00:00:00'), firstDay)));
+  }
+
+  const sorted = [...weekKeys].sort();
+  const weekMs = (key: string) => new Date(key + 'T00:00:00').getTime();
+  let longest = 0;
+  let run = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    // Round absorbs DST shifts: week gaps are 7 days ± 1 hour in local time.
+    const consecutive = i > 0 && Math.round((weekMs(sorted[i]) - weekMs(sorted[i - 1])) / (7 * 86400000)) === 1;
+    run = consecutive ? run + 1 : 1;
+    longest = Math.max(longest, run);
+  }
+
+  let current = 0;
+  const cursor = startOfWeek(today, firstDay);
+  if (!weekKeys.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 7);
+  while (weekKeys.has(localDateKey(cursor))) {
+    current += 1;
+    cursor.setDate(cursor.getDate() - 7);
+  }
+
+  return {
+    trainingDays,
+    weeksActive: weekKeys.size,
+    currentStreakWeeks: current,
+    longestStreakWeeks: longest,
+  };
+};
+
 // --- Combined strength analytics ---
 export interface StrengthPoint {
   date: string;

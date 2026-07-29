@@ -4,12 +4,14 @@ import {
   ResponsiveContainer, AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
-import { LineChart as LineIcon, PieChart as PieIcon, GitCompare, BarChart3, History as HistoryIcon, Star, Activity, Trophy } from 'lucide-react';
+import { LineChart as LineIcon, PieChart as PieIcon, GitCompare, BarChart3, History as HistoryIcon, Star, Activity, Trophy, CalendarDays, Scale } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import {
   exerciseGraphSeries, breakdown, periodStart, workoutGraphSeries, weeklyMuscleVolume, startOfWeek, strengthAnalytics,
   type BreakdownMetric, type BreakdownPeriod, type WorkoutGroupBy,
 } from '../lib/stats';
+import { matchLiftPattern, strengthStandard, latestBodyweightKg, STANDARD_LEVELS, PATTERN_DISPLAY } from '../lib/standards';
+import { YearHeatmap } from '../components/YearHeatmap';
 import { intColorToHex } from '../lib/colors';
 
 type Metric = 'volume' | 'maxWeight' | 'estimated1RM' | 'maxReps' | 'totalReps';
@@ -29,8 +31,8 @@ const trend = (vals: number[]): number[] => {
 };
 
 export function AnalysisView() {
-  const { exercises, categories, allLogs, userUnit, settings, analyticExerciseId, setAnalyticExerciseId, setHistoryExerciseId, graphFavourites, saveGraphFavourite, uuidv4 } = useFitNotesStore();
-  const [tab, setTab] = useState<'graph' | 'muscles' | 'strength' | 'breakdown' | 'comparison' | 'workout'>('graph');
+  const { exercises, categories, allLogs, bodyWeights, userUnit, settings, analyticExerciseId, setAnalyticExerciseId, setHistoryExerciseId, graphFavourites, saveGraphFavourite, uuidv4 } = useFitNotesStore();
+  const [tab, setTab] = useState<'graph' | 'muscles' | 'strength' | 'consistency' | 'breakdown' | 'comparison' | 'workout'>('graph');
   const [metric, setMetric] = useState<Metric>('volume');
   const [gFrom, setGFrom] = useState('');
   const [gTo, setGTo] = useState('');
@@ -83,6 +85,17 @@ export function AnalysisView() {
   );
   const latestStrength = strengthSeries[strengthSeries.length - 1];
   const bestStrength = strengthSeries.reduce((best, point) => Math.max(best, point.adjusted1RM), 0);
+
+  // Bodyweight-relative strength standard for recognised barbell lifts.
+  const bodyweight = useMemo(() => latestBodyweightKg(bodyWeights), [bodyWeights]);
+  const liftPattern = useMemo(
+    () => matchLiftPattern(exercises.find(e => e.id === analyticExerciseId)?.name ?? ''),
+    [exercises, analyticExerciseId],
+  );
+  const bestAdjustedKg = strengthData.series.reduce((best, point) => Math.max(best, point.adjusted1RM), 0);
+  const standard = liftPattern && bodyweight
+    ? strengthStandard(bestAdjustedKg, bodyweight.weightKg, liftPattern)
+    : null;
   const series = useMemo(() => {
     let logs = allLogs.filter(l => l.exercise_id === analyticExerciseId);
     if (gFrom) logs = logs.filter(l => l.date >= gFrom);
@@ -118,6 +131,7 @@ export function AnalysisView() {
         <button className={`btn ${tab === 'graph' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('graph')}><LineIcon size={16} /> Exercise</button>
         <button className={`btn ${tab === 'muscles' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('muscles')}><Activity size={16} /> Muscle Volume</button>
         <button className={`btn ${tab === 'strength' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('strength')}><Trophy size={16} /> Strength</button>
+        <button className={`btn ${tab === 'consistency' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('consistency')}><CalendarDays size={16} /> Consistency</button>
         <button className={`btn ${tab === 'breakdown' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('breakdown')}><PieIcon size={16} /> Breakdown</button>
         <button className={`btn ${tab === 'comparison' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('comparison')}><GitCompare size={16} /> Compare</button>
         <button className={`btn ${tab === 'workout' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('workout')}><BarChart3 size={16} /> Workout</button>
@@ -252,6 +266,50 @@ export function AnalysisView() {
               </div>
             </div>
 
+            {liftPattern && !bodyweight && (
+              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+                <Scale size={13} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
+                Log a body weight to see how this lift grades against bodyweight-relative strength standards.
+              </div>
+            )}
+            {standard && bodyweight && (
+              <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Scale size={16} color="var(--primary)" />
+                    <span style={{ fontSize: '13px', fontWeight: 700 }}>Strength Standard</span>
+                    <span style={{
+                      fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '999px',
+                      background: standard.levelIndex >= 3 ? 'var(--success)' : 'var(--primary)', color: '#fff',
+                    }}>
+                      {standard.level}
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '18px', fontWeight: 800 }}>{standard.ratio}× <small style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary-dark)' }}>bodyweight</small></span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  {STANDARD_LEVELS.map((level, i) => (
+                    <div key={level} style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <div style={{ height: '6px', borderRadius: '999px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: i < standard.levelIndex ? '100%' : i === standard.levelIndex ? `${Math.round(standard.progressToNext * 100)}%` : '0%',
+                          background: i < 3 ? 'var(--primary)' : 'var(--success)',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '9px', color: i <= standard.levelIndex ? 'inherit' : 'var(--text-secondary-dark)', fontWeight: i === standard.levelIndex ? 800 : 500, textAlign: 'center' }}>{level}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>
+                  {standard.nextLevel && standard.nextRatio
+                    ? <>Next: {standard.nextLevel} at {standard.nextRatio}× BW ({displayStrengthWeight(standard.nextRatio * bodyweight.weightKg)} {userUnit} e1RM). </>
+                    : <>Top band reached. </>}
+                  Based on best RPE-adjusted e1RM vs your {displayStrengthWeight(bodyweight.weightKg)} {userUnit} bodyweight ({niceDate(bodyweight.date)}). Reference bands for the barbell {PATTERN_DISPLAY[standard.pattern]}.
+                </div>
+              </div>
+            )}
+
             <div style={{ width: '100%', height: 320 }}>
               {strengthSeries.length === 0 ? (
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '48px' }}>No completed weighted working sets for this exercise yet.</p>
@@ -314,6 +372,18 @@ export function AnalysisView() {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'consistency' && (
+        <div className="card">
+          <div>
+            <div className="card-title">Training Consistency</div>
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+              Past 12 months of logged sets. Cell shade reflects session volume; streaks count calendar weeks with at least one workout.
+            </div>
+          </div>
+          <YearHeatmap />
         </div>
       )}
 

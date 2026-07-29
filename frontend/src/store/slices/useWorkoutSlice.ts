@@ -187,13 +187,18 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
         rir: parseEffortInput(logRir, 0),
         set_type: logSetType || 'working',
       };
-      await db.execute('UPDATE training_logs', [updatedLog]);
+      // Optimistic: patch the row in state first so back-to-back edits feel
+      // instant; a full refreshData would also re-sort the day's rows.
+      if (updatedLog.date === selectedDateRef.current) {
+        setCurrentLogs(prev => prev.map(l => (l.id === updatedLog.id ? updatedLog : l)));
+      }
+      setAllLogs(prev => prev.map(l => (l.id === updatedLog.id ? updatedLog : l)));
       setEditingLog(null);
       setLogComment('');
       setLogRpe('');
       setLogRir('');
       setLogSetType('working');
-      await late.refreshData();
+      await db.execute('UPDATE training_logs', [updatedLog]);
       triggerToast('Set updated.');
       return;
     }
@@ -406,21 +411,27 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
   const handleToggleComplete = async (log: TrainingLog) => {
     const updated = { ...log, is_complete: !log.is_complete };
+    // Optimistic: flip the row in place immediately; persistence and the
+    // auto-stop check follow. A full refreshData here re-sorts the day and
+    // adds a visible delay before the checkmark appears.
+    setCurrentLogs(prev => prev.map(l => (l.id === log.id ? updated : l)));
+    setAllLogs(prev => prev.map(l => (l.id === log.id ? updated : l)));
     await db.execute('INSERT INTO training_logs', [updated]);
     if (updated.is_complete) await maybeAutoStopWorkoutTimer(log.date);
-    await late.refreshData();
   };
 
   const handleMarkAllComplete = async () => {
     const uncompleted = currentLogs.filter(l => !l.is_complete);
     if (uncompleted.length === 0) return;
 
+    const ids = new Set(uncompleted.map(l => l.id));
+    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
+    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
     for (const log of uncompleted) {
       const updated = { ...log, is_complete: true };
       await db.execute('INSERT INTO training_logs', [updated]);
     }
     await maybeAutoStopWorkoutTimer(selectedDateRef.current);
-    await late.refreshData();
     triggerToast('All sets marked complete.');
   };
 
@@ -428,13 +439,53 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     const exLogs = currentLogs.filter(l => l.exercise_id === exerciseId && !l.is_complete);
     if (exLogs.length === 0) return;
 
+    const ids = new Set(exLogs.map(l => l.id));
+    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
+    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
     for (const log of exLogs) {
       const updated = { ...log, is_complete: true };
       await db.execute('INSERT INTO training_logs', [updated]);
     }
     await maybeAutoStopWorkoutTimer(selectedDateRef.current);
-    await late.refreshData();
     triggerToast('All exercise sets marked complete.');
+  };
+
+  // Bulk edit: apply the current entry-form values (weight/reps/distance/
+  // duration, plus set type and RPE/RIR when provided) to every set of the
+  // selected exercise on the selected day. Per-set comments are left alone.
+  const handleBulkUpdateExerciseSets = async () => {
+    if (!selectedExercise) return;
+    const t = selectedExercise.exercise_type_id;
+    const weight = typeHasWeight(t) ? (parseFloat(logWeight) || null) : null;
+    const reps = typeHasReps(t) ? (parseInt(logReps) || null) : null;
+    const distance = typeHasDistance(t) ? (logDistance ? (parseFloat(logDistance) * (settings.distance_unit === 2 ? 1.60934 : 1)) : null) : null;
+    const duration = typeHasDuration(t) ? (parseInt(logDuration) || null) : null;
+    const targets = currentLogs.filter(l => l.exercise_id === selectedExercise.id);
+    if (targets.length === 0) return;
+
+    const rpe = parseEffortInput(logRpe, 1);
+    const rir = parseEffortInput(logRir, 0);
+    const updatedById = new Map<string, TrainingLog>();
+    for (const log of targets) {
+      updatedById.set(log.id, {
+        ...log,
+        metric_weight: weight,
+        reps,
+        unit: userUnit === 'kg' ? 1 : 2,
+        distance,
+        duration_seconds: duration,
+        rpe: rpe ?? log.rpe,
+        rir: rir ?? log.rir,
+        set_type: logSetType || log.set_type || 'working',
+      });
+    }
+
+    setCurrentLogs(prev => prev.map(l => updatedById.get(l.id) ?? l));
+    setAllLogs(prev => prev.map(l => updatedById.get(l.id) ?? l));
+    for (const updated of updatedById.values()) {
+      await db.execute('UPDATE training_logs', [updated]);
+    }
+    triggerToast(`Updated ${updatedById.size} set${updatedById.size === 1 ? '' : 's'}.`);
   };
 
   const handleDeleteSet = async (id: string) => {
@@ -823,7 +874,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     handleAddSet, handleSelectLogForEdit, handleCancelEdit, handleCopyPreviousSet, handleClearDay,
     handleReplaceExercise, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
     maybeAutoStopWorkoutTimer, saveExerciseComment, handleToggleComplete, handleMarkAllComplete,
-    handleMarkExerciseComplete, handleDeleteSet, handleDeleteWorkoutRoutine, handleCopyWorkoutConfirm,
+    handleMarkExerciseComplete, handleBulkUpdateExerciseSets, handleDeleteSet, handleDeleteWorkoutRoutine, handleCopyWorkoutConfirm,
     recordWorkoutRoutine, handleBulkDelete, handleBulkMoveConfirm, handleBulkIncrementWeight, handleBulkIncrementReps,
     formatLogValue, handleSaveComment, shareWorkout,
     handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,

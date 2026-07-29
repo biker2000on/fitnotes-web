@@ -4,7 +4,9 @@ import {
   estimated1RM,
   rpeAdjustedEstimated1RM,
   strengthAnalytics,
+  trainingDayTotals,
   weeklyMuscleVolume,
+  weeklyStreaks,
 } from './stats';
 
 const exercise = (overrides: Partial<Exercise> = {}): Exercise => ({
@@ -138,5 +140,55 @@ describe('combined strength analytics', () => {
 
     expect(result.repMaxGrid[0].logId).toBe('lbs');
     expect(result.repMaxGrid[0].weight).toBeCloseTo(102.1, 1);
+  });
+});
+
+describe('training consistency', () => {
+  it('totals sets and volume per day, skipping deleted logs', () => {
+    const totals = trainingDayTotals([
+      log({ id: 'a', date: '2026-07-20', metric_weight: 100, reps: 5 }),
+      log({ id: 'b', date: '2026-07-20', metric_weight: 100, reps: 3 }),
+      log({ id: 'c', date: '2026-07-21', metric_weight: 80, reps: 10 }),
+      log({ id: 'd', date: '2026-07-21', is_deleted: true }),
+    ]);
+
+    expect(totals.get('2026-07-20')).toEqual({ sets: 2, volume: 800 });
+    expect(totals.get('2026-07-21')).toEqual({ sets: 1, volume: 800 });
+  });
+
+  it('counts weekly streaks with grace for the in-progress week', () => {
+    // Weeks (Mon start): Jul 6, Jul 13, Jul 20 trained; nothing yet in the
+    // week of Jul 27 — today is Wed Jul 29, so the streak should hold at 3.
+    const stats = weeklyStreaks(
+      ['2026-07-08', '2026-07-15', '2026-07-16', '2026-07-22'],
+      1,
+      new Date(2026, 6, 29),
+    );
+
+    expect(stats.trainingDays).toBe(4);
+    expect(stats.weeksActive).toBe(3);
+    expect(stats.currentStreakWeeks).toBe(3);
+    expect(stats.longestStreakWeeks).toBe(3);
+  });
+
+  it('resets the run after a fully missed week but keeps the longest', () => {
+    const stats = weeklyStreaks(
+      ['2026-06-01', '2026-06-08', '2026-06-15', '2026-07-20'],
+      1,
+      new Date(2026, 6, 29),
+    );
+
+    expect(stats.longestStreakWeeks).toBe(3);
+    // Only the week of Jul 20 counts toward the current streak.
+    expect(stats.currentStreakWeeks).toBe(1);
+
+    // With the last workout two-plus weeks back, the streak is fully broken.
+    const stale = weeklyStreaks(['2026-07-06'], 1, new Date(2026, 6, 29));
+    expect(stale.currentStreakWeeks).toBe(0);
+  });
+
+  it('handles no training history', () => {
+    const stats = weeklyStreaks([], 1, new Date(2026, 6, 29));
+    expect(stats).toEqual({ trainingDays: 0, weeksActive: 0, currentStreakWeeks: 0, longestStreakWeeks: 0 });
   });
 });
