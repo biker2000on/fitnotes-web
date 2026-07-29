@@ -143,6 +143,8 @@ func main() {
 			r.Get("/exercises", handlers.APIExercisesHandler)
 			r.Get("/workouts", handlers.APIWorkoutsHandler)
 			r.Get("/body-weights", handlers.APIBodyWeightsHandler)
+			r.Get("/workout-groups", handlers.APIWorkoutGroupsHandler)
+			r.Get("/workout-routines", handlers.APIWorkoutRoutinesHandler)
 		})
 	})
 
