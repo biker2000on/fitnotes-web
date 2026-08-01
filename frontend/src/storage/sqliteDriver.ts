@@ -20,6 +20,7 @@ import {
   virtualDefaultMeasurements,
   virtualDefaultPlates,
   SqlStatement,
+  DBOperation,
 } from './shared';
 
 interface WorkerResponse {
@@ -223,6 +224,20 @@ export class SqliteWasmDriver implements DBDriver {
     } else {
       await this.rawExec(sql, params);
     }
+    this.notifyListeners();
+  }
+
+  async executeBatch(operations: DBOperation[]): Promise<void> {
+    if (!(await this.useSqlite())) {
+      if (this.fallback.executeBatch) return this.fallback.executeBatch(operations);
+      for (const operation of operations) await this.fallback.execute(operation.sql, operation.params || []);
+      return;
+    }
+
+    const statements = operations.flatMap(operation => (
+      buildShorthandStatements(operation.sql, operation.params || []) || [{ sql: operation.sql, params: operation.params || [] }]
+    ));
+    await this.rawBatch(statements);
     this.notifyListeners();
   }
 

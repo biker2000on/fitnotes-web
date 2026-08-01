@@ -11,6 +11,34 @@ use tauri::{Manager, State};
 
 struct DbConnection(Mutex<Connection>);
 
+#[derive(Deserialize)]
+struct SqlBatchStatement {
+    sql: String,
+    #[serde(default)]
+    params: Vec<Value>,
+}
+
+fn json_params(params: &[Value]) -> Vec<Box<dyn rusqlite::ToSql>> {
+    params
+        .iter()
+        .map(|v| -> Box<dyn rusqlite::ToSql> {
+            match v {
+                Value::Null => Box::new(rusqlite::types::Null),
+                Value::Bool(b) => Box::new(*b),
+                Value::Number(num) => {
+                    if let Some(i) = num.as_i64() {
+                        Box::new(i)
+                    } else {
+                        Box::new(num.as_f64().unwrap_or(0.0))
+                    }
+                }
+                Value::String(s) => Box::new(s.clone()),
+                _ => Box::new(v.to_string()),
+            }
+        })
+        .collect()
+}
+
 fn error_chain(error: &dyn Error) -> String {
     let mut message = error.to_string();
     let mut current = error.source();
@@ -42,24 +70,7 @@ fn tauri_query(
         .map_err(|e| format!("Query prepare failed for `{}`: {}", sql, e))?;
 
     // Map incoming dynamic JSON parameters to SQLite parameters
-    let sql_params: Vec<Box<dyn rusqlite::ToSql>> = params
-        .iter()
-        .map(|v| -> Box<dyn rusqlite::ToSql> {
-            match v {
-                Value::Null => Box::new(rusqlite::types::Null),
-                Value::Bool(b) => Box::new(*b),
-                Value::Number(num) => {
-                    if let Some(i) = num.as_i64() {
-                        Box::new(i)
-                    } else {
-                        Box::new(num.as_f64().unwrap_or(0.0))
-                    }
-                }
-                Value::String(s) => Box::new(s.clone()),
-                _ => Box::new(v.to_string()),
-            }
-        })
-        .collect();
+    let sql_params = json_params(&params);
 
     let sql_params_ref: Vec<&dyn rusqlite::ToSql> = sql_params.iter().map(|b| b.as_ref()).collect();
 
@@ -105,6 +116,72 @@ fn tauri_query(
     }
 
     Ok(result)
+}
+
+// Executes all submitted writes under one SQLite transaction. This is used for
+// routine-editor mutations that must never expose an orphaned group/link pair.
+#[tauri::command]
+fn tauri_execute_batch(
+    statements: Vec<SqlBatchStatement>,
+    db_state: State<'_, DbConnection>,
+) -> std::result::Result<(), String> {
+    let mut conn = db_state.0.lock().unwrap();
+    execute_sql_batch(&mut conn, statements)
+}
+
+fn execute_sql_batch(
+    conn: &mut Connection,
+    statements: Vec<SqlBatchStatement>,
+) -> std::result::Result<(), String> {
+    let tx = conn
+        .transaction()
+        .map_err(|e| format!("Batch transaction begin failed: {}", e))?;
+
+    for statement in statements {
+        let sql_params = json_params(&statement.params);
+        let sql_params_ref: Vec<&dyn rusqlite::ToSql> =
+            sql_params.iter().map(|b| b.as_ref()).collect();
+        tx.execute(&statement.sql, &sql_params_ref[..])
+            .map_err(|e| format!("Batch execute failed for `{}`: {}", statement.sql, e))?;
+    }
+
+    tx.commit()
+        .map_err(|e| format!("Batch transaction commit failed: {}", e))?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::{execute_sql_batch, SqlBatchStatement};
+    use rusqlite::Connection;
+    use serde_json::json;
+
+    #[test]
+    fn failed_batch_rolls_back_every_statement() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute("CREATE TABLE items (id TEXT PRIMARY KEY)", [])
+            .unwrap();
+
+        let result = execute_sql_batch(
+            &mut conn,
+            vec![
+                SqlBatchStatement {
+                    sql: "INSERT INTO items (id) VALUES (?)".into(),
+                    params: vec![json!("first")],
+                },
+                SqlBatchStatement {
+                    sql: "INSERT INTO missing_table (id) VALUES (?)".into(),
+                    params: vec![json!("second")],
+                },
+            ],
+        );
+
+        assert!(result.is_err());
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM items", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
 }
 
 #[tauri::command]
@@ -1621,6 +1698,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             tauri_query,
             tauri_execute,
+            tauri_execute_batch,
             tauri_sync,
             tauri_invalidate_cache
         ])

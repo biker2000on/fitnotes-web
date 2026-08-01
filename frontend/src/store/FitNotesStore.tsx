@@ -186,7 +186,8 @@ export function useFitNotesController() {
     editorSectionExercises, setEditorSectionExercises, editorExerciseSets, setEditorExerciseSets,
     routines, setRoutines,
     showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,
-    showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
+    showAddExToSectionModal, setShowAddExToSectionModal, isAddingExerciseToSection, setIsAddingExerciseToSection, isSwitchingRoutineSectionExercise, setIsSwitchingRoutineSectionExercise, isCreatingRoutineSuperset, setIsCreatingRoutineSuperset, editorExercisePickerMode, setEditorExercisePickerMode,
+    editorSwitchTargetSectionExerciseId, setEditorSwitchTargetSectionExerciseId, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory,
     selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     pastLoggedDates, setPastLoggedDates,
@@ -200,8 +201,8 @@ export function useFitNotesController() {
     handleImportRoutinePopulated, handleCreateRoutineSuperset, handleUpdateRoutineGroupName, handleClearRoutineGroup,
     handleCreateRoutineTemplate, handleUpdateRoutineCategory, handleUpdateRoutineDetails, handleDeleteRoutine,
     handleCopyRoutine, handleCreateRoutineVersion, handleImportRoutine,
-    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter,
-    handleAddExerciseToSection, handleDeleteExerciseFromSection, handleAddSetToTemplateExercise,
+    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openSwitchRoutineSectionExercise, openPastImporter,
+    handleAddExerciseToSection, handleSwitchRoutineSectionExercise, handleReorderRoutineSectionExercises, handleReorderRoutineSections, handleDeleteExerciseFromSection, handleAddSetToTemplateExercise,
     handleUpdatePopulateSetsType, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues,
     handleUpdateRoutineSectionExercise, handleUpdateSectionSchedule, handleUpdateSectionName, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection,
@@ -806,14 +807,7 @@ export function useFitNotesController() {
       const [removed] = reorderedSections.splice(result.source.index, 1);
       reorderedSections.splice(result.destination.index, 0, removed);
 
-      // Update sort order in db
-      let order = 1;
-      for (const section of reorderedSections) {
-        await db.execute('INSERT INTO routine_sections', [{ ...section, sort_order: order++ }]);
-      }
-
-      await loadEditorData(editingRoutine.id);
-      triggerToast('Workout days reordered.');
+      await handleReorderRoutineSections(editingRoutine.id, reorderedSections.map(item => item.id));
       return;
     }
 
@@ -827,13 +821,7 @@ export function useFitNotesController() {
       const [removed] = reorderedExs.splice(result.source.index, 1);
       reorderedExs.splice(result.destination.index, 0, removed);
 
-      let order = 1;
-      for (const se of reorderedExs) {
-        await db.execute('INSERT INTO routine_section_exercises', [{ ...se, sort_order: order++ }]);
-      }
-
-      await loadEditorData(editingRoutine.id);
-      triggerToast('Exercises reordered.');
+      await handleReorderRoutineSectionExercises(sectionId, reorderedExs.map(item => item.id));
       return;
     }
   };
@@ -860,7 +848,8 @@ export function useFitNotesController() {
     workoutTime, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
     replaceTargetExerciseId, setReplaceTargetExerciseId, handleReplaceExercise, handleCopyRoutine, handleCreateRoutineVersion,
     showRoutineImportModal, setShowRoutineImportModal, showCreateRoutineModal, setShowCreateRoutineModal,
-    showAddExToSectionModal, setShowAddExToSectionModal, editorExSearchQuery, setEditorExSearchQuery,
+    showAddExToSectionModal, setShowAddExToSectionModal, isAddingExerciseToSection, setIsAddingExerciseToSection, isSwitchingRoutineSectionExercise, setIsSwitchingRoutineSectionExercise, isCreatingRoutineSuperset, setIsCreatingRoutineSuperset, editorExercisePickerMode, setEditorExercisePickerMode,
+    editorSwitchTargetSectionExerciseId, setEditorSwitchTargetSectionExerciseId, editorExSearchQuery, setEditorExSearchQuery,
     editorExSelectedCategory, setEditorExSelectedCategory, selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     pastLoggedDates, setPastLoggedDates, workoutGroups, setWorkoutGroups, groupExercises, setGroupExercises,
     workoutRoutines, setWorkoutRoutines, recordWorkoutRoutine, handleDeleteWorkoutRoutine,
@@ -908,7 +897,7 @@ export function useFitNotesController() {
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise, handleMergeExercises,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
     handleCreateRoutineSuperset, handleUpdateRoutineGroupName, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
-    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openPastImporter, handleAddExerciseToSection, handleDeleteExerciseFromSection,
+    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openSwitchRoutineSectionExercise, openPastImporter, handleAddExerciseToSection, handleSwitchRoutineSectionExercise, handleDeleteExerciseFromSection,
     handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateRoutineSectionExercise, handleUpdateSectionName, handleUpdateSectionSchedule, handleDeleteSection,
     handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
     saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord, calculatePlatesSolver,

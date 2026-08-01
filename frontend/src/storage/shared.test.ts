@@ -42,3 +42,29 @@ describe('settings null round-trip', () => {
     expect(settings.body_weight_goal_weight).toBeNull(); // but read back as real null
   });
 });
+
+describe('routine template set shorthand', () => {
+  const templateSet = {
+    id: 'set-1',
+    routine_section_exercise_id: 'rse-1',
+    metric_weight: 100,
+    reps: 8,
+    sort_order: 1,
+  };
+
+  it('expands an INSERT for a table whose name contains "sets"', () => {
+    const statements = buildShorthandStatements('INSERT INTO routine_section_exercise_sets', [templateSet]);
+
+    expect(statements).toHaveLength(1);
+    expect(statements![0].sql).toMatch(/^INSERT OR REPLACE INTO routine_section_exercise_sets \(/);
+    expect(statements![0].params).toContain('set-1');
+  });
+
+  it('expands an UPDATE for a table whose name contains "sets"', () => {
+    const statements = buildShorthandStatements('UPDATE routine_section_exercise_sets', [templateSet]);
+
+    expect(statements).toHaveLength(1);
+    expect(statements![0].sql).toMatch(/^UPDATE routine_section_exercise_sets SET /);
+    expect(statements![0].params[statements![0].params.length - 1]).toBe('set-1');
+  });
+});
