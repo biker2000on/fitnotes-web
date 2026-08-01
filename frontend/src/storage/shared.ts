@@ -5,6 +5,10 @@ import { DEFAULT_SETTINGS } from '../lib/settings';
 export interface DBDriver {
   query<T>(sql: string, params?: any[]): Promise<T[]>;
   execute(sql: string, params?: any[]): Promise<void>;
+  // Optional atomic write batch. SQLite-capable web drivers implement this;
+  // native clients that only expose single-statement IPC can safely fall back
+  // to caller-managed serialization and compensation.
+  executeBatch?(operations: DBOperation[]): Promise<void>;
   // Resolves with the number of rows pulled from the server, or null when the
   // driver cannot tell (lets callers skip UI refreshes after no-op syncs).
   sync(apiToken: string, apiBaseUrl: string): Promise<number | null>;
@@ -255,6 +259,7 @@ export const settingsFromKeyValueRows = (rows: Array<{ key: string; value: unkno
 };
 
 export interface SqlStatement { sql: string; params: any[] }
+export interface DBOperation { sql: string; params?: any[] }
 
 // Expand the store's shorthand `execute('INSERT INTO <table>', [rowObject])` /
 // `execute('UPDATE <table>', [rowObject])` calls into concrete SQL statements.
@@ -288,9 +293,13 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
     return statements;
   }
 
+  // Look for SQL clauses, rather than substrings.  Table names such as
+  // `routine_section_exercise_sets` contain "set", but are valid shorthand
+  // targets.  The previous substring check let those calls fall through to
+  // SQLite as incomplete SQL.
   const isShorthand = (
-    !normalized.includes('values') &&
-    !normalized.includes('set') &&
+    !/\bvalues\b/.test(normalized) &&
+    !/\bset\b/.test(normalized) &&
     !normalized.includes('(')
   );
   if (!isShorthand) return null;

@@ -16,6 +16,7 @@ import {
   isBuiltInSeedRow,
   normalizeForSync,
   normalizeTimestamp,
+  type DBOperation,
   settingsFromKeyValueRows,
   virtualDefaultBarbells,
   virtualDefaultMeasurements,
@@ -34,6 +35,9 @@ const isTauri = () => {
 // In-Memory/LocalStorage Local Database Driver for Browser Mode
 export class BrowserLocalDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
+  private batchDepth = 0;
+  private pendingBatchNotification = false;
+  private batchQueue: Promise<void> = Promise.resolve();
 
   onChange(listener: () => void): () => void {
     this.changeListeners.push(listener);
@@ -43,9 +47,59 @@ export class BrowserLocalDriver implements DBDriver {
   }
 
   private notifyListeners(): void {
+    if (this.batchDepth > 0) {
+      this.pendingBatchNotification = true;
+      return;
+    }
+    this.emitListeners();
+  }
+
+  private emitListeners(): void {
     this.changeListeners.forEach(l => {
       try { l(); } catch (e) { console.error(e); }
     });
+  }
+
+  async executeBatch(operations: DBOperation[]): Promise<void> {
+    const run = async () => this.runBatch(operations);
+    const queued = this.batchQueue.then(run, run);
+    // Leave the queue usable after a rejected batch while preserving the error
+    // for this caller.
+    this.batchQueue = queued.then(() => undefined, () => undefined);
+    return queued;
+  }
+
+  private async runBatch(operations: DBOperation[]): Promise<void> {
+    const tableNames = new Set(operations.map(operation => {
+      const parts = operation.sql.toLowerCase().trim().split(/\s+/);
+      if (parts[0] === 'delete') return parts[2];
+      return parts[0] === 'update' ? parts[1] : parts[parts.indexOf('into') + 1];
+    }).filter(Boolean));
+    const snapshot = new Map<string, string | null>();
+    tableNames.forEach(table => snapshot.set(table, localStorage.getItem(`fn_${table}`)));
+
+    this.batchDepth += 1;
+    let committed = false;
+    try {
+      // The driver-wide queue prevents a failed batch from restoring a stale
+      // snapshot over another successful batch. Notifications remain held
+      // until this batch reaches a committed state.
+      await Promise.all(operations.map(operation => this.execute(operation.sql, operation.params || [])));
+      committed = true;
+    } catch (error) {
+      snapshot.forEach((value, table) => {
+        if (value === null) localStorage.removeItem(`fn_${table}`);
+        else localStorage.setItem(`fn_${table}`, value);
+      });
+      throw error;
+    } finally {
+      this.batchDepth -= 1;
+      if (!committed) this.pendingBatchNotification = false;
+      if (this.batchDepth === 0 && (committed || this.pendingBatchNotification)) {
+        this.pendingBatchNotification = false;
+        this.emitListeners();
+      }
+    }
   }
 
   private getStore(table: string): any[] {
@@ -260,11 +314,15 @@ export class BrowserLocalDriver implements DBDriver {
     // Shorthand insert/update: match "INSERT INTO <table>" / "UPDATE <table>"
     // for any known synced table and upsert the row object.
     const parts = normalized.split(/\s+/);
-    const table = parts[0] === 'update' ? parts[1] : parts[2];
+    const table = parts[0] === 'update' ? parts[1] : parts[parts.indexOf('into') + 1];
     if (table && params.length === 1 && typeof params[0] === 'object' && params[0] !== null) {
       const store = this.getStore(table);
       const item = { ...params[0] };
       const idx = store.findIndex(x => x.id === item.id);
+      // Match SQLite UPDATE semantics: a stale update against a deleted or
+      // otherwise missing primary key affects zero rows. Only INSERT shorthand
+      // may create/upsert a record.
+      if (parts[0] === 'update' && idx < 0) return;
       item.is_dirty = 1;
       item.last_modified = new Date().toISOString();
       if (idx >= 0) store[idx] = item;
@@ -475,7 +533,7 @@ export class BrowserLocalDriver implements DBDriver {
 }
 
 // Tauri native sqlite driver implementation that makes IPC calls to Rust side
-class TauriNativeDriver implements DBDriver {
+export class TauriNativeDriver implements DBDriver {
   private changeListeners: (() => void)[] = [];
 
   onChange(listener: () => void): () => void {
@@ -510,6 +568,14 @@ class TauriNativeDriver implements DBDriver {
     } else {
       await (invoke as any)('tauri_execute', { sql, params });
     }
+    this.notifyListeners();
+  }
+
+  async executeBatch(operations: DBOperation[]): Promise<void> {
+    const statements = operations.flatMap(operation => (
+      buildShorthandStatements(operation.sql, operation.params || []) || [{ sql: operation.sql, params: operation.params || [] }]
+    ));
+    await (invoke as any)('tauri_execute_batch', { statements });
     this.notifyListeners();
   }
 

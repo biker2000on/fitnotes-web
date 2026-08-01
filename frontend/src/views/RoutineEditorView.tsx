@@ -44,11 +44,11 @@ export function RoutineEditorView() {
     exercises, groupExercises, workoutGroups, userUnit,
     handleUpdateSectionName, handleUpdateSectionSchedule, handleAddAllSectionLogs, handleDeleteSection,
     handleUpdatePopulateSetsType, handleUpdateRoutineSectionExercise,
-    openAddExerciseToSection, openPastImporter,
+    openAddExerciseToSection, openSwitchRoutineSectionExercise, openPastImporter,
     selectedSectionExerciseIdsForSuperset, setSelectedSectionExerciseIdsForSuperset,
     handleClearRoutineGroup, handleUpdateRoutineGroupName, handleDeleteExerciseFromSection,
     handleUpdateTemplateSetValues, handleDeleteSetFromTemplateExercise, handleAddSetToTemplateExercise,
-    supersetColor, setSupersetColor, supersetName, setSupersetName, handleCreateRoutineSuperset,
+    supersetColor, setSupersetColor, supersetName, setSupersetName, isCreatingRoutineSuperset, handleCreateRoutineSuperset,
   } = useFitNotesStore();
 
   if (!editingRoutine) return null;
@@ -255,6 +255,13 @@ export function RoutineEditorView() {
                                               </div>
 
                                               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                <button
+                                                  className="btn btn-secondary"
+                                                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                                                  onClick={() => openSwitchRoutineSectionExercise(se.id)}
+                                                >
+                                                  Switch exercise
+                                                </button>
                                                 {group && (
                                                   <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '10px', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => handleClearRoutineGroup(group.id)}>
                                                     Unlink Superset
@@ -396,15 +403,18 @@ export function RoutineEditorView() {
                                 <button
                                   className="btn btn-primary"
                                   style={{ padding: '6px 12px', fontSize: '12px' }}
-                                  onClick={() => {
+                                  disabled={isCreatingRoutineSuperset}
+                                  aria-busy={isCreatingRoutineSuperset}
+                                  onClick={async () => {
                                     const selectedIds = selectedSectionExerciseIdsForSuperset.filter(id => sectionExercises.some(se => se.id === id));
-                                    const actualExIds = selectedIds.map(id => sectionExercises.find(se => se.id === id)!.exercise_id);
-                                    handleCreateRoutineSuperset(section.id, actualExIds, supersetName);
-                                    setSupersetName('Superset');
-                                    setSelectedSectionExerciseIdsForSuperset([]);
+                                    const created = await handleCreateRoutineSuperset(section.id, selectedIds, supersetName);
+                                    if (created) {
+                                      setSupersetName('Superset');
+                                      setSelectedSectionExerciseIdsForSuperset([]);
+                                    }
                                   }}
                                 >
-                                  Link as Superset
+                                  {isCreatingRoutineSuperset ? 'Linking…' : 'Link as Superset'}
                                 </button>
                                 <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => setSelectedSectionExerciseIdsForSuperset([])}>
                                   Clear
