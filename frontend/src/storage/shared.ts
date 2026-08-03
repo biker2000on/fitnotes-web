@@ -261,6 +261,27 @@ export const settingsFromKeyValueRows = (rows: Array<{ key: string; value: unkno
 export interface SqlStatement { sql: string; params: any[] }
 export interface DBOperation { sql: string; params?: any[] }
 
+// Upsert by primary key without INSERT OR REPLACE.
+//
+// REPLACE is a DELETE + INSERT, so it fires ON DELETE CASCADE against child
+// rows the moment `PRAGMA foreign_keys` is enabled - upserting a routine would
+// silently take its sections with it. ON CONFLICT ... DO UPDATE mutates the
+// row in place instead.
+//
+// `onlyIfClean` additionally refuses to overwrite a row that is locally dirty.
+// The sync pull uses it so a server row cannot clobber an edit the user made
+// while the request was in flight.
+export function buildUpsertSql(table: string, columns: string[], onlyIfClean = false): string {
+  const placeholders = columns.map(() => '?').join(', ');
+  const assignments = columns
+    .filter(col => col !== 'id')
+    .map(col => `${col} = excluded.${col}`)
+    .join(', ');
+  const guard = onlyIfClean ? ` WHERE ${table}.is_dirty = 0` : '';
+  return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) `
+    + `ON CONFLICT(id) DO UPDATE SET ${assignments}${guard}`;
+}
+
 // Expand the store's shorthand `execute('INSERT INTO <table>', [rowObject])` /
 // `execute('UPDATE <table>', [rowObject])` calls into concrete SQL statements.
 // Returns null when the call is not shorthand (raw SQL passes through).
@@ -281,7 +302,7 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
   // "settings" contains the substring "set", which the gate excludes (it is
   // meant to reject real SQL with SET clauses). With the generic gate alone,
   // settings writes fall through to raw SQL and fail.
-  if (/^(insert\s+into|update|replace\s+into)\s+settings$/.test(normalized)) {
+  if (/^(insert\s+into|update|replace\s+into|insert\s+or\s+replace\s+into)\s+settings$/.test(normalized)) {
     const statements: SqlStatement[] = [];
     for (const [k, v] of Object.entries(item)) {
       if (k === 'is_dirty' || k === 'last_modified') continue;
@@ -304,8 +325,12 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
   );
   if (!isShorthand) return null;
 
+  // Take the table after INTO rather than a fixed offset: "insert or replace
+  // into x" puts "replace" at parts[2], which used to miss the TABLE_COLUMNS
+  // lookup and silently fall through to raw SQL with an object bound to a
+  // statement that has no placeholders.
   const parts = normalized.split(/\s+/);
-  const table = parts[0] === 'update' ? parts[1] : parts[2]; // e.g. "exercises"
+  const table = parts[0] === 'update' ? parts[1] : parts[parts.indexOf('into') + 1];
 
   const columns = TABLE_COLUMNS[table];
   if (!columns) return null;
@@ -316,10 +341,9 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
     last_modified: new Date().toISOString(),
   };
 
-  if (normalized.startsWith('insert into') || normalized.startsWith('replace into') || normalized.startsWith('insert or replace into')) {
-    const placeholders = columns.map(() => '?').join(', ');
+  if (/^(insert\s+into|replace\s+into|insert\s+or\s+replace\s+into)\b/.test(normalized)) {
     return [{
-      sql: `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
+      sql: buildUpsertSql(table, columns),
       params: columns.map(col => enriched[col] !== undefined ? enriched[col] : null),
     }];
   }

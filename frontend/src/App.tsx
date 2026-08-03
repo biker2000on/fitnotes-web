@@ -42,7 +42,7 @@ import { ToastNotification } from './components/ToastNotification';
 import { ConfirmationModal } from './components/ConfirmationModal';
 
 import { PlateCalculatorModal } from './components/PlateCalculatorModal';
-import { CommandPalette } from './components/CommandPalette';
+import { ExercisePicker } from './components/ExercisePicker';
 import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { CopyWorkoutDrawer } from './components/CopyWorkoutDrawer';
 import { BulkActionsDock } from './components/BulkActionsDock';
@@ -546,7 +546,7 @@ export default function App() {
       <KeyboardShortcutsModal />
 
       {/* Global Command Palette Quick Exercise Search Selector */}
-      <CommandPalette
+      <ExercisePicker
         isOpen={showCommandPalette}
         onClose={() => {
           setShowCommandPalette(false);

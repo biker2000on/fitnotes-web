@@ -82,6 +82,59 @@ describe('BrowserLocalDriver.executeBatch', () => {
   });
 });
 
+describe('BrowserLocalDriver.sync mid-request edits', () => {
+  // The payload snapshot is taken before the fetch and applied after it. An
+  // edit landing in that window used to be marked clean without ever being
+  // pushed, and then overwritten by the server's echo of the old value.
+  const syncWith = async (storage: ReturnType<typeof installStorage>, onFetch: () => void) => {
+    const driver = new BrowserLocalDriver();
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      onFetch();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          server_time: '2026-08-03T10:00:00.000Z',
+          training_logs: [{ id: 'log-1', reps: 5, last_modified: 'T1', is_deleted: false }],
+        }),
+      } as any;
+    }));
+    await driver.sync('token', 'https://example.invalid');
+    return JSON.parse(storage.getItem('fn_training_logs')!);
+  };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps a row edited during the request dirty and unclobbered', async () => {
+    const storage = installStorage();
+    storage.setItem('fn_training_logs', JSON.stringify([
+      { id: 'log-1', reps: 5, last_modified: 'T1', is_dirty: 1, is_deleted: false },
+    ]));
+
+    const rows = await syncWith(storage, () => {
+      // User logs a correction while the request is in flight.
+      storage.setItem('fn_training_logs', JSON.stringify([
+        { id: 'log-1', reps: 8, last_modified: 'T2', is_dirty: 1, is_deleted: false },
+      ]));
+    });
+
+    expect(rows[0].reps).toBe(8);
+    expect(rows[0].is_dirty).toBe(1);
+  });
+
+  it('still cleans and applies the server copy for an untouched pushed row', async () => {
+    const storage = installStorage();
+    storage.setItem('fn_training_logs', JSON.stringify([
+      { id: 'log-1', reps: 3, last_modified: 'T1', is_dirty: 1, is_deleted: false },
+    ]));
+
+    const rows = await syncWith(storage, () => {});
+
+    expect(rows[0].reps).toBe(5);
+    expect(rows[0].is_dirty).toBe(0);
+  });
+});
+
 describe('BrowserLocalDriver UPDATE semantics', () => {
   it('does not upsert a missing row', async () => {
     const storage = installStorage();

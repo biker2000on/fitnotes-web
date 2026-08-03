@@ -56,7 +56,26 @@ describe('routine template set shorthand', () => {
     const statements = buildShorthandStatements('INSERT INTO routine_section_exercise_sets', [templateSet]);
 
     expect(statements).toHaveLength(1);
-    expect(statements![0].sql).toMatch(/^INSERT OR REPLACE INTO routine_section_exercise_sets \(/);
+    expect(statements![0].sql).toMatch(/^INSERT INTO routine_section_exercise_sets \(/);
+    expect(statements![0].params).toContain('set-1');
+  });
+
+  it('upserts without REPLACE so enabling foreign keys cannot cascade children away', () => {
+    const statements = buildShorthandStatements('INSERT INTO routine_section_exercise_sets', [templateSet])!;
+
+    expect(statements[0].sql).not.toMatch(/REPLACE/);
+    expect(statements[0].sql).toMatch(/ON CONFLICT\(id\) DO UPDATE SET /);
+    expect(statements[0].sql).not.toMatch(/id = excluded\.id/);
+  });
+
+  it('recognises INSERT OR REPLACE INTO as shorthand rather than falling through', () => {
+    // "insert or replace into x" puts "replace" at the fixed table offset the
+    // parser used to read, so these silently reached SQLite as raw SQL with an
+    // object bound to a statement that has no placeholders.
+    const statements = buildShorthandStatements('INSERT OR REPLACE INTO routine_section_exercise_sets', [templateSet]);
+
+    expect(statements).toHaveLength(1);
+    expect(statements![0].sql).toMatch(/^INSERT INTO routine_section_exercise_sets \(/);
     expect(statements![0].params).toContain('set-1');
   });
 

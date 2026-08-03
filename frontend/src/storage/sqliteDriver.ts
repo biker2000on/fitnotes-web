@@ -12,6 +12,7 @@ import {
   BOOL_COLUMNS,
   buildDdlStatements,
   buildShorthandStatements,
+  buildUpsertSql,
   isBuiltInSeedRow,
   normalizeForSync,
   normalizeTimestamp,
@@ -152,10 +153,9 @@ export class SqliteWasmDriver implements DBDriver {
       try { rows = JSON.parse(raw); } catch { continue; }
       if (!Array.isArray(rows)) continue;
       const columns = TABLE_COLUMNS[table];
-      const placeholders = columns.map(() => '?').join(', ');
       for (const row of rows) {
         statements.push({
-          sql: `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
+          sql: buildUpsertSql(table, columns),
           params: columns.map(col => {
             const v = row[col];
             if (v === undefined) return col === 'is_dirty' || col === 'is_deleted' ? 0 : null;
@@ -253,15 +253,19 @@ export class SqliteWasmDriver implements DBDriver {
       ? new Date(Date.parse(rawLastSync)).toISOString()
       : new Date(0).toISOString();
 
-    // Collect dirty rows per table, remembering which ids we pushed so we only
-    // clear those dirty flags afterwards (edits made mid-sync stay dirty).
-    const pushedIds: Record<string, string[]> = {};
+    // Collect dirty rows per table, remembering each row's raw id *and*
+    // last_modified. The pull below only clears the dirty flag on rows still
+    // identical to what we pushed, so an edit made during the request keeps its
+    // value and goes out next time.
+    const pushed: Record<string, Array<{ id: string; last_modified: unknown }>> = {};
     const payload: Record<string, any> = { last_sync_timestamp: lastSync };
 
     for (const table of SYNC_TABLES) {
       const dirty = (await this.rawQuery<any>(`SELECT * FROM ${table} WHERE is_dirty = 1`))
         .filter(row => !isBuiltInSeedRow(table, row));
-      pushedIds[table] = dirty.map(row => String(row.id));
+      // Captured pre-normalization: normalizeForSync rewrites last_modified
+      // (and legacy ids) for the wire, but the local row still has the raw one.
+      pushed[table] = dirty.map(row => ({ id: String(row.id), last_modified: row.last_modified }));
       const bools = BOOL_COLUMNS[table] || [];
       payload[table] = dirty.map(row => {
         const normalized = normalizeForSync(row, UUID_FIELDS[table]);
@@ -303,18 +307,21 @@ export class SqliteWasmDriver implements DBDriver {
     const statements: SqlStatement[] = [];
 
     for (const table of SYNC_TABLES) {
-      // 1. Clear dirty flags for the rows we successfully pushed.
-      for (const id of pushedIds[table]) {
-        statements.push({ sql: `UPDATE ${table} SET is_dirty = 0 WHERE id = ?`, params: [id] });
+      // 1. Clear dirty flags, but only where the row is untouched since push.
+      for (const row of pushed[table]) {
+        statements.push({
+          sql: `UPDATE ${table} SET is_dirty = 0 WHERE id = ? AND last_modified = ?`,
+          params: [row.id, row.last_modified],
+        });
       }
-      // 2. Upsert server rows (pull).
+      // 2. Upsert server rows (pull), skipping rows that are still dirty.
       const serverRows: any[] = serverData[table] || [];
       pulledCount += serverRows.length;
       const columns = TABLE_COLUMNS[table];
-      const placeholders = columns.map(() => '?').join(', ');
+      const upsertSql = buildUpsertSql(table, columns, true);
       for (const row of serverRows) {
         statements.push({
-          sql: `INSERT OR REPLACE INTO ${table} (${columns.join(', ')}) VALUES (${placeholders})`,
+          sql: upsertSql,
           params: columns.map(col => {
             if (col === 'is_dirty') return 0;
             const v = row[col];

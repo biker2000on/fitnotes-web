@@ -342,11 +342,17 @@ export class BrowserLocalDriver implements DBDriver {
       ? new Date(Date.parse(rawLastSync)).toISOString()
       : new Date(0).toISOString();
 
+    // Remember exactly which rows went out, and what they looked like. Clearing
+    // is_dirty on everything (as this driver used to) strands any edit made
+    // during the request - it is marked clean without ever having been pushed.
+    const pushed: Record<string, Array<{ id: unknown; last_modified: unknown }>> = {};
+
     const getDirty = (table: string, uuidFields: string[] = []) => {
-      return this.getStore(table)
+      const rows = this.getStore(table)
         .filter(x => x.is_dirty === 1)
-        .filter(x => !isBuiltInSeedRow(table, x))
-        .map(x => normalizeForSync(x, uuidFields));
+        .filter(x => !isBuiltInSeedRow(table, x));
+      pushed[table] = rows.map(x => ({ id: x.id, last_modified: x.last_modified }));
+      return rows.map(x => normalizeForSync(x, uuidFields));
     };
 
     // Settings is a singleton; push it only when locally modified.
@@ -415,18 +421,23 @@ export class BrowserLocalDriver implements DBDriver {
       const applyUpdates = (table: string, serverItems: any[]) => {
         pulledCount += serverItems.length;
         const localItems = this.getStore(table);
+        const pushedRows = new Map(
+          (pushed[table] || []).map(row => [String(row.id), row.last_modified]),
+        );
 
-        // 1. Clear dirty state for successfully pushed items
+        // 1. Clear dirty state only on rows still identical to what we pushed.
         localItems.forEach(x => {
-          if (x.is_dirty === 1) {
+          if (x.is_dirty === 1 && pushedRows.get(String(x.id)) === x.last_modified) {
             x.is_dirty = 0;
           }
         });
 
-        // 2. Merge server items (Pull updates)
+        // 2. Merge server items (pull), leaving locally dirty rows alone - they
+        // hold an edit that has not reached the server yet.
         serverItems.forEach(srv => {
           const idx = localItems.findIndex(x => x.id === srv.id);
           if (idx >= 0) {
+            if (localItems[idx].is_dirty === 1) return;
             localItems[idx] = { ...srv, is_dirty: 0 };
           } else {
             localItems.push({ ...srv, is_dirty: 0 });
@@ -458,14 +469,28 @@ export class BrowserLocalDriver implements DBDriver {
       applyUpdates('custom_units', serverData.custom_units || []);
       applyUpdates('graph_favourites', serverData.graph_favourites || []);
 
-      // Settings singleton: clear the pushed dirty flag, then apply the server copy
-      // (last-write-wins) if one came back.
+      // Settings singleton: clear the pushed dirty flag, then apply the server
+      // copy (last-write-wins) if one came back. Both steps re-read the current
+      // value rather than trusting the pre-request snapshot, so a settings
+      // change made during the sync is neither marked clean nor overwritten.
+      const readSettings = () => {
+        const raw = localStorage.getItem('fn_settings');
+        if (!raw) return null;
+        try { return JSON.parse(raw); } catch { return null; }
+      };
+
       if (dirtySettings) {
-        localStorage.setItem('fn_settings', JSON.stringify({ ...localSettings, is_dirty: 0 }));
+        const current = readSettings();
+        if (current && current.last_modified === localSettings.last_modified) {
+          localStorage.setItem('fn_settings', JSON.stringify({ ...current, is_dirty: 0 }));
+        }
       }
       if (serverData.settings) {
         pulledCount += 1;
-        localStorage.setItem('fn_settings', JSON.stringify({ ...serverData.settings, is_dirty: 0 }));
+        const current = readSettings();
+        if (!current || current.is_dirty !== 1) {
+          localStorage.setItem('fn_settings', JSON.stringify({ ...serverData.settings, is_dirty: 0 }));
+        }
       }
 
       localStorage.setItem('fn_last_sync_timestamp', serverData.server_time);

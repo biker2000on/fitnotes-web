@@ -3,6 +3,7 @@
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::sync::Mutex;
@@ -540,6 +541,15 @@ fn purge_builtin_seed_rows(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+// Identifies a row exactly as it was at push time. `id` is the *local* id
+// (before UUID normalization rewrites legacy ids for the wire), and
+// `last_modified` is the raw local column value. The pull uses both to tell an
+// untouched pushed row from one the user edited mid-request.
+struct PushedRow {
+    id: String,
+    last_modified: String,
+}
+
 #[derive(Deserialize, Debug)]
 struct SyncResponse {
     server_time: String,
@@ -567,6 +577,214 @@ struct SyncResponse {
     settings: Option<Value>,
 }
 
+// Applies one table's slice of a sync response.
+//
+// Two invariants this has to hold, both of which cost real data when broken:
+//  - A row the user edited while the sync request was in flight must keep its
+//    local value and stay dirty. The push snapshot is taken before the HTTP
+//    call and the DB lock is released across it, so that window is wide.
+//  - Upserting a parent must not delete it. INSERT OR REPLACE is a
+//    DELETE + INSERT, so it would fire ON DELETE CASCADE against children as
+//    soon as `PRAGMA foreign_keys` is turned on.
+fn upsert_synced_table(
+    tx: &rusqlite::Transaction<'_>,
+    table: &str,
+    items: &[Value],
+    columns: &[&str],
+    pushed: &[PushedRow],
+) -> std::result::Result<(), String> {
+    // Tables carrying a secondary UNIQUE constraint. INSERT OR REPLACE used to
+    // absorb those collisions by deleting the offending row; ON CONFLICT(id)
+    // only covers the primary key, so clear them explicitly first.
+    let unique_by: Option<&str> = match table {
+        "workout_comments" => Some("date"),
+        _ => None,
+    };
+
+    // 1. Clear the dirty flag only on rows still identical to what we pushed.
+    // A row edited while the request was in flight has a newer last_modified,
+    // so it stays dirty and goes out on the next sync.
+    for row in pushed {
+        tx.execute(
+            &format!(
+                "UPDATE {} SET is_dirty = 0 WHERE id = ?1 AND last_modified = ?2",
+                table
+            ),
+            params![row.id, row.last_modified],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    // 2. Apply server rows, skipping any row that is still locally dirty.
+    let assignments: Vec<String> = columns
+        .iter()
+        .filter(|col| **col != "id")
+        .map(|col| format!("{} = excluded.{}", col, col))
+        .collect();
+
+    for item in items {
+        let map = item.as_object().ok_or("Expected JSON object")?;
+
+        if let Some(key) = unique_by {
+            if let (Some(key_value), Some(id_value)) = (map.get(key), map.get("id")) {
+                let dedupe = json_params(&[key_value.clone(), id_value.clone()]);
+                let dedupe_ref: Vec<&dyn rusqlite::ToSql> =
+                    dedupe.iter().map(|b| b.as_ref()).collect();
+                tx.execute(
+                    &format!(
+                        "DELETE FROM {} WHERE {} = ?1 AND id != ?2 AND is_dirty = 0",
+                        table, key
+                    ),
+                    &dedupe_ref[..],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
+        let placeholders: Vec<String> = (1..=columns.len()).map(|i| format!("?{}", i)).collect();
+        let sql = format!(
+            "INSERT INTO {} ({}) VALUES ({}) ON CONFLICT(id) DO UPDATE SET {} WHERE {}.is_dirty = 0",
+            table,
+            columns.join(", "),
+            placeholders.join(", "),
+            assignments.join(", "),
+            table
+        );
+
+        let values: Vec<Value> = columns
+            .iter()
+            .map(|col| map.get(*col).cloned().unwrap_or(Value::Null))
+            .collect();
+        let sql_params = json_params(&values);
+        let sql_params_ref: Vec<&dyn rusqlite::ToSql> =
+            sql_params.iter().map(|b| b.as_ref()).collect();
+
+        tx.execute(&sql, &sql_params_ref[..])
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod upsert_tests {
+    use super::{upsert_synced_table, PushedRow};
+    use rusqlite::Connection;
+    use serde_json::json;
+
+    const COLUMNS: &[&str] = &["id", "name", "last_modified", "is_deleted"];
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE routines (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                last_modified TEXT NOT NULL,
+                is_deleted INTEGER DEFAULT 0 NOT NULL,
+                is_dirty INTEGER DEFAULT 0 NOT NULL
+            );
+            CREATE TABLE routine_sections (
+                id TEXT PRIMARY KEY,
+                routine_id TEXT NOT NULL REFERENCES routines(id) ON DELETE CASCADE
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn edit_made_during_sync_survives_the_pull() {
+        let mut conn = setup();
+        // Pushed at T1, then edited locally to T2 while the request was in
+        // flight, so the row is dirty again with a newer timestamp.
+        conn.execute(
+            "INSERT INTO routines (id, name, last_modified, is_dirty) VALUES ('r1', 'Local edit', 'T2', 1)",
+            [],
+        )
+        .unwrap();
+
+        let tx = conn.transaction().unwrap();
+        upsert_synced_table(
+            &tx,
+            "routines",
+            &[json!({"id": "r1", "name": "Server copy", "last_modified": "T1", "is_deleted": false})],
+            COLUMNS,
+            &[PushedRow { id: "r1".into(), last_modified: "T1".into() }],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let (name, dirty): (String, i64) = conn
+            .query_row("SELECT name, is_dirty FROM routines WHERE id = 'r1'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(name, "Local edit", "server row clobbered a mid-sync edit");
+        assert_eq!(dirty, 1, "mid-sync edit lost its dirty flag and would never push");
+    }
+
+    #[test]
+    fn unchanged_pushed_row_is_cleaned_and_takes_server_value() {
+        let mut conn = setup();
+        conn.execute(
+            "INSERT INTO routines (id, name, last_modified, is_dirty) VALUES ('r1', 'Mine', 'T1', 1)",
+            [],
+        )
+        .unwrap();
+
+        let tx = conn.transaction().unwrap();
+        upsert_synced_table(
+            &tx,
+            "routines",
+            &[json!({"id": "r1", "name": "Server copy", "last_modified": "T3", "is_deleted": false})],
+            COLUMNS,
+            &[PushedRow { id: "r1".into(), last_modified: "T1".into() }],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let (name, dirty): (String, i64) = conn
+            .query_row("SELECT name, is_dirty FROM routines WHERE id = 'r1'", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(name, "Server copy");
+        assert_eq!(dirty, 0);
+    }
+
+    #[test]
+    fn upserting_a_parent_does_not_cascade_delete_children() {
+        let mut conn = setup();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute(
+            "INSERT INTO routines (id, name, last_modified) VALUES ('r1', 'Push day', 'T1')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO routine_sections (id, routine_id) VALUES ('s1', 'r1')",
+            [],
+        )
+        .unwrap();
+
+        let tx = conn.transaction().unwrap();
+        upsert_synced_table(
+            &tx,
+            "routines",
+            &[json!({"id": "r1", "name": "Push day v2", "last_modified": "T2", "is_deleted": false})],
+            COLUMNS,
+            &[],
+        )
+        .unwrap();
+        tx.commit().unwrap();
+
+        let sections: i64 = conn
+            .query_row("SELECT COUNT(*) FROM routine_sections", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(sections, 1, "upserting the parent cascade-deleted its sections");
+    }
+}
+
 #[tauri::command]
 async fn tauri_sync(
     api_token: &str,
@@ -580,6 +798,9 @@ async fn tauri_sync(
     }
 
     // 1. Gather local changes where is_dirty = 1 and build the push payload.
+    // `pushed_rows` records what each row looked like at push time so the pull
+    // can leave mid-request edits alone.
+    let mut pushed_rows: HashMap<String, Vec<PushedRow>> = HashMap::new();
     let payload = {
         let conn = db_state.0.lock().unwrap();
 
@@ -592,8 +813,10 @@ async fn tauri_sync(
             )
             .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
-        let extract_dirty =
-            |table: &str, uuid_fields: &[&str], bool_fields: &[&str]| -> Result<Vec<Value>> {
+        let extract_dirty = |table: &str,
+                             uuid_fields: &[&str],
+                             bool_fields: &[&str]|
+         -> Result<(Vec<Value>, Vec<PushedRow>)> {
                 let mut stmt =
                     conn.prepare(&format!("SELECT * FROM {} WHERE is_dirty = 1", table))?;
                 let col_count = stmt.column_count();
@@ -602,6 +825,7 @@ async fn tauri_sync(
                     .collect::<Result<_>>()?;
                 let mut rows = stmt.query([])?;
                 let mut list = Vec::new();
+                let mut pushed = Vec::new();
                 while let Some(row) = rows.next()? {
                     let mut map = serde_json::Map::new();
                     for i in 0..col_count {
@@ -620,52 +844,67 @@ async fn tauri_sync(
                         };
                         map.insert(col_name.to_string(), json_val);
                     }
+                    // Recorded before normalization, which rewrites legacy ids
+                    // for the wire; the local row still has the original.
+                    if let Some(Value::String(id)) = map.get("id") {
+                        pushed.push(PushedRow {
+                            id: id.clone(),
+                            last_modified: map
+                                .get("last_modified")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                        });
+                    }
                     list.push(normalize_sync_item(
                         Value::Object(map),
                         uuid_fields,
                         bool_fields,
                     ));
                 }
-                Ok(list)
+                Ok((list, pushed))
             };
+
+        // Swallowing an extraction error here would strand that table's local
+        // edits and let the pull below overwrite them, while still reporting a
+        // successful sync. Fail the whole sync instead.
+        let mut extract = |table: &str,
+                           uuid_fields: &[&str],
+                           bool_fields: &[&str]|
+         -> std::result::Result<Vec<Value>, String> {
+            let (items, pushed) = extract_dirty(table, uuid_fields, bool_fields).map_err(|e| {
+                format!("Failed to collect local changes for `{}`: {}", table, e)
+            })?;
+            pushed_rows.insert(table.to_string(), pushed);
+            Ok(items)
+        };
 
         SyncPayload {
             last_sync_timestamp: last_sync,
-            categories: extract_dirty("categories", &[], &["is_deleted"]).unwrap_or_default(),
-            exercises: extract_dirty(
-                "exercises",
-                &["category_id"],
-                &["is_favourite", "is_deleted"],
-            )
-            .unwrap_or_default(),
-            routines: extract_dirty("routines", &[], &["is_deleted"]).unwrap_or_default(),
-            routine_sections: extract_dirty("routine_sections", &["routine_id"], &["is_deleted"])
-                .unwrap_or_default(),
-            routine_section_exercises: extract_dirty(
+            categories: extract("categories", &[], &["is_deleted"])?,
+            exercises: extract("exercises", &["category_id"], &["is_favourite", "is_deleted"])?,
+            routines: extract("routines", &[], &["is_deleted"])?,
+            routine_sections: extract("routine_sections", &["routine_id"], &["is_deleted"])?,
+            routine_section_exercises: extract(
                 "routine_section_exercises",
                 &["routine_section_id", "exercise_id"],
                 &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            routine_section_exercise_sets: extract_dirty(
+            )?,
+            routine_section_exercise_sets: extract(
                 "routine_section_exercise_sets",
                 &["routine_section_exercise_id"],
                 &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            training_logs: extract_dirty(
+            )?,
+            training_logs: extract(
                 "training_logs",
                 &["exercise_id", "routine_section_exercise_set_id"],
                 &["is_personal_record", "is_complete", "is_deleted"],
-            )
-            .unwrap_or_default(),
-            body_weights: extract_dirty("body_weights", &[], &["is_deleted"]).unwrap_or_default(),
-            plates: extract_dirty("plates", &[], &["enabled", "is_deleted"]).unwrap_or_default(),
-            barbells: extract_dirty("barbells", &["exercise_id"], &["is_deleted"])
-                .unwrap_or_default(),
-            workout_comments: extract_dirty("workout_comments", &[], &["is_deleted"])
-                .unwrap_or_default(),
-            workout_groups: extract_dirty(
+            )?,
+            body_weights: extract("body_weights", &[], &["is_deleted"])?,
+            plates: extract("plates", &[], &["enabled", "is_deleted"])?,
+            barbells: extract("barbells", &["exercise_id"], &["is_deleted"])?,
+            workout_comments: extract("workout_comments", &[], &["is_deleted"])?,
+            workout_groups: extract(
                 "workout_groups",
                 &["routine_section_id"],
                 &[
@@ -673,40 +912,30 @@ async fn tauri_sync(
                     "rest_timer_auto_start_enabled",
                     "is_deleted",
                 ],
-            )
-            .unwrap_or_default(),
-            workout_group_exercises: extract_dirty(
+            )?,
+            workout_group_exercises: extract(
                 "workout_group_exercises",
                 &["exercise_id", "routine_section_id", "workout_group_id"],
                 &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            workout_routines: extract_dirty(
+            )?,
+            workout_routines: extract(
                 "workout_routines",
                 &["routine_id", "routine_section_id"],
                 &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            goals: extract_dirty("goals", &["exercise_id"], &["is_deleted"]).unwrap_or_default(),
-            measurements: extract_dirty("measurements", &[], &["custom", "enabled", "is_deleted"])
-                .unwrap_or_default(),
-            measurement_records: extract_dirty(
+            )?,
+            goals: extract("goals", &["exercise_id"], &["is_deleted"])?,
+            measurements: extract("measurements", &[], &["custom", "enabled", "is_deleted"])?,
+            measurement_records: extract(
                 "measurement_records",
                 &["measurement_id"],
                 &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            exercise_comments: extract_dirty(
-                "exercise_comments",
-                &["exercise_id"],
-                &["is_deleted"],
-            )
-            .unwrap_or_default(),
-            workout_times: extract_dirty("workout_times", &[], &["is_deleted"]).unwrap_or_default(),
-            custom_units: extract_dirty("custom_units", &[], &["is_deleted"]).unwrap_or_default(),
-            graph_favourites: extract_dirty("graph_favourites", &["exercise_id"], &["is_deleted"])
-                .unwrap_or_default(),
-            settings: extract_dirty_settings(&conn).unwrap_or_default(),
+            )?,
+            exercise_comments: extract("exercise_comments", &["exercise_id"], &["is_deleted"])?,
+            workout_times: extract("workout_times", &[], &["is_deleted"])?,
+            custom_units: extract("custom_units", &[], &["is_deleted"])?,
+            graph_favourites: extract("graph_favourites", &["exercise_id"], &["is_deleted"])?,
+            settings: extract_dirty_settings(&conn)
+                .map_err(|e| format!("Failed to collect local settings: {}", e))?,
         }
     };
 
@@ -777,67 +1006,20 @@ async fn tauri_sync(
         let mut conn = db_state.0.lock().unwrap();
         let tx = conn.transaction().map_err(|e| e.to_string())?;
 
+        let pushed_for = |table: &str| -> &[PushedRow] {
+            match pushed_rows.get(table) {
+                Some(rows) => rows.as_slice(),
+                None => &[],
+            }
+        };
+
         // Helper upsert function to map server payload directly to SQLite
         let upsert_table = |table: &str,
                             items: &[Value],
                             columns: &[&str],
-                            pushed_items: &[Value]|
+                            pushed: &[PushedRow]|
          -> std::result::Result<(), String> {
-            // 1. Reset dirty flag only on items included in this sync request.
-            for item in pushed_items {
-                if let Some(id) = item.get("id").and_then(Value::as_str) {
-                    tx.execute(
-                        &format!("UPDATE {} SET is_dirty = 0 WHERE id = ?1", table),
-                        params![id],
-                    )
-                    .map_err(|e| e.to_string())?;
-                }
-            }
-
-            // 2. Insert or replace server items
-            for item in items {
-                let map = item.as_object().ok_or("Expected JSON object")?;
-                let placeholders: Vec<String> =
-                    (1..=columns.len()).map(|i| format!("?{}", i)).collect();
-                let sql = format!(
-                    "INSERT OR REPLACE INTO {} ({}) VALUES ({})",
-                    table,
-                    columns.join(", "),
-                    placeholders.join(", ")
-                );
-
-                let mut params = Vec::new();
-                for col in columns {
-                    let val = map.get(*col).unwrap_or(&Value::Null);
-                    params.push(val);
-                }
-
-                let sql_params: Vec<Box<dyn rusqlite::ToSql>> = params
-                    .iter()
-                    .map(|v| -> Box<dyn rusqlite::ToSql> {
-                        match v {
-                            Value::Null => Box::new(rusqlite::types::Null),
-                            Value::Bool(b) => Box::new(*b),
-                            Value::Number(num) => {
-                                if let Some(i) = num.as_i64() {
-                                    Box::new(i)
-                                } else {
-                                    Box::new(num.as_f64().unwrap_or(0.0))
-                                }
-                            }
-                            Value::String(s) => Box::new(s.clone()),
-                            _ => Box::new(v.to_string()),
-                        }
-                    })
-                    .collect();
-
-                let sql_params_ref: Vec<&dyn rusqlite::ToSql> =
-                    sql_params.iter().map(|b| b.as_ref()).collect();
-
-                tx.execute(&sql, &sql_params_ref[..])
-                    .map_err(|e| e.to_string())?;
-            }
-            Ok(())
+            upsert_synced_table(&tx, table, items, columns, pushed)
         };
 
         if let Some(items) = sync_res.categories {
@@ -852,7 +1034,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.categories.as_slice(),
+                pushed_for("categories"),
             )?;
         }
         if let Some(items) = sync_res.exercises {
@@ -881,7 +1063,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.exercises.as_slice(),
+                pushed_for("exercises"),
             )?;
         }
         // Routine templates: parents before children.
@@ -893,7 +1075,7 @@ async fn tauri_sync(
                     "id", "name", "notes", "category", "version", "program_weeks",
                     "current_week", "start_date", "is_archived", "last_modified", "is_deleted",
                 ],
-                payload.routines.as_slice(),
+                pushed_for("routines"),
             )?;
         }
         if let Some(items) = sync_res.routine_sections {
@@ -911,7 +1093,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.routine_sections.as_slice(),
+                pushed_for("routine_sections"),
             )?;
         }
         if let Some(items) = sync_res.routine_section_exercises {
@@ -930,7 +1112,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.routine_section_exercises.as_slice(),
+                pushed_for("routine_section_exercises"),
             )?;
         }
         if let Some(items) = sync_res.routine_section_exercise_sets {
@@ -955,7 +1137,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.routine_section_exercise_sets.as_slice(),
+                pushed_for("routine_section_exercise_sets"),
             )?;
         }
         if let Some(items) = sync_res.training_logs {
@@ -981,7 +1163,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.training_logs.as_slice(),
+                pushed_for("training_logs"),
             )?;
         }
         if let Some(items) = sync_res.body_weights {
@@ -998,7 +1180,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.body_weights.as_slice(),
+                pushed_for("body_weights"),
             )?;
         }
         if let Some(items) = sync_res.plates {
@@ -1017,7 +1199,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.plates.as_slice(),
+                pushed_for("plates"),
             )?;
         }
         if let Some(items) = sync_res.barbells {
@@ -1032,7 +1214,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.barbells.as_slice(),
+                pushed_for("barbells"),
             )?;
         }
         if let Some(items) = sync_res.workout_comments {
@@ -1040,7 +1222,7 @@ async fn tauri_sync(
                 "workout_comments",
                 items.as_slice(),
                 &["id", "date", "comment", "last_modified", "is_deleted"],
-                payload.workout_comments.as_slice(),
+                pushed_for("workout_comments"),
             )?;
         }
         // Supersets: groups before their exercise links (routine_sections already upserted above).
@@ -1059,7 +1241,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.workout_groups.as_slice(),
+                pushed_for("workout_groups"),
             )?;
         }
         if let Some(items) = sync_res.workout_group_exercises {
@@ -1075,7 +1257,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.workout_group_exercises.as_slice(),
+                pushed_for("workout_group_exercises"),
             )?;
         }
         if let Some(items) = sync_res.goals {
@@ -1098,7 +1280,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.goals.as_slice(),
+                pushed_for("goals"),
             )?;
         }
         // Measurements before measurement_records.
@@ -1118,7 +1300,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.measurements.as_slice(),
+                pushed_for("measurements"),
             )?;
         }
         if let Some(items) = sync_res.measurement_records {
@@ -1135,7 +1317,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.measurement_records.as_slice(),
+                pushed_for("measurement_records"),
             )?;
         }
         if let Some(items) = sync_res.exercise_comments {
@@ -1150,7 +1332,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.exercise_comments.as_slice(),
+                pushed_for("exercise_comments"),
             )?;
         }
         if let Some(items) = sync_res.workout_times {
@@ -1166,7 +1348,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.workout_times.as_slice(),
+                pushed_for("workout_times"),
             )?;
         }
         if let Some(items) = sync_res.workout_routines {
@@ -1181,7 +1363,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.workout_routines.as_slice(),
+                pushed_for("workout_routines"),
             )?;
         }
         if let Some(items) = sync_res.custom_units {
@@ -1197,7 +1379,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.custom_units.as_slice(),
+                pushed_for("custom_units"),
             )?;
         }
         if let Some(items) = sync_res.graph_favourites {
@@ -1213,7 +1395,7 @@ async fn tauri_sync(
                     "last_modified",
                     "is_deleted",
                 ],
-                payload.graph_favourites.as_slice(),
+                pushed_for("graph_favourites"),
             )?;
         }
 

@@ -18,8 +18,8 @@ describe('TauriNativeDriver.executeBatch', () => {
 
     expect(mocks.invoke).toHaveBeenCalledWith('tauri_execute_batch', {
       statements: [
-        expect.objectContaining({ sql: expect.stringMatching(/^INSERT OR REPLACE INTO workout_groups/) }),
-        expect.objectContaining({ sql: expect.stringMatching(/^INSERT OR REPLACE INTO workout_group_exercises/) }),
+        expect.objectContaining({ sql: expect.stringMatching(/^INSERT INTO workout_groups .* ON CONFLICT\(id\) DO UPDATE SET /) }),
+        expect.objectContaining({ sql: expect.stringMatching(/^INSERT INTO workout_group_exercises .* ON CONFLICT\(id\) DO UPDATE SET /) }),
       ],
     });
     expect(listener).toHaveBeenCalledTimes(1);
