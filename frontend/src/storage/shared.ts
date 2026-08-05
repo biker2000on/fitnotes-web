@@ -278,6 +278,10 @@ export function buildUpsertSql(table: string, columns: string[], onlyIfClean = f
     .map(col => `${col} = excluded.${col}`)
     .join(', ');
   const guard = onlyIfClean ? ` WHERE ${table}.is_dirty = 0` : '';
+  if (!assignments) {
+    return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) `
+      + 'ON CONFLICT(id) DO NOTHING';
+  }
   return `INSERT INTO ${table} (${columns.join(', ')}) VALUES (${placeholders}) `
     + `ON CONFLICT(id) DO UPDATE SET ${assignments}${guard}`;
 }
@@ -342,9 +346,14 @@ export function buildShorthandStatements(sql: string, params: any[]): SqlStateme
   };
 
   if (/^(insert\s+into|replace\s+into|insert\s+or\s+replace\s+into)\b/.test(normalized)) {
+    // Bind only the columns the caller provided. An absent column must fall
+    // back to its SQLite DEFAULT (is_deleted 0, set_type 'working'), not an
+    // explicit NULL bind, which violates NOT NULL constraints on the native
+    // and WASM SQLite schemas.
+    const presentColumns = columns.filter(col => enriched[col] !== undefined);
     return [{
-      sql: buildUpsertSql(table, columns),
-      params: columns.map(col => enriched[col] !== undefined ? enriched[col] : null),
+      sql: buildUpsertSql(table, presentColumns),
+      params: presentColumns.map(col => enriched[col]),
     }];
   }
   if (normalized.startsWith('update')) {
