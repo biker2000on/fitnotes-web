@@ -31,6 +31,7 @@
 12. **Gym profiles for plate calculator** — per-gym plates/bars/dumbbell increments; progression suggestions round to loads achievable at the active gym.
 13. **Routine import from structured sources (ATG)** — map scraped ATG program markdown/JSON into routines (sections, exercises, predefined sets); test case for the program engine.
 14. **Joint/pain tracking** — per-joint discomfort log with severity, overlaid on exercise volume in Analysis to spot correlations.
+15. **Cairn-style calendar view** — restyle the calendar to match the look and feel of Cairn's calendar (`../fitness-tracker/web/app/calendar/page.tsx`): month grid with compact per-day workout chips. Clicking a day/chip keeps the current behavior of showing the workout summary to the right; on mobile the summary slides up as a dismissible bottom pane so you can keep scrolling the calendar behind it. Possibly ship as a new separate "Sessions" menu item that takes over the current calendar/history view.
 
 ## Done (2026-07-02 parity + mobile pass)
 - ~~Per-exercise routine set types (copy previous / predefined / don't populate) honored when loading routines.~~
