@@ -1,7 +1,7 @@
 // CalendarView.tsx - Responsive calendar dashboard with workout history and
 // a selected-day summary that preserves supersets.
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List, Menu, Bookmark } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List, Menu, Bookmark, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -21,6 +21,7 @@ export function CalendarView() {
   const [view, setView] = useState<'month' | 'list'>('month');
   const [filter, setFilter] = useState('');
   const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
+  const [detailOpen, setDetailOpen] = useState(false);
   const swipeRef = useRef({ startX: 0, startY: 0, tracking: false, swiped: false });
 
   // Routine day-splits for the filter dropdown (not kept in global store state).
@@ -34,6 +35,42 @@ export function CalendarView() {
     <style>{`
       .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; padding: 4px; }
       .calendar-left-pane { flex: 1.3; min-width: 0; align-self: flex-start; }
+      .calendar-dashboard .calendar-grid {
+        gap: 0; overflow: hidden; border: 1px solid var(--border-dark); border-radius: 12px;
+        background: rgba(15, 23, 42, 0.16);
+      }
+      .calendar-dashboard .calendar-day-label {
+        padding: 8px 4px; border-bottom: 1px solid var(--border-dark);
+        font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      }
+      .calendar-dashboard .calendar-day {
+        aspect-ratio: auto; min-height: 112px; border: none; border-right: 1px solid var(--border-dark);
+        border-bottom: 1px solid var(--border-dark); border-radius: 0; padding: 6px;
+        align-items: stretch; justify-content: flex-start; gap: 5px; background: rgba(255,255,255,0.012);
+      }
+      .calendar-dashboard .calendar-day:nth-child(7n) { border-right: none; }
+      .calendar-dashboard .calendar-day:hover { transform: none; background: rgba(99, 102, 241, 0.06); }
+      .calendar-dashboard .calendar-day.empty { cursor: default; background: rgba(15, 23, 42, 0.18); }
+      .calendar-dashboard .calendar-day.empty:hover { background: rgba(15, 23, 42, 0.18); }
+      .calendar-day-number {
+        align-self: flex-end; display: inline-flex; align-items: center; justify-content: center;
+        min-width: 22px; height: 22px; padding: 0 5px; border: 0; border-radius: 999px;
+        background: transparent; color: var(--text-secondary-dark); font: inherit; font-size: 11px; cursor: pointer;
+      }
+      .calendar-day.today .calendar-day-number { background: var(--accent); color: #111827; font-weight: 800; }
+      .calendar-day.active .calendar-day-number { box-shadow: inset 0 0 0 1px var(--primary); color: var(--primary); }
+      .calendar-dashboard .calendar-day.today { box-shadow: none; }
+      .calendar-workout-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .calendar-workout-chip {
+        display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; padding: 4px 5px;
+        border: 1px solid color-mix(in srgb, var(--chip-color) 38%, var(--border-dark)); border-radius: 6px;
+        background: color-mix(in srgb, var(--chip-color) 10%, transparent); color: var(--text-main-dark);
+        font-size: 10px; line-height: 1.1; cursor: pointer; text-align: left;
+      }
+      .calendar-workout-chip-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--chip-color); }
+      .calendar-workout-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .calendar-workout-chip-stat { flex: 0 0 auto; color: var(--text-secondary-dark); font-size: 9px; }
+      .calendar-workout-more { padding-left: 5px; color: var(--text-secondary-dark); font-size: 9px; }
       .calendar-right-pane {
         flex: 0.7; min-width: 320px; background: rgba(30, 41, 59, 0.4);
         backdrop-filter: blur(16px); border: 1px solid var(--border-dark); border-radius: 16px;
@@ -74,10 +111,20 @@ export function CalendarView() {
         border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 13px; color: #f59e0b;
         display: flex; gap: 8px; align-items: flex-start;
       }
+      .calendar-detail-dismiss { display: none; }
       @media (max-width: 768px) {
         .calendar-dashboard { flex-direction: column; }
         .calendar-left-pane { flex: 0 0 auto; width: 100%; align-self: stretch; }
-        .calendar-right-pane { flex: 0 0 auto; position: static; width: 100%; }
+        .calendar-dashboard .calendar-container { overflow-x: auto; padding-bottom: 4px; }
+        .calendar-dashboard .calendar-grid { min-width: 680px; }
+        .calendar-right-pane { display: none; }
+        .calendar-right-pane.detail-open {
+          display: flex; position: fixed; z-index: 1000; left: 8px; right: 8px; bottom: 8px; top: auto;
+          width: auto; min-width: 0; min-height: 0; max-height: min(72vh, 620px); padding: 16px;
+          border-radius: 18px 18px 12px 12px; box-shadow: 0 -18px 60px rgba(0,0,0,0.5);
+        }
+        .calendar-detail-dismiss { display: inline-flex; }
+        .workout-summary-scroll { min-height: 0; overscroll-behavior: contain; }
       }
     `}</style>
   );
@@ -108,6 +155,36 @@ export function CalendarView() {
   }, [filter, allLogs, exercises, workoutRoutines]);
 
   const dayMatches = (dateStr: string): boolean => matchingDates === null || matchingDates.has(dateStr);
+
+  const workoutChipsByDate = useMemo(() => {
+    const byDate = new Map<string, Array<{ exerciseId: string; name: string; sets: number; color: string }>>();
+    const grouped = new Map<string, Map<string, number>>();
+    for (const log of allLogs) {
+      if (log.is_deleted || (matchingDates !== null && !matchingDates.has(log.date))) continue;
+      const day = grouped.get(log.date) ?? new Map<string, number>();
+      day.set(log.exercise_id, (day.get(log.exercise_id) ?? 0) + 1);
+      grouped.set(log.date, day);
+    }
+    for (const [date, day] of grouped) {
+      const chips = [...day.entries()].map(([exerciseId, sets]) => {
+        const exercise = exercises.find(candidate => candidate.id === exerciseId);
+        const category = exercise ? categories.find(candidate => candidate.id === exercise.category_id) : undefined;
+        return {
+          exerciseId,
+          name: exercise?.name ?? 'Unknown exercise',
+          sets,
+          color: category ? intColorToHex(category.colour) : 'var(--primary)',
+        };
+      });
+      byDate.set(date, chips.sort((a, b) => b.sets - a.sets || a.name.localeCompare(b.name)));
+    }
+    return byDate;
+  }, [allLogs, categories, exercises, matchingDates]);
+
+  const selectCalendarDate = (date: string) => {
+    setSelectedDate(date);
+    setDetailOpen(true);
+  };
 
   const dotColoursFor = (dateStr: string): string[] => {
     if (!dayMatches(dateStr)) return [];
@@ -329,7 +406,7 @@ export function CalendarView() {
             ) : historyDays.map(d => (
               <div
                 key={d.date}
-                onClick={() => setSelectedDate(d.date)}
+                onClick={() => selectCalendarDate(d.date)}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px',
                   border: '1px solid var(--border-dark)', borderRadius: '10px', cursor: 'pointer',
@@ -376,30 +453,47 @@ export function CalendarView() {
                 const cells = [];
 
                 for (let i = 0; i < startDayIndex; i++) {
-                  cells.push(<div key={`empty-${i}`} className="calendar-day empty" style={{ border: 'none', background: 'transparent', cursor: 'default' }} />);
+                  cells.push(<div key={`empty-${i}`} className="calendar-day empty" />);
                 }
 
                 const todayStr = getLocalDateString();
                 for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
                   const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
                   const isToday = dateStr === todayStr;
-                  const dots = dotColoursFor(dateStr);
+                  const chips = workoutChipsByDate.get(dateStr) ?? [];
                   cells.push(
                     <div
                       key={`day-${dayNum}`}
                       className={`calendar-day ${selectedDate === dateStr ? 'active' : ''} ${isToday ? 'today' : ''}`}
                       onClick={() => {
                         if (swipeRef.current.swiped) return;
-                        setSelectedDate(dateStr);
+                        selectCalendarDate(dateStr);
                       }}
                       style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
                     >
-                      {dayNum}
-                      {dots.length > 0 && (
-                        <div className="calendar-dot-container" style={{ display: 'flex', gap: '2px', justifyContent: 'center' }}>
-                          {dots.map((c, i) => <div key={i} className="calendar-dot" style={{ backgroundColor: c }} />)}
-                        </div>
-                      )}
+                      <button
+                        className="calendar-day-number"
+                        onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
+                        aria-label={`Open workout summary for ${dateStr}`}
+                      >
+                        {dayNum}
+                      </button>
+                      <div className="calendar-workout-chips">
+                        {chips.slice(0, 2).map(chip => (
+                          <button
+                            key={chip.exerciseId}
+                            className="calendar-workout-chip"
+                            style={{ '--chip-color': chip.color } as CSSProperties}
+                            title={`${chip.name} · ${chip.sets} set${chip.sets === 1 ? '' : 's'}`}
+                            onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
+                          >
+                            <span className="calendar-workout-chip-dot" />
+                            <span className="calendar-workout-chip-name">{chip.name}</span>
+                            <span className="calendar-workout-chip-stat">{chip.sets}</span>
+                          </button>
+                        ))}
+                        {chips.length > 2 && <span className="calendar-workout-more">+{chips.length - 2} more</span>}
+                      </div>
                     </div>
                   );
                 }
@@ -411,12 +505,23 @@ export function CalendarView() {
         )}
       </div>
 
-      <div className="calendar-right-pane">
+      <div className={`calendar-right-pane ${detailOpen ? 'detail-open' : ''}`}>
         <div className="workout-summary-header">
-          <div className="workout-summary-title">
-            <Dumbbell size={18} color="var(--primary)" /> Workout Summary
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+            <div>
+              <div className="workout-summary-title">
+                <Dumbbell size={18} color="var(--primary)" /> Workout Summary
+              </div>
+              <div className="workout-summary-date">{formattedSelectedDate}</div>
+            </div>
+            <button
+              className="btn btn-secondary icon-btn calendar-detail-dismiss"
+              onClick={() => setDetailOpen(false)}
+              aria-label="Close workout summary"
+            >
+              <X size={18} />
+            </button>
           </div>
-          <div className="workout-summary-date">{formattedSelectedDate}</div>
         </div>
 
         {linkedRoutineSummaries.length > 0 && (

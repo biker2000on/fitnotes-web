@@ -13,6 +13,7 @@ import {
 import { Activity, Percent, RefreshCw, Scale, TrendingUp, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { kgToLbs } from '../lib/units';
+import { exponentialMovingAverage } from '../lib/trends';
 
 type TimeRangePreset = '1M' | '1Y' | 'ALL' | 'CUSTOM';
 
@@ -69,46 +70,57 @@ export function BodyView() {
   const useMonthlyAverages = rangePreset === 'ALL' || visibleSpanDays > 730;
 
   const chartData = useMemo(() => {
-    if (!useMonthlyAverages) return rawBodyData;
+    let data = rawBodyData;
 
-    const months = new Map<string, {
+    if (useMonthlyAverages) {
+      const months = new Map<string, {
       timestamp: number;
       date: string;
       weightTotal: number;
       weightCount: number;
       fatTotal: number;
       fatCount: number;
-    }>();
+      }>();
 
-    for (const row of rawBodyData) {
-      const d = new Date(row.timestamp);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
-      const bucket = months.get(key) ?? {
-        timestamp: monthStart.getTime(),
-        date: monthStart.toISOString().slice(0, 10),
-        weightTotal: 0,
-        weightCount: 0,
-        fatTotal: 0,
-        fatCount: 0,
-      };
-      bucket.weightTotal += row.weight;
-      bucket.weightCount++;
-      if (row.bodyFat != null) {
-        bucket.fatTotal += row.bodyFat;
-        bucket.fatCount++;
+      for (const row of rawBodyData) {
+        const d = new Date(row.timestamp);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthStart = new Date(d.getFullYear(), d.getMonth(), 1);
+        const bucket = months.get(key) ?? {
+          timestamp: monthStart.getTime(),
+          date: monthStart.toISOString().slice(0, 10),
+          weightTotal: 0,
+          weightCount: 0,
+          fatTotal: 0,
+          fatCount: 0,
+        };
+        bucket.weightTotal += row.weight;
+        bucket.weightCount++;
+        if (row.bodyFat != null) {
+          bucket.fatTotal += row.bodyFat;
+          bucket.fatCount++;
+        }
+        months.set(key, bucket);
       }
-      months.set(key, bucket);
+
+      data = Array.from(months.values())
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(bucket => ({
+          date: bucket.date,
+          measuredAt: `${bucket.date}T00:00:00`,
+          timestamp: bucket.timestamp,
+          weight: Math.round((bucket.weightTotal / bucket.weightCount) * 10) / 10,
+          bodyFat: bucket.fatCount === 0 ? null : Math.round((bucket.fatTotal / bucket.fatCount) * 10) / 10,
+        }));
     }
 
-    return Array.from(months.values())
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .map(bucket => ({
-        date: bucket.date,
-        timestamp: bucket.timestamp,
-        weight: Math.round((bucket.weightTotal / bucket.weightCount) * 10) / 10,
-        bodyFat: bucket.fatCount === 0 ? null : Math.round((bucket.fatTotal / bucket.fatCount) * 10) / 10,
-      }));
+    const weightEwma = exponentialMovingAverage(data.map(row => row.weight));
+    const bodyFatEwma = exponentialMovingAverage(data.map(row => row.bodyFat));
+    return data.map((row, index) => ({
+      ...row,
+      weightEwma: weightEwma[index],
+      bodyFatEwma: bodyFatEwma[index],
+    }));
   }, [rawBodyData, useMonthlyAverages]);
 
   const shortDate = (date: string) => {
@@ -382,7 +394,7 @@ export function BodyView() {
             <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary-dark)', textTransform: 'uppercase' }}>Weight</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>{userUnit}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Raw · <span style={{ color: 'var(--accent)' }}>EWMA</span> · {userUnit}</span>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -414,9 +426,10 @@ export function BodyView() {
                     <Tooltip
                       contentStyle={tooltipStyle}
                       labelFormatter={(value) => shortDateTime(Number(value))}
-                      formatter={(value) => [`${value} ${userUnit}`, 'Weight']}
+                      formatter={(value, name) => [`${value} ${userUnit}`, name]}
                     />
-                    <Line type="monotone" dataKey="weight" stroke="var(--primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="weight" name="Weight" stroke="var(--primary)" strokeWidth={1.5} strokeOpacity={0.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="weightEwma" name="Weight EWMA" stroke="var(--accent)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -424,7 +437,7 @@ export function BodyView() {
             <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary-dark)', textTransform: 'uppercase' }}>Body Fat</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>%</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Raw · <span style={{ color: 'var(--accent)' }}>EWMA</span> · %</span>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -456,9 +469,10 @@ export function BodyView() {
                     <Tooltip
                       contentStyle={tooltipStyle}
                       labelFormatter={(value) => shortDateTime(Number(value))}
-                      formatter={(value) => [`${value}%`, 'Body Fat']}
+                      formatter={(value, name) => [`${value}%`, name]}
                     />
-                    <Line type="monotone" dataKey="bodyFat" stroke="var(--success)" strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="bodyFat" name="Body Fat" stroke="var(--success)" strokeWidth={1.5} strokeOpacity={0.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="bodyFatEwma" name="Body Fat EWMA" stroke="var(--accent)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

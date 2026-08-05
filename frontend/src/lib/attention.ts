@@ -8,15 +8,18 @@ import { addDays, getLocalDateString, parseLocalDate } from './date';
 import { getProgressionSuggestion } from './progression';
 import { goalCurrentValue, goalTargetValue, goalTypeLabel } from './goals';
 import { startOfWeek, weeklyMuscleVolume } from './stats';
+import type { MuscleKey } from './muscles';
 
 export type AttentionKind = 'stalled' | 'goal_deadline' | 'under_volume' | 'neglected';
 
 export interface AttentionItem {
+  id: string;
   kind: AttentionKind;
   title: string;
   detail: string;
   exerciseId?: string;
   goalId?: string;
+  muscle?: MuscleKey;
 }
 
 // Exercises must have been trained this recently to be checked for a stall.
@@ -75,6 +78,7 @@ export function needsAttention({
     const suggestion = getProgressionSuggestion(allLogs, ex, userUnit, addDays(today, 1));
     if (suggestion?.kind === 'deload') {
       stalled.push({
+        id: `stalled:${ex.id}:${last}`,
         kind: 'stalled',
         title: `${ex.name} has stalled`,
         detail: suggestion.message,
@@ -99,6 +103,7 @@ export function needsAttention({
     const pct = Math.round((current / target) * 100);
     const exName = exerciseById.get(g.exercise_id)?.name ?? 'Unknown exercise';
     deadlines.push({
+      id: `goal_deadline:${g.id}:${g.target_date}`,
       kind: 'goal_deadline',
       title: `${exName} goal due ${daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`}`,
       detail: `${goalTypeLabel(g.type_id)}: ${Math.round(current * 100) / 100} of ${target} (${pct}%).`,
@@ -119,9 +124,11 @@ export function needsAttention({
     .sort((a, b) => a.sets - b.sets)
     .slice(0, MAX_PER_KIND)
     .map((row): AttentionItem => ({
+      id: `under_volume:${row.muscle}:${getLocalDateString(prevWeekStart)}`,
       kind: 'under_volume',
       title: `${row.name} volume under target`,
       detail: `${row.sets} set${row.sets === 1 ? '' : 's'} last week (target ${row.targetMin}–${row.targetMax}).`,
+      muscle: row.muscle,
     }));
   items.push(...underVolume);
 
@@ -141,6 +148,7 @@ export function needsAttention({
       (parseLocalDate(today).getTime() - parseLocalDate(last).getTime()) / (7 * 86400000),
     );
     neglected.push({
+      id: `neglected:${ex.id}:${last}`,
       kind: 'neglected',
       title: `${ex.name} not trained in ${weeks} week${weeks === 1 ? '' : 's'}`,
       detail: `Last session ${last}.`,

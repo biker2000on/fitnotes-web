@@ -446,6 +446,8 @@ export function WorkoutLogView() {
       </div>
       {/* Left: Active set Logger & comments */}
       <div className="workout-log-input-column">
+        <AttentionCard />
+
         {selectedExercise ? (
           <div className="card active-exercise-card" style={{ gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -493,8 +495,6 @@ export function WorkoutLogView() {
             </div>
           </div>
         )}
-
-        <AttentionCard />
 
         {showEntryModal && selectedExercise && (
           <div className="modal-overlay mobile-modal-overlay" onClick={cancelEntry}>

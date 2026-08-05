@@ -1,5 +1,10 @@
 # TODOs
 
+## Done (2026-08-05 roadmap 15–17)
+- ~~Cairn-style calendar: compact per-exercise workout chips in the month grid, persistent desktop summary, and a dismissible mobile bottom sheet that leaves the calendar scrollable.~~
+- ~~Workout-log “Needs attention” triage: today/future visibility only, durable cycle-aware dismissals, Up/Down/Enter/D keyboard flow, predictable focus, and contextual chart modals for every item type.~~
+- ~~Body-weight EWMA trends: smoothed EWMA overlays for both weight and body-fat charts, including monthly/all-history views.~~
+
 ## Done (2026-07-29 insights pass)
 - ~~Bodyweight-relative strength standards: e1RM graded Untrained→Elite against BW-multiple bands for the classic barbell lifts (lib/standards.ts), shown on the Analysis Strength tab with progress to the next band.~~
 - ~~"Needs attention" feed on the workout log: stalled lifts (deload detection), goals due within 14 days, muscles under the weekly volume band last week, regular exercises untrained 3+ weeks (lib/attention.ts, AttentionCard).~~
@@ -31,7 +36,6 @@
 12. **Gym profiles for plate calculator** — per-gym plates/bars/dumbbell increments; progression suggestions round to loads achievable at the active gym.
 13. **Routine import from structured sources (ATG)** — map scraped ATG program markdown/JSON into routines (sections, exercises, predefined sets); test case for the program engine.
 14. **Joint/pain tracking** — per-joint discomfort log with severity, overlaid on exercise volume in Analysis to spot correlations.
-15. **Cairn-style calendar view** — restyle the calendar to match the look and feel of Cairn's calendar (`../fitness-tracker/web/app/calendar/page.tsx`): month grid with compact per-day workout chips. Clicking a day/chip keeps the current behavior of showing the workout summary to the right; on mobile the summary slides up as a dismissible bottom pane so you can keep scrolling the calendar behind it. Possibly ship as a new separate "Sessions" menu item that takes over the current calendar/history view.
 
 ## Done (2026-07-02 parity + mobile pass)
 - ~~Per-exercise routine set types (copy previous / predefined / don't populate) honored when loading routines.~~
