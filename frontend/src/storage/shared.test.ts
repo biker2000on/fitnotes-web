@@ -87,3 +87,47 @@ describe('routine template set shorthand', () => {
     expect(statements![0].params[statements![0].params.length - 1]).toBe('set-1');
   });
 });
+
+describe('shorthand INSERT with omitted columns', () => {
+  it('leaves absent columns out instead of binding NULL, so SQLite defaults apply', () => {
+    // Routine populate and Log Set build fresh training_logs without
+    // is_deleted or set_type; binding NULL for them violated NOT NULL
+    // constraints on the native/WASM schemas and made every insert fail.
+    const statements = buildShorthandStatements('INSERT INTO training_logs', [{
+      id: 'log-1',
+      exercise_id: 'ex-1',
+      date: '2026-08-05',
+      metric_weight: 100,
+      reps: 5,
+      unit: 1,
+      is_personal_record: false,
+      is_complete: false,
+      distance: null,
+      duration_seconds: null,
+    }])!;
+
+    expect(statements).toHaveLength(1);
+    const { sql, params } = statements[0];
+    expect(sql).not.toMatch(/\bis_deleted\b/);
+    expect(sql).not.toMatch(/\bset_type\b/);
+    // Explicit nulls stay bound; the column count matches the params count.
+    expect(params).toContain(null);
+    expect((sql.match(/\?/g) || []).length).toBe(params.length);
+    // is_dirty and last_modified are always enriched in.
+    expect(sql).toMatch(/\bis_dirty\b/);
+    expect(sql).toMatch(/\blast_modified\b/);
+  });
+
+  it('still binds an explicitly provided is_deleted value', () => {
+    const statements = buildShorthandStatements('INSERT INTO training_logs', [{
+      id: 'log-2',
+      exercise_id: 'ex-1',
+      date: '2026-08-05',
+      is_deleted: true,
+    }])!;
+
+    const { sql, params } = statements[0];
+    expect(sql).toMatch(/\bis_deleted\b/);
+    expect(params).toContain(true);
+  });
+});

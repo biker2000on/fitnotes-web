@@ -68,19 +68,21 @@ export function useSyncSlice(deps: SyncSliceDeps) {
   // refresh -> sync -> setToken -> re-run loop.
   const isAuthenticated = Boolean(token);
 
+  // Both SQLite drivers (Tauri native and web WASM) store the timestamp in the
+  // key-value settings table; only the localStorage fallback driver keeps it in
+  // localStorage. Ask the settings table first and fall back if it has nothing.
   const loadLastSyncTime = async () => {
-    if (isTauri()) {
-      try {
-        const rows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
-        if (rows.length > 0) {
-          setLastSyncTime(rows[0].value);
-        }
-      } catch (e) {
-        console.warn("Failed to query last sync timestamp from SQLite:", e);
+    try {
+      const rows = await db.query<{ key: string; value: string }>("SELECT * FROM settings WHERE key = 'last_sync_timestamp'");
+      const value = rows[0]?.value;
+      if (typeof value === 'string' && value) {
+        setLastSyncTime(value);
+        return;
       }
-    } else {
-      setLastSyncTime(localStorage.getItem('fn_last_sync_timestamp') || '');
+    } catch (e) {
+      console.warn("Failed to query last sync timestamp from SQLite:", e);
     }
+    setLastSyncTime(localStorage.getItem('fn_last_sync_timestamp') || '');
   };
 
   // Debounced Auto-Sync Setup

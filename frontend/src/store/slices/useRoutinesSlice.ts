@@ -624,7 +624,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     });
   };
 
-  const handleImportRoutinePopulated = async (
+  const importRoutinePopulated = async (
     routineId: string,
     type: 'template' | 'last_workout' | 'one_rep_max',
     percentage: number = 75,
@@ -813,6 +813,26 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'routine set types'}.`);
     } else {
       triggerToast('No routine sets were logged. Add template sets or log this exercise once before using history-based loading.', 'error');
+    }
+  };
+
+  // A failed populate must never leave the Start Routine modal stranded: close
+  // it, reconcile the UI with whatever did get written, and surface the error.
+  const handleImportRoutinePopulated = async (
+    routineId: string,
+    type: 'template' | 'last_workout' | 'one_rep_max',
+    percentage: number = 75,
+    sectionId?: string
+  ) => {
+    try {
+      await importRoutinePopulated(routineId, type, percentage, sectionId);
+    } catch (error) {
+      console.error('Failed to load routine into workout:', error);
+      setShowRoutineImportModal(false);
+      setActiveRoutineForPopulate(null);
+      setActiveSectionForPopulate(null);
+      await late.refreshData().catch(refreshError => console.error('Failed to reconcile workout data:', refreshError));
+      triggerToast(`Couldn't load routine: ${errorMessage(error)}`, 'error');
     }
   };
 
