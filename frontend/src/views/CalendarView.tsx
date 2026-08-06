@@ -221,15 +221,20 @@ export function CalendarView() {
 
   const styleTag = (
     <style>{`
-      .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; padding: 4px; }
+      .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; }
+      /* The calendar is not a card: it is a grid bounded by the viewport, so it
+         sits directly on the page and sizes to the screen rather than stretching
+         to match the summary column beside it. */
       .calendar-left-pane {
-        flex: 1 1 auto; min-width: 0; align-self: stretch;
-        display: flex; flex-direction: column; padding: 16px; gap: 12px;
+        flex: 1 1 auto; min-width: 0; align-self: flex-start;
+        display: flex; flex-direction: column; gap: 10px;
       }
       .calendar-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
       .calendar-scroll {
         --week-col: 92px;
-        flex: 1; min-height: 0; max-height: calc(100vh - 210px); overflow-y: auto; overscroll-behavior: contain;
+        /* Fills from below the toolbar to just above the viewport floor; the
+           workspace padding and toolbar are the only things above it. */
+        height: calc(100vh - 118px); min-height: 320px; overflow-y: auto; overscroll-behavior: contain;
         border: 1px solid var(--border-dark); border-radius: 12px; background: rgba(15, 23, 42, 0.16);
       }
       .calendar-month-section { position: relative; }
@@ -359,12 +364,12 @@ export function CalendarView() {
       .calendar-detail-dismiss { display: none; }
       @media (max-width: 900px) {
         .calendar-dashboard { flex-direction: column; }
-        .calendar-left-pane { flex: 0 0 auto; width: 100%; padding: 10px; }
+        .calendar-left-pane { flex: 0 0 auto; width: 100%; }
         /* The whole week has to fit on screen: a horizontally scrolling month
            shows three days at a time, which reads as a broken week. Columns
            shrink and exercise chips collapse to category dots; the full detail
            is one tap away in the summary sheet. */
-        .calendar-scroll { max-height: calc(100vh - 190px); overflow-x: hidden; --week-col: 54px; }
+        .calendar-scroll { height: calc(100vh - 150px); overflow-x: hidden; --week-col: 54px; }
         .calendar-month-section { min-width: 0; }
         .calendar-month-header { padding: 8px 10px 5px; }
         .calendar-month-title { font-size: 13px; }
@@ -613,7 +618,7 @@ export function CalendarView() {
     <div className="calendar-dashboard">
       {styleTag}
 
-      <div className="calendar-left-pane card">
+      <div className="calendar-left-pane">
         <div className="calendar-toolbar">
           <button className="hamburger-btn calendar-menu-btn" onClick={() => setSidebarOpen(true)} title="Open navigation menu" aria-label="Open navigation menu">
             <Menu size={20} />
