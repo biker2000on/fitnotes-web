@@ -43,11 +43,11 @@ export function HistoryView() {
   useEffect(() => { setVisible(PAGE_SIZE); }, [filter]);
 
   // Scroll-driven paging, listening on whichever ancestor actually scrolls.
-  // The app scrolls inside .main-content rather than the window, and scroll
-  // events neither bubble nor (in the Android WebView) reach a capture-phase
-  // listener on the document - both of which leave the list stuck on page one
-  // with a "loading" label that never resolves. Binding to the element itself
-  // is the only form that fires on every platform.
+  // The app scrolls inside .main-content, not the window, and scroll events do
+  // not bubble - a window-only listener never fires here, which left the list
+  // stuck on its first page behind a label that never resolved. Binding to the
+  // scrolling element itself is the form that depends on the least: no
+  // bubbling, no capture-phase delivery, no observer callbacks.
   useEffect(() => {
     const check = () => {
       const sentinel = sentinelRef.current;
