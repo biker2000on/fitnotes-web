@@ -76,9 +76,15 @@ export function CalendarView() {
   }, [allLogs, currentOrdinal]);
   const latestOrdinal = currentOrdinal + FUTURE_MONTHS;
 
+  // The month the calendar should be looking at: whatever day is selected.
+  // Arriving from History ("view in calendar") selects a past day first, so
+  // opening on today's month would land on the wrong place entirely.
+  const selectedOrdinal = useMemo(() => ordinalOfDate(parseLocalDate(selectedDate)), [selectedDate]);
+  const lastSelectedOrdinalRef = useRef(selectedOrdinal);
+
   const [range, setRange] = useState(() => ({
-    start: currentOrdinal - INITIAL_TRAIL,
-    end: currentOrdinal + 1,
+    start: selectedOrdinal - INITIAL_TRAIL,
+    end: Math.max(selectedOrdinal, currentOrdinal) + 1,
   }));
 
   // Keep the rendered window inside the data bounds as logs load in.
@@ -101,13 +107,38 @@ export function CalendarView() {
     if (root && target) root.scrollTo({ top: target.offsetTop, behavior });
   };
 
-  // Anchor the current month at the top on first paint so the view opens on
-  // "now" with history available by scrolling up.
+  // Anchor the selected day's month at the top on first paint, so the view
+  // opens where the user is looking with history available by scrolling up.
   useLayoutEffect(() => {
     if (anchored) return;
-    scrollMonthIntoView(currentOrdinal);
+    scrollMonthIntoView(selectedOrdinal);
     setAnchored(true);
-  }, [anchored, currentOrdinal, months]);
+  }, [anchored, selectedOrdinal, months]);
+
+  // Follow the selection when it moves to another month while the calendar is
+  // already open - but only scroll if that month is off-screen, so clicking a
+  // day in a month you can already see never yanks the viewport.
+  useEffect(() => {
+    if (!anchored) return;
+    if (selectedOrdinal === lastSelectedOrdinalRef.current) return;
+    lastSelectedOrdinalRef.current = selectedOrdinal;
+
+    setRange(prev => ({
+      start: Math.min(prev.start, selectedOrdinal),
+      end: Math.max(prev.end, selectedOrdinal),
+    }));
+
+    const root = scrollRef.current;
+    const section = root?.querySelector<HTMLElement>(`[data-month="${selectedOrdinal}"]`);
+    if (!root || !section) {
+      // Not rendered yet; scroll once the widened range paints.
+      pendingMonthRef.current = selectedOrdinal;
+      return;
+    }
+    const visible = section.offsetTop < root.scrollTop + root.clientHeight
+      && section.offsetTop + section.offsetHeight > root.scrollTop;
+    if (!visible) scrollMonthIntoView(selectedOrdinal, 'smooth');
+  }, [anchored, selectedOrdinal]);
 
   // Restore the visual position after older months are prepended above, unless
   // an explicit month jump is queued - that one wins.
@@ -250,6 +281,18 @@ export function CalendarView() {
       .calendar-cell.today .calendar-cell-number { background: var(--accent); color: #111827; font-weight: 800; }
       .calendar-cell.active { box-shadow: inset 0 0 0 2px var(--primary); }
       .calendar-cell.active .calendar-cell-number { color: var(--primary); font-weight: 700; }
+      /* The routine a day belonged to, above its exercises. Deliberately not a
+         sibling of the exercise chips: those are capped with :nth-child, which
+         would start counting this one. */
+      .calendar-routine-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+      .calendar-routine-chip {
+        display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 3px 5px;
+        border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 6px;
+        background: rgba(99, 102, 241, 0.14); color: var(--primary);
+        font-size: 10px; font-weight: 700; line-height: 1.1; cursor: pointer; text-align: left;
+      }
+      .calendar-routine-chip-icon { flex: 0 0 auto; }
+      .calendar-routine-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .calendar-workout-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .calendar-workout-chip {
         display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; padding: 4px 5px;
@@ -333,6 +376,11 @@ export function CalendarView() {
         .calendar-week-meta, .calendar-week-rest { font-size: 8px; }
         .calendar-cell { min-height: 60px; padding: 3px; gap: 3px; }
         .calendar-cell-number { min-width: 18px; height: 18px; font-size: 10px; }
+        /* No room for the routine name at this column width; the bookmark
+           alone still says "this day ran a routine", and the sheet names it. */
+        .calendar-routine-chips { padding-left: 2px; }
+        .calendar-routine-chip { width: auto; padding: 0; border: none; background: none; }
+        .calendar-routine-chip-name { display: none; }
         .calendar-workout-chips { flex-direction: row; flex-wrap: wrap; gap: 3px; padding-left: 2px; }
         .calendar-workout-chip { width: auto; padding: 0; border: none; background: none; }
         .calendar-workout-chip:nth-child(n+3) { display: flex; }
@@ -376,6 +424,30 @@ export function CalendarView() {
     }
     return byDate;
   }, [allLogs, categories, exercises, matchingDates]);
+
+  // Routines completed on each day. The day split is the useful label when a
+  // routine has one ("Spine Day") - the parent routine name is the same on
+  // every one of its days and tells you nothing about which session this was.
+  const routineChipsByDate = useMemo(() => {
+    const byDate = new Map<string, Array<{ id: string; label: string; title: string }>>();
+    for (const wr of workoutRoutines) {
+      if (wr.is_deleted) continue;
+      if (matchingDates !== null && !matchingDates.has(wr.date)) continue;
+      const routine = routines.find(r => r.id === wr.routine_id && !r.is_deleted);
+      if (!routine) continue;
+      const section = wr.routine_section_id
+        ? routineSections.find(s => s.id === wr.routine_section_id && !s.is_deleted)
+        : null;
+      const list = byDate.get(wr.date) ?? [];
+      list.push({
+        id: wr.id,
+        label: section?.name || routine.name,
+        title: `${routine.name}${section ? ` - ${section.name}` : ''}`,
+      });
+      byDate.set(wr.date, list);
+    }
+    return byDate;
+  }, [workoutRoutines, routines, routineSections, matchingDates]);
 
   const selectCalendarDate = (date: string) => {
     setSelectedDate(date);
@@ -625,6 +697,7 @@ export function CalendarView() {
                       if (!inMonth) return <div key={dateStr} className="calendar-cell outside" />;
 
                       const chips = workoutChipsByDate.get(dateStr) ?? [];
+                      const routineChips = routineChipsByDate.get(dateStr) ?? [];
                       return (
                         <div
                           key={dateStr}
@@ -638,6 +711,21 @@ export function CalendarView() {
                           >
                             {day.getDate()}
                           </button>
+                          {routineChips.length > 0 && (
+                            <div className="calendar-routine-chips">
+                              {routineChips.map(routine => (
+                                <button
+                                  key={routine.id}
+                                  className="calendar-routine-chip"
+                                  title={routine.title}
+                                  onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
+                                >
+                                  <Bookmark size={9} className="calendar-routine-chip-icon" />
+                                  <span className="calendar-routine-chip-name">{routine.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <div className="calendar-workout-chips">
                             {chips.map(chip => (
                               <button

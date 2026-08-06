@@ -42,21 +42,23 @@ export function HistoryView() {
   // Reset paging whenever the filter changes the result set.
   useEffect(() => { setVisible(PAGE_SIZE); }, [filter]);
 
-  // Scroll-driven paging rather than an IntersectionObserver: observers only
-  // fire while the page composites, which the Android WebView does not always
-  // do, and a history list that stops loading looks like missing data.
+  // Scroll-driven paging. The listener is registered in the capture phase on
+  // the document because scroll events do not bubble and the app scrolls inside
+  // .main-content, not the window - a window-level listener never fires here
+  // and the list silently stops at the first page.
   useEffect(() => {
     const check = () => {
       const sentinel = sentinelRef.current;
       if (!sentinel) return;
-      const remaining = sentinel.getBoundingClientRect().top - window.innerHeight;
-      if (remaining < 300) setVisible(v => (v >= sessions.length ? v : v + PAGE_SIZE));
+      if (sentinel.getBoundingClientRect().top - window.innerHeight < 300) {
+        setVisible(v => (v >= sessions.length ? v : v + PAGE_SIZE));
+      }
     };
     check();
-    window.addEventListener('scroll', check, { passive: true });
+    document.addEventListener('scroll', check, { capture: true, passive: true });
     window.addEventListener('resize', check);
     return () => {
-      window.removeEventListener('scroll', check);
+      document.removeEventListener('scroll', check, { capture: true });
       window.removeEventListener('resize', check);
     };
   }, [sessions.length, visible]);
@@ -250,9 +252,15 @@ export function HistoryView() {
           })}
           <div ref={sentinelRef} />
           {visible < sessions.length && (
-            <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-secondary-dark)', padding: '8px' }}>
-              Loading more sessions…
-            </div>
+            // Also a button, not just a spinner: if auto-paging ever fails to
+            // fire there is still a way forward instead of a stuck label.
+            <button
+              className="btn btn-secondary"
+              style={{ alignSelf: 'center', padding: '8px 18px', fontSize: '12px' }}
+              onClick={() => setVisible(v => v + PAGE_SIZE)}
+            >
+              Load more ({sessions.length - visible} older {sessions.length - visible === 1 ? 'session' : 'sessions'})
+            </button>
           )}
         </div>
       )}
