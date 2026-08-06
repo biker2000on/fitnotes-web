@@ -25,3 +25,23 @@ describe('TauriNativeDriver.executeBatch', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('TauriNativeDriver.query boolean normalization', () => {
+  it('returns SQLite 0/1 boolean columns as real booleans', async () => {
+    // A raw 0 reaching JSX renders as a literal "0" beside the value it
+    // guards - the "10 lbs x 6 reps0" bug in the exercise history pane.
+    mocks.invoke.mockResolvedValueOnce([
+      { id: 'log-1', reps: 6, is_personal_record: 0, is_complete: 1, is_deleted: 0, is_dirty: 1 },
+    ] as any);
+
+    const driver = new TauriNativeDriver();
+    const [row] = await driver.query<any>('SELECT * FROM training_logs');
+
+    expect(row.is_personal_record).toBe(false);
+    expect(row.is_complete).toBe(true);
+    expect(row.is_deleted).toBe(false);
+    expect(row.reps).toBe(6);
+    // is_dirty is a local-only sync marker compared against 1; it stays numeric.
+    expect(row.is_dirty).toBe(1);
+  });
+});

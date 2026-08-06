@@ -228,7 +228,7 @@ export function ExerciseHistoryDrawer() {
                       <span style={{ color: 'var(--text-secondary-dark)' }}>Set {i + 1}</span>
                       <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', textAlign: 'right' }}>
                         {formatLogValue(l, exercise.exercise_type_id)}
-                        {l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
+                        {!!l.is_personal_record && <Trophy size={12} color="var(--accent)" />}
                       </span>
                     </div>
                   ))}

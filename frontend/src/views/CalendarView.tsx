@@ -347,7 +347,7 @@ export function CalendarView() {
         >
           <span className="summary-set-badge">{i + 1}</span>
           <span>{formatLogValue(set, ex.typeId)}</span>
-          {set.is_complete && <span className="summary-set-completed">✓</span>}
+          {!!set.is_complete && <span className="summary-set-completed">✓</span>}
         </div>
       ))}
     </div>

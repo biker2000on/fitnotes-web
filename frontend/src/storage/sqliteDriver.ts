@@ -13,6 +13,7 @@ import {
   buildDdlStatements,
   buildShorthandStatements,
   buildUpsertSql,
+  coerceRowBooleans,
   isBuiltInSeedRow,
   normalizeForSync,
   normalizeTimestamp,
@@ -201,7 +202,7 @@ export class SqliteWasmDriver implements DBDriver {
       return [settingsFromKeyValueRows(rows)] as T[];
     }
 
-    const rows = await this.rawQuery<T>(sql, params);
+    const rows = coerceRowBooleans(await this.rawQuery<T>(sql, params));
 
     // Guests with an empty store still get sensible plate/barbell/measurement
     // defaults (virtual rows, never persisted — matches the old mock driver).

@@ -978,7 +978,7 @@ export function WorkoutLogView() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{groupLabel}</span>
-                          {wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
+                          {!!wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
                         </div>
                         <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }} onClick={() => handleClearGroup(wg.id)}>
                           Unlink

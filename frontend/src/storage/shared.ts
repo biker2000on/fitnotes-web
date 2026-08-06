@@ -105,6 +105,30 @@ export const BOOL_COLUMNS: Record<string, string[]> = {
   graph_favourites: ['is_deleted'],
 };
 
+// Every column name the models type as bool, across all tables. Column names
+// don't collide between tables, so a single set is enough to normalize a row
+// without knowing which table a free-form SELECT came from.
+//
+// `is_dirty` is deliberately absent: it is a local-only sync marker compared
+// against the literal 1, and must stay numeric.
+const BOOLEAN_COLUMN_NAMES = new Set(Object.values(BOOL_COLUMNS).flat());
+
+// SQLite has no boolean type - it hands these columns back as 0/1 integers,
+// while the TypeScript models (and the React components reading them) declare
+// them as booleans. A raw 0 reaching JSX renders as a literal "0" next to the
+// value it guards (`{log.is_personal_record && <Trophy/>}`), so normalize at
+// the read boundary rather than at each of the dozens of call sites.
+export function coerceRowBooleans<T>(rows: T[]): T[] {
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const record = row as Record<string, unknown>;
+    for (const key of BOOLEAN_COLUMN_NAMES) {
+      if (typeof record[key] === 'number') record[key] = record[key] !== 0;
+    }
+  }
+  return rows;
+}
+
 // Default body measurements shown to guests with an empty local store (mirrors
 // FitNotes defaults). unit_id: 1 = cm, 2 = inches, 3 = percent.
 // Fixed UUIDs keep selection stable across reloads and remain valid if a record
