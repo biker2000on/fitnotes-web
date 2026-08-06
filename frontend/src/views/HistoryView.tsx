@@ -42,10 +42,12 @@ export function HistoryView() {
   // Reset paging whenever the filter changes the result set.
   useEffect(() => { setVisible(PAGE_SIZE); }, [filter]);
 
-  // Scroll-driven paging. The listener is registered in the capture phase on
-  // the document because scroll events do not bubble and the app scrolls inside
-  // .main-content, not the window - a window-level listener never fires here
-  // and the list silently stops at the first page.
+  // Scroll-driven paging, listening on whichever ancestor actually scrolls.
+  // The app scrolls inside .main-content rather than the window, and scroll
+  // events neither bubble nor (in the Android WebView) reach a capture-phase
+  // listener on the document - both of which leave the list stuck on page one
+  // with a "loading" label that never resolves. Binding to the element itself
+  // is the only form that fires on every platform.
   useEffect(() => {
     const check = () => {
       const sentinel = sentinelRef.current;
@@ -54,11 +56,21 @@ export function HistoryView() {
         setVisible(v => (v >= sessions.length ? v : v + PAGE_SIZE));
       }
     };
+
+    let scroller: HTMLElement | null = sentinelRef.current?.parentElement ?? null;
+    while (scroller) {
+      const overflowY = getComputedStyle(scroller).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') break;
+      scroller = scroller.parentElement;
+    }
+
     check();
-    document.addEventListener('scroll', check, { capture: true, passive: true });
+    scroller?.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('scroll', check, { passive: true });
     window.addEventListener('resize', check);
     return () => {
-      document.removeEventListener('scroll', check, { capture: true });
+      scroller?.removeEventListener('scroll', check);
+      window.removeEventListener('scroll', check);
       window.removeEventListener('resize', check);
     };
   }, [sessions.length, visible]);
