@@ -258,9 +258,13 @@ body.light-theme .nav-item {
 }
 
 /* Views that are grids rather than reading columns (the calendar) opt out of
-   the shared content cap and use the full viewport width. */
+   the shared content cap and use the full viewport width. They also claim the
+   workspace's leftover height, so the grid inside can size itself to the
+   screen without hard-coding an offset for the toolbar and safe-area insets. */
 .main-panel.main-panel-wide {
   max-width: none;
+  flex: 1;
+  min-height: 0;
 }
 
 .header {
