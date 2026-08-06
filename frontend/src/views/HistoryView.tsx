@@ -2,7 +2,7 @@
 // reverse-chronological order with its exercises, totals, and linked routines.
 // Split out of the calendar so browsing past sessions is its own destination.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Bookmark, Dumbbell, History as HistoryIcon, Menu, ArrowRight } from 'lucide-react';
+import { CalendarDays, Bookmark, Dumbbell, History as HistoryIcon, ArrowRight } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -16,7 +16,7 @@ const PAGE_SIZE = 25;
 export function HistoryView() {
   const {
     allLogs, exercises, categories, routines, workoutRoutines,
-    setSelectedDate, setActiveTab, setSidebarOpen, userUnit, handleSelectLogForEdit,
+    setSelectedDate, setActiveTab, userUnit, handleSelectLogForEdit,
   } = useFitNotesStore();
   const [filter, setFilter] = useState('');
   const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
@@ -162,10 +162,9 @@ export function HistoryView() {
         .history-session-actions { display: flex; gap: 8px; flex-wrap: wrap; }
       `}</style>
 
+      {/* No menu button here: unlike the calendar, this view keeps the app
+          header, which already carries one. */}
       <div className="history-toolbar">
-        <button className="hamburger-btn calendar-menu-btn" onClick={() => setSidebarOpen(true)} title="Open navigation menu" aria-label="Open navigation menu">
-          <Menu size={20} />
-        </button>
         <FilterCombobox
           className="calendar-filter-combobox"
           value={filter}
