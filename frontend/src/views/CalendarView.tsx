@@ -197,24 +197,26 @@ export function CalendarView() {
       }
       .calendar-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
       .calendar-scroll {
+        --week-col: 92px;
         flex: 1; min-height: 0; max-height: calc(100vh - 210px); overflow-y: auto; overscroll-behavior: contain;
         border: 1px solid var(--border-dark); border-radius: 12px; background: rgba(15, 23, 42, 0.16);
       }
       .calendar-month-section { position: relative; }
-      .calendar-month-header {
-        position: sticky; top: 0; z-index: 3; display: flex; align-items: baseline;
-        justify-content: space-between; gap: 12px; padding: 10px 12px 8px;
-        background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(10px);
+      /* Title and weekday labels stick together as one block, so the labels
+         never need to guess the header's height to position themselves. */
+      .calendar-month-sticky {
+        position: sticky; top: 0; z-index: 3;
+        background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--border-dark);
+      }
+      .calendar-month-header {
+        display: flex; align-items: baseline; justify-content: space-between;
+        gap: 12px; padding: 10px 12px 6px;
       }
       .calendar-month-title { font-size: 15px; font-weight: 800; color: var(--text-main-dark); }
       .calendar-month-total { font-size: 11px; color: var(--text-secondary-dark); }
       .calendar-week-labels, .calendar-week-row {
         display: grid; grid-template-columns: var(--week-col) repeat(7, minmax(0, 1fr));
-      }
-      .calendar-week-labels {
-        position: sticky; top: 39px; z-index: 2; background: rgba(15, 23, 42, 0.94);
-        backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-dark);
       }
       .calendar-week-labels > div {
         padding: 6px 4px; text-align: center; font-size: 10px; font-weight: 600;
@@ -256,6 +258,9 @@ export function CalendarView() {
         font-size: 10px; line-height: 1.1; cursor: pointer; text-align: left;
       }
       .calendar-workout-chip-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--chip-color); }
+      /* Every exercise is in the DOM; how many are shown is a per-breakpoint
+         decision - two named chips fit a desktop cell, more dots fit a phone. */
+      .calendar-workout-chip:nth-child(n+3) { display: none; }
       .calendar-workout-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .calendar-workout-chip-stat { flex: 0 0 auto; color: var(--text-secondary-dark); font-size: 9px; }
       .calendar-workout-more { padding-left: 5px; color: var(--text-secondary-dark); font-size: 9px; }
@@ -311,9 +316,30 @@ export function CalendarView() {
       .calendar-detail-dismiss { display: none; }
       @media (max-width: 900px) {
         .calendar-dashboard { flex-direction: column; }
-        .calendar-left-pane { flex: 0 0 auto; width: 100%; }
-        .calendar-scroll { max-height: calc(100vh - 190px); overflow-x: auto; }
-        .calendar-month-section { min-width: 720px; }
+        .calendar-left-pane { flex: 0 0 auto; width: 100%; padding: 10px; }
+        /* The whole week has to fit on screen: a horizontally scrolling month
+           shows three days at a time, which reads as a broken week. Columns
+           shrink and exercise chips collapse to category dots; the full detail
+           is one tap away in the summary sheet. */
+        .calendar-scroll { max-height: calc(100vh - 190px); overflow-x: hidden; --week-col: 54px; }
+        .calendar-month-section { min-width: 0; }
+        .calendar-month-header { padding: 8px 10px 5px; }
+        .calendar-month-title { font-size: 13px; }
+        .calendar-month-total { font-size: 10px; }
+        .calendar-week-labels > div { font-size: 8px; padding: 5px 1px; letter-spacing: 0.04em; }
+        .calendar-week-summary { padding: 4px 4px; gap: 1px; }
+        .calendar-week-range { font-size: 8px; }
+        .calendar-week-primary { font-size: 10px; }
+        .calendar-week-meta, .calendar-week-rest { font-size: 8px; }
+        .calendar-cell { min-height: 60px; padding: 3px; gap: 3px; }
+        .calendar-cell-number { min-width: 18px; height: 18px; font-size: 10px; }
+        .calendar-workout-chips { flex-direction: row; flex-wrap: wrap; gap: 3px; padding-left: 2px; }
+        .calendar-workout-chip { width: auto; padding: 0; border: none; background: none; }
+        .calendar-workout-chip:nth-child(n+3) { display: flex; }
+        .calendar-workout-chip:nth-child(n+7) { display: none; }
+        .calendar-workout-chip-name, .calendar-workout-chip-stat { display: none; }
+        .calendar-workout-chip-dot { width: 7px; height: 7px; flex-basis: 7px; }
+        .calendar-workout-more { display: none; }
         .calendar-right-pane { display: none; }
         .calendar-right-pane.detail-open {
           display: flex; position: fixed; z-index: 1000; left: 8px; right: 8px; bottom: 8px; top: auto;
@@ -552,7 +578,7 @@ export function CalendarView() {
           />
         </div>
 
-        <div className="calendar-scroll" ref={scrollRef} onScroll={handleScroll} style={{ '--week-col': '92px' } as CSSProperties}>
+        <div className="calendar-scroll" ref={scrollRef} onScroll={handleScroll}>
           <div className="calendar-sentinel" ref={topSentinelRef}>
             {range.start > earliestOrdinal ? 'Loading earlier months' : ''}
           </div>
@@ -577,15 +603,17 @@ export function CalendarView() {
 
             return (
               <section key={ordinal} className="calendar-month-section" data-month={ordinal}>
-                <div className="calendar-month-header">
-                  <span className="calendar-month-title">{monthLabel}</span>
-                  <span className="calendar-month-total">
-                    {monthDays > 0 ? `${monthDays} ${monthDays === 1 ? 'day' : 'days'} · ${monthSets} sets` : 'No workouts'}
-                  </span>
-                </div>
-                <div className="calendar-week-labels">
-                  <div>Week</div>
-                  {dayLabels.map(label => <div key={label}>{label}</div>)}
+                <div className="calendar-month-sticky">
+                  <div className="calendar-month-header">
+                    <span className="calendar-month-title">{monthLabel}</span>
+                    <span className="calendar-month-total">
+                      {monthDays > 0 ? `${monthDays} ${monthDays === 1 ? 'day' : 'days'} · ${monthSets} sets` : 'No workouts'}
+                    </span>
+                  </div>
+                  <div className="calendar-week-labels">
+                    <div>Week</div>
+                    {dayLabels.map(label => <div key={label}>{label}</div>)}
+                  </div>
                 </div>
 
                 {weeks.map(week => (
@@ -611,7 +639,7 @@ export function CalendarView() {
                             {day.getDate()}
                           </button>
                           <div className="calendar-workout-chips">
-                            {chips.slice(0, 2).map(chip => (
+                            {chips.map(chip => (
                               <button
                                 key={chip.exerciseId}
                                 className="calendar-workout-chip"
