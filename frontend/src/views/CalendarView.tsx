@@ -1,28 +1,55 @@
-// CalendarView.tsx - Responsive calendar dashboard with workout history and
-// a selected-day summary that preserves supersets.
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, ArrowRight, FileText, Dumbbell, List, Menu, Bookmark, X } from 'lucide-react';
+// CalendarView.tsx - Continuously scrolling calendar: months stack in
+// chronological order and load in both directions as you scroll, each week row
+// led by a weekly overview cell. The selected day's workout summary sits beside
+// the grid on desktop and slides up as a dismissible sheet on mobile.
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { CalendarDays, ArrowRight, FileText, Dumbbell, Menu, Bookmark, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
-import { getLocalDateString } from '../lib/date';
+import { getLocalDateString, parseLocalDate } from '../lib/date';
 import { FilterCombobox } from '../components/FilterCombobox';
 import { aggregateMuscleTargets } from '../lib/muscles';
 import { MuscleDiagramDetails } from '../components/MuscleDiagram';
+import { buildDayStats, buildMatchingDates, formatVolume, nextMonthRange, type DayChip } from '../lib/workoutHistory';
 import type { RoutineSection } from '../types';
+
+// Months are addressed as a single ordinal so stepping never wraps badly.
+const toOrdinal = (year: number, month: number) => year * 12 + month;
+const fromOrdinal = (ordinal: number) => ({ year: Math.floor(ordinal / 12), month: ordinal % 12 });
+const ordinalOfDate = (date: Date) => toOrdinal(date.getFullYear(), date.getMonth());
+
+// How far the calendar may travel: a year ahead of today, and back to whichever
+// is earlier of the first workout or a year ago - so a new account can still
+// browse backwards instead of hitting a wall after one screen.
+const FUTURE_MONTHS = 12;
+const MIN_PAST_MONTHS = 12;
+const INITIAL_TRAIL = 2;
 
 export function CalendarView() {
   const {
-    calendarYear, calendarMonth, handlePrevMonth, handleNextMonth,
     allLogs, selectedDate, setSelectedDate, settings, exercises, categories,
     workoutComment, setActiveTab, formatLogValue, handleSelectLogForEdit,
-    workoutGroups, groupExercises, routines, workoutRoutines, setSidebarOpen,
+    workoutGroups, groupExercises, routines, workoutRoutines, setSidebarOpen, userUnit,
   } = useFitNotesStore();
-  const [view, setView] = useState<'month' | 'list'>('month');
   const [filter, setFilter] = useState('');
   const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
-  const swipeRef = useRef({ startX: 0, startY: 0, tracking: false, swiped: false });
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
+  // Distance from the bottom of the scroll content, captured before months are
+  // prepended so the viewport can be restored to the same visual position.
+  const pendingScrollRef = useRef<number | null>(null);
+  // A month the view should jump to once it has been rendered ([ / ] hotkeys).
+  const pendingMonthRef = useRef<number | null>(null);
+  // Top-most month currently in view, so a relative jump has somewhere to start.
+  const visibleOrdinalRef = useRef<number | null>(null);
+  const [anchored, setAnchored] = useState(false);
+
+  const todayStr = getLocalDateString();
+  const currentOrdinal = useMemo(() => ordinalOfDate(new Date()), []);
 
   // Routine day-splits for the filter dropdown (not kept in global store state).
   useEffect(() => {
@@ -31,35 +58,196 @@ export function CalendarView() {
       .catch(e => console.warn('Failed to load routine sections for filter:', e));
   }, [routines]);
 
+  const matchingDates = useMemo(
+    () => buildMatchingDates(filter, allLogs, exercises, workoutRoutines),
+    [filter, allLogs, exercises, workoutRoutines],
+  );
+  const dayStats = useMemo(() => buildDayStats(allLogs, matchingDates), [allLogs, matchingDates]);
+
+  // Scroll bounds: never page back past the first workout, and stop a year out.
+  const earliestOrdinal = useMemo(() => {
+    let earliest: number | null = null;
+    for (const log of allLogs) {
+      if (log.is_deleted) continue;
+      const ordinal = ordinalOfDate(parseLocalDate(log.date));
+      if (earliest === null || ordinal < earliest) earliest = ordinal;
+    }
+    return Math.min(earliest ?? currentOrdinal, currentOrdinal - MIN_PAST_MONTHS) - 1;
+  }, [allLogs, currentOrdinal]);
+  const latestOrdinal = currentOrdinal + FUTURE_MONTHS;
+
+  const [range, setRange] = useState(() => ({
+    start: currentOrdinal - INITIAL_TRAIL,
+    end: currentOrdinal + 1,
+  }));
+
+  // Keep the rendered window inside the data bounds as logs load in.
+  useEffect(() => {
+    setRange(prev => ({
+      start: Math.max(prev.start, earliestOrdinal),
+      end: Math.min(prev.end, latestOrdinal),
+    }));
+  }, [earliestOrdinal, latestOrdinal]);
+
+  const months = useMemo(() => {
+    const list: number[] = [];
+    for (let o = range.start; o <= range.end; o++) list.push(o);
+    return list;
+  }, [range]);
+
+  const scrollMonthIntoView = (ordinal: number, behavior: ScrollBehavior = 'auto') => {
+    const root = scrollRef.current;
+    const target = root?.querySelector<HTMLElement>(`[data-month="${ordinal}"]`);
+    if (root && target) root.scrollTo({ top: target.offsetTop, behavior });
+  };
+
+  // Anchor the current month at the top on first paint so the view opens on
+  // "now" with history available by scrolling up.
+  useLayoutEffect(() => {
+    if (anchored) return;
+    scrollMonthIntoView(currentOrdinal);
+    setAnchored(true);
+  }, [anchored, currentOrdinal, months]);
+
+  // Restore the visual position after older months are prepended above, unless
+  // an explicit month jump is queued - that one wins.
+  useLayoutEffect(() => {
+    if (pendingMonthRef.current != null) {
+      const target = pendingMonthRef.current;
+      pendingMonthRef.current = null;
+      pendingScrollRef.current = null;
+      scrollMonthIntoView(target, 'smooth');
+      return;
+    }
+    if (pendingScrollRef.current == null) return;
+    const root = scrollRef.current;
+    if (root) root.scrollTop = root.scrollHeight - pendingScrollRef.current;
+    pendingScrollRef.current = null;
+  }, [months]);
+
+  // Track the top-most visible month so [ / ] can step relative to it, and
+  // extend the rendered range when either edge comes into reach.
+  const handleScroll = () => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const sections = root.querySelectorAll<HTMLElement>('[data-month]');
+    let top: number | null = null;
+    for (const section of sections) {
+      if (section.offsetTop <= root.scrollTop + 8) top = Number(section.dataset.month);
+      else break;
+    }
+    if (top != null) visibleOrdinalRef.current = top;
+    extendForScroll(root);
+  };
+
+  // The opening view may already sit at an edge (a short history renders less
+  // than one screen), so evaluate once after anchoring instead of waiting for
+  // the first scroll event.
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (root && anchored) extendForScroll(root);
+  }, [anchored, months, earliestOrdinal, latestOrdinal]);
+
+  // [ / ] scroll the continuous calendar by a month instead of paging it.
+  useEffect(() => {
+    const onShift = (event: Event) => {
+      const delta = (event as CustomEvent<{ delta: number }>).detail?.delta ?? 0;
+      if (!delta) return;
+      const from = visibleOrdinalRef.current ?? currentOrdinal;
+      const target = Math.min(Math.max(from + delta, earliestOrdinal), latestOrdinal);
+      setRange(prev => {
+        const next = { start: Math.min(prev.start, target), end: Math.max(prev.end, target) };
+        if (next.start === prev.start && next.end === prev.end) {
+          scrollMonthIntoView(target, 'smooth');
+          return prev;
+        }
+        pendingMonthRef.current = target;
+        return next;
+      });
+      visibleOrdinalRef.current = target;
+    };
+    window.addEventListener('fitnotes:calendar-shift', onShift);
+    return () => window.removeEventListener('fitnotes:calendar-shift', onShift);
+  }, [currentOrdinal, earliestOrdinal, latestOrdinal]);
+
+  // Edge-triggered month loading, driven by scroll position. The decision rule
+  // lives in nextMonthRange so it can be tested without a live scroll
+  // container; this only wires it up and preserves the viewport when months are
+  // added above the current position.
+  const extendForScroll = (root: HTMLDivElement) => {
+    if (!anchored) return;
+    setRange(prev => {
+      const { range: next, direction } = nextMonthRange(
+        { scrollTop: root.scrollTop, scrollHeight: root.scrollHeight, clientHeight: root.clientHeight },
+        prev,
+        { earliest: earliestOrdinal, latest: latestOrdinal },
+      );
+      if (!direction) return prev;
+      if (direction === 'earlier') pendingScrollRef.current = root.scrollHeight - root.scrollTop;
+      return next;
+    });
+  };
+
   const styleTag = (
     <style>{`
       .calendar-dashboard { display: flex; align-items: flex-start; gap: 24px; width: 100%; padding: 4px; }
-      .calendar-left-pane { flex: 1.3; min-width: 0; align-self: flex-start; }
-      .calendar-dashboard .calendar-grid {
-        gap: 0; overflow: hidden; border: 1px solid var(--border-dark); border-radius: 12px;
-        background: rgba(15, 23, 42, 0.16);
+      .calendar-left-pane {
+        flex: 1 1 auto; min-width: 0; align-self: stretch;
+        display: flex; flex-direction: column; padding: 16px; gap: 12px;
       }
-      .calendar-dashboard .calendar-day-label {
-        padding: 8px 4px; border-bottom: 1px solid var(--border-dark);
-        font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+      .calendar-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .calendar-scroll {
+        flex: 1; min-height: 0; max-height: calc(100vh - 210px); overflow-y: auto; overscroll-behavior: contain;
+        border: 1px solid var(--border-dark); border-radius: 12px; background: rgba(15, 23, 42, 0.16);
       }
-      .calendar-dashboard .calendar-day {
-        aspect-ratio: auto; min-height: 112px; border: none; border-right: 1px solid var(--border-dark);
-        border-bottom: 1px solid var(--border-dark); border-radius: 0; padding: 6px;
-        align-items: stretch; justify-content: flex-start; gap: 5px; background: rgba(255,255,255,0.012);
+      .calendar-month-section { position: relative; }
+      .calendar-month-header {
+        position: sticky; top: 0; z-index: 3; display: flex; align-items: baseline;
+        justify-content: space-between; gap: 12px; padding: 10px 12px 8px;
+        background: rgba(15, 23, 42, 0.94); backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border-dark);
       }
-      .calendar-dashboard .calendar-day:nth-child(7n) { border-right: none; }
-      .calendar-dashboard .calendar-day:hover { transform: none; background: rgba(99, 102, 241, 0.06); }
-      .calendar-dashboard .calendar-day.empty { cursor: default; background: rgba(15, 23, 42, 0.18); }
-      .calendar-dashboard .calendar-day.empty:hover { background: rgba(15, 23, 42, 0.18); }
-      .calendar-day-number {
+      .calendar-month-title { font-size: 15px; font-weight: 800; color: var(--text-main-dark); }
+      .calendar-month-total { font-size: 11px; color: var(--text-secondary-dark); }
+      .calendar-week-labels, .calendar-week-row {
+        display: grid; grid-template-columns: var(--week-col) repeat(7, minmax(0, 1fr));
+      }
+      .calendar-week-labels {
+        position: sticky; top: 39px; z-index: 2; background: rgba(15, 23, 42, 0.94);
+        backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-dark);
+      }
+      .calendar-week-labels > div {
+        padding: 6px 4px; text-align: center; font-size: 10px; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary-dark);
+      }
+      .calendar-week-summary {
+        border-right: 1px solid var(--border-dark); border-bottom: 1px solid var(--border-dark);
+        padding: 6px 7px; background: rgba(99, 102, 241, 0.05);
+        display: flex; flex-direction: column; gap: 2px; min-width: 0;
+      }
+      .calendar-week-range { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary-dark); }
+      .calendar-week-primary { font-size: 12px; font-weight: 800; color: var(--text-main-dark); }
+      .calendar-week-meta { font-size: 10px; color: var(--text-secondary-dark); }
+      .calendar-week-rest { font-size: 10px; color: var(--text-secondary-dark); opacity: 0.55; }
+      .calendar-cell {
+        min-height: 112px; border-right: 1px solid var(--border-dark);
+        border-bottom: 1px solid var(--border-dark); padding: 6px;
+        display: flex; flex-direction: column; align-items: stretch; gap: 5px;
+        background: rgba(255,255,255,0.012); cursor: pointer; transition: background 0.15s ease;
+        text-align: left; min-width: 0;
+      }
+      .calendar-cell:nth-child(8n) { border-right: none; }
+      .calendar-cell:hover { background: rgba(99, 102, 241, 0.06); }
+      .calendar-cell.outside { background: rgba(15, 23, 42, 0.28); cursor: default; }
+      .calendar-cell.outside:hover { background: rgba(15, 23, 42, 0.28); }
+      .calendar-cell-number {
         align-self: flex-end; display: inline-flex; align-items: center; justify-content: center;
         min-width: 22px; height: 22px; padding: 0 5px; border: 0; border-radius: 999px;
         background: transparent; color: var(--text-secondary-dark); font: inherit; font-size: 11px; cursor: pointer;
       }
-      .calendar-day.today .calendar-day-number { background: var(--accent); color: #111827; font-weight: 800; }
-      .calendar-day.active .calendar-day-number { box-shadow: inset 0 0 0 1px var(--primary); color: var(--primary); }
-      .calendar-dashboard .calendar-day.today { box-shadow: none; }
+      .calendar-cell.today .calendar-cell-number { background: var(--accent); color: #111827; font-weight: 800; }
+      .calendar-cell.active { box-shadow: inset 0 0 0 2px var(--primary); }
+      .calendar-cell.active .calendar-cell-number { color: var(--primary); font-weight: 700; }
       .calendar-workout-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .calendar-workout-chip {
         display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; padding: 4px 5px;
@@ -71,11 +259,20 @@ export function CalendarView() {
       .calendar-workout-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .calendar-workout-chip-stat { flex: 0 0 auto; color: var(--text-secondary-dark); font-size: 9px; }
       .calendar-workout-more { padding-left: 5px; color: var(--text-secondary-dark); font-size: 9px; }
+      .calendar-edge-note { padding: 14px; text-align: center; font-size: 11px; color: var(--text-secondary-dark); }
+      /* Sentinels need real area: a zero-height target never reports an
+         intersection, which silently disables the infinite scroll. */
+      .calendar-sentinel {
+        height: 28px; display: flex; align-items: center; justify-content: center;
+        font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-secondary-dark); opacity: 0.6;
+      }
       .calendar-right-pane {
-        flex: 0.7; min-width: 320px; background: rgba(30, 41, 59, 0.4);
+        flex: 0 0 380px; width: 380px; background: rgba(30, 41, 59, 0.4);
         backdrop-filter: blur(16px); border: 1px solid var(--border-dark); border-radius: 16px;
-        padding: 20px; display: flex; flex-direction: column; height: auto; align-self: stretch;
-        min-height: 520px; position: sticky; top: 24px; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        padding: 20px; display: flex; flex-direction: column;
+        max-height: calc(100vh - 150px); position: sticky; top: 24px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
       }
       .workout-summary-header { border-bottom: 1px solid var(--border-dark); padding-bottom: 12px; margin-bottom: 16px; }
       .workout-summary-title {
@@ -112,15 +309,15 @@ export function CalendarView() {
         display: flex; gap: 8px; align-items: flex-start;
       }
       .calendar-detail-dismiss { display: none; }
-      @media (max-width: 768px) {
+      @media (max-width: 900px) {
         .calendar-dashboard { flex-direction: column; }
-        .calendar-left-pane { flex: 0 0 auto; width: 100%; align-self: stretch; }
-        .calendar-dashboard .calendar-container { overflow-x: auto; padding-bottom: 4px; }
-        .calendar-dashboard .calendar-grid { min-width: 680px; }
+        .calendar-left-pane { flex: 0 0 auto; width: 100%; }
+        .calendar-scroll { max-height: calc(100vh - 190px); overflow-x: auto; }
+        .calendar-month-section { min-width: 720px; }
         .calendar-right-pane { display: none; }
         .calendar-right-pane.detail-open {
           display: flex; position: fixed; z-index: 1000; left: 8px; right: 8px; bottom: 8px; top: auto;
-          width: auto; min-width: 0; min-height: 0; max-height: min(72vh, 620px); padding: 16px;
+          width: auto; flex-basis: auto; max-height: min(72vh, 620px); padding: 16px;
           border-radius: 18px 18px 12px 12px; box-shadow: 0 -18px 60px rgba(0,0,0,0.5);
         }
         .calendar-detail-dismiss { display: inline-flex; }
@@ -129,35 +326,8 @@ export function CalendarView() {
     `}</style>
   );
 
-  // Day-level filtering: a day matches when it contains the chosen exercise /
-  // category, or when the chosen routine (or day split) was completed on it.
-  // Matching days still render their ENTIRE log; null = no filter active.
-  const matchingDates = useMemo<Set<string> | null>(() => {
-    if (!filter) return null;
-    const [kind, id] = filter.split(':');
-    const dates = new Set<string>();
-    if (kind === 'ex' || kind === 'cat') {
-      for (const l of allLogs) {
-        if (l.is_deleted) continue;
-        if (kind === 'ex' && l.exercise_id !== id) continue;
-        if (kind === 'cat' && exercises.find(e => e.id === l.exercise_id)?.category_id !== id) continue;
-        dates.add(l.date);
-      }
-    } else if (kind === 'rt' || kind === 'rts') {
-      for (const wr of workoutRoutines) {
-        if (wr.is_deleted) continue;
-        if (kind === 'rt' && wr.routine_id !== id) continue;
-        if (kind === 'rts' && wr.routine_section_id !== id) continue;
-        dates.add(wr.date);
-      }
-    }
-    return dates;
-  }, [filter, allLogs, exercises, workoutRoutines]);
-
-  const dayMatches = (dateStr: string): boolean => matchingDates === null || matchingDates.has(dateStr);
-
   const workoutChipsByDate = useMemo(() => {
-    const byDate = new Map<string, Array<{ exerciseId: string; name: string; sets: number; color: string }>>();
+    const byDate = new Map<string, DayChip[]>();
     const grouped = new Map<string, Map<string, number>>();
     for (const log of allLogs) {
       if (log.is_deleted || (matchingDates !== null && !matchingDates.has(log.date))) continue;
@@ -186,77 +356,31 @@ export function CalendarView() {
     setDetailOpen(true);
   };
 
-  const dotColoursFor = (dateStr: string): string[] => {
-    if (!dayMatches(dateStr)) return [];
-    if (!settings.calendar_category_dots_visible) {
-      return allLogs.some(l => l.date === dateStr && !l.is_deleted) ? ['var(--primary)'] : [];
-    }
-    const colours = new Set<string>();
-    for (const l of allLogs) {
-      if (l.date !== dateStr || l.is_deleted) continue;
-      const ex = exercises.find(e => e.id === l.exercise_id);
-      const cat = ex ? categories.find(c => c.id === ex.category_id) : undefined;
-      colours.add(cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)');
-    }
-    return Array.from(colours).slice(0, 5);
-  };
-
   const weekStart = settings.first_day_of_week === 1 ? 0 : settings.first_day_of_week === 7 ? 6 : 1;
   const allLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const dayLabels = Array.from({ length: 7 }, (_, i) => allLabels[(weekStart + i) % 7]);
 
-  const handleCalendarPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'mouse') return;
-    swipeRef.current = { startX: e.clientX, startY: e.clientY, tracking: true, swiped: false };
-  };
-
-  const handleCalendarPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const swipe = swipeRef.current;
-    if (!swipe.tracking) return;
-
-    swipe.tracking = false;
-    const deltaX = e.clientX - swipe.startX;
-    const deltaY = e.clientY - swipe.startY;
-    const absX = Math.abs(deltaX);
-    const absY = Math.abs(deltaY);
-
-    if (absX >= 56 && absX > absY * 1.4) {
-      swipe.swiped = true;
-      if (deltaX > 0) {
-        handlePrevMonth();
-      } else {
-        handleNextMonth();
-      }
-      window.setTimeout(() => {
-        swipeRef.current.swiped = false;
-      }, 180);
+  // Week-aligned rows padded with the neighbouring months' days, so a weekly
+  // overview always totals a real seven-day week.
+  const buildWeeks = (year: number, month: number): Date[][] => {
+    const first = new Date(year, month, 1);
+    const lead = (first.getDay() - weekStart + 7) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const total = lead + daysInMonth;
+    const tail = (7 - (total % 7)) % 7;
+    const weeks: Date[][] = [];
+    for (let offset = -lead; offset < daysInMonth + tail; offset += 7) {
+      weeks.push(Array.from({ length: 7 }, (_, i) => new Date(year, month, 1 + offset + i)));
     }
+    return weeks;
   };
-
-  const handleCalendarPointerCancel = () => {
-    swipeRef.current.tracking = false;
-  };
-
-  const historyDays = useMemo(() => {
-    const byDate: Record<string, { sets: number; exercises: Set<string> }> = {};
-    for (const l of allLogs) {
-      if (l.is_deleted || (matchingDates !== null && !matchingDates.has(l.date))) continue;
-      const e = byDate[l.date] || (byDate[l.date] = { sets: 0, exercises: new Set() });
-      e.sets += 1;
-      e.exercises.add(l.exercise_id);
-    }
-    return Object.entries(byDate)
-      .map(([date, v]) => ({ date, sets: v.sets, exercises: v.exercises.size }))
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [allLogs, matchingDates]);
 
   const formattedSelectedDate = useMemo(() => {
     try {
-      const [y, m, d] = selectedDate.split('-').map(Number);
-      return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+      return parseLocalDate(selectedDate).toLocaleDateString(undefined, {
         weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
       });
-    } catch (e) {
+    } catch {
       return selectedDate;
     }
   }, [selectedDate]);
@@ -273,10 +397,7 @@ export function CalendarView() {
         const routine = routines.find(r => r.id === wr.routine_id && !r.is_deleted);
         if (!routine) return null;
         const section = wr.routine_section_id ? routineSections.find(s => s.id === wr.routine_section_id && !s.is_deleted) : null;
-        return {
-          id: wr.id,
-          label: `${routine.name}${section ? ` - ${section.name}` : ''}`,
-        };
+        return { id: wr.id, label: `${routine.name}${section ? ` - ${section.name}` : ''}` };
       })
       .filter((item): item is { id: string; label: string } => item !== null)
   ), [workoutRoutines, selectedDate, routines, routineSections]);
@@ -353,20 +474,61 @@ export function CalendarView() {
     </div>
   );
 
+  const renderWeekSummary = (week: Date[]) => {
+    let sets = 0;
+    let volume = 0;
+    let daysTrained = 0;
+    const exerciseIds = new Set<string>();
+
+    for (const day of week) {
+      const stats = dayStats.get(getLocalDateString(day));
+      if (!stats) continue;
+      daysTrained += 1;
+      sets += stats.sets;
+      volume += stats.volume;
+    }
+    for (const day of week) {
+      const chips = workoutChipsByDate.get(getLocalDateString(day)) ?? [];
+      for (const chip of chips) exerciseIds.add(chip.exerciseId);
+    }
+
+    const rangeLabel = week[0].toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    return (
+      <div className="calendar-week-summary">
+        <span className="calendar-week-range">{rangeLabel}</span>
+        {daysTrained === 0 ? (
+          <span className="calendar-week-rest">Rest week</span>
+        ) : (
+          <>
+            <span className="calendar-week-primary">{daysTrained} {daysTrained === 1 ? 'day' : 'days'}</span>
+            <span className="calendar-week-meta">{sets} {sets === 1 ? 'set' : 'sets'}</span>
+            <span className="calendar-week-meta">{exerciseIds.size} exercises</span>
+            {volume > 0 && <span className="calendar-week-meta">{formatVolume(volume, userUnit)}</span>}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="calendar-dashboard">
       {styleTag}
 
       <div className="calendar-left-pane card">
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="calendar-toolbar">
           <button className="hamburger-btn calendar-menu-btn" onClick={() => setSidebarOpen(true)} title="Open navigation menu" aria-label="Open navigation menu">
             <Menu size={20} />
           </button>
-          <button className={`btn ${view === 'month' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setView('month')}>
-            <Calendar size={14} /> Month
-          </button>
-          <button className={`btn ${view === 'list' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setView('list')}>
-            <List size={14} /> History
+          <button
+            className="btn btn-secondary"
+            style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
+            onClick={() => {
+              setSelectedDate(todayStr);
+              scrollMonthIntoView(currentOrdinal, 'smooth');
+            }}
+          >
+            <CalendarDays size={14} /> Today
           </button>
           <FilterCombobox
             className="calendar-filter-combobox"
@@ -374,10 +536,7 @@ export function CalendarView() {
             onChange={setFilter}
             placeholder="All workouts"
             groups={[
-              {
-                label: 'Routines',
-                options: routines.map(r => ({ value: `rt:${r.id}`, label: r.name })),
-              },
+              { label: 'Routines', options: routines.map(r => ({ value: `rt:${r.id}`, label: r.name })) },
               {
                 label: 'Routine Days',
                 options: routineSections
@@ -387,122 +546,99 @@ export function CalendarView() {
                   })
                   .filter((o): o is { value: string; label: string } => o !== null),
               },
-              {
-                label: 'Categories',
-                options: categories.map(c => ({ value: `cat:${c.id}`, label: c.name })),
-              },
-              {
-                label: 'Exercises',
-                options: exercises.map(ex => ({ value: `ex:${ex.id}`, label: ex.name })),
-              },
+              { label: 'Categories', options: categories.map(c => ({ value: `cat:${c.id}`, label: c.name })) },
+              { label: 'Exercises', options: exercises.map(ex => ({ value: `ex:${ex.id}`, label: ex.name })) },
             ]}
           />
         </div>
 
-        {view === 'list' ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
-            {historyDays.length === 0 ? (
-              <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '32px' }}>No workouts logged yet.</p>
-            ) : historyDays.map(d => (
-              <div
-                key={d.date}
-                onClick={() => selectCalendarDate(d.date)}
-                style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px',
-                  border: '1px solid var(--border-dark)', borderRadius: '10px', cursor: 'pointer',
-                  background: d.date === selectedDate ? 'var(--primary-glow)' : 'transparent',
-                  borderColor: d.date === selectedDate ? 'var(--primary)' : 'var(--border-dark)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {dotColoursFor(d.date).map((c, i) => <span key={i} style={{ width: '8px', height: '8px', borderRadius: '50%', background: c }} />)}
-                  <span style={{ fontWeight: 600, fontSize: '14px' }}>
-                    {(() => {
-                      const [y, m, day] = d.date.split('-').map(Number);
-                      return new Date(y, m - 1, day).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-                    })()}
+        <div className="calendar-scroll" ref={scrollRef} onScroll={handleScroll} style={{ '--week-col': '92px' } as CSSProperties}>
+          <div className="calendar-sentinel" ref={topSentinelRef}>
+            {range.start > earliestOrdinal ? 'Loading earlier months' : ''}
+          </div>
+          {range.start <= earliestOrdinal && (
+            <div className="calendar-edge-note">Beginning of your training history</div>
+          )}
+
+          {months.map(ordinal => {
+            const { year, month } = fromOrdinal(ordinal);
+            const weeks = buildWeeks(year, month);
+            const monthLabel = new Date(year, month, 1).toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
+            let monthSets = 0;
+            let monthDays = 0;
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            for (let d = 1; d <= daysInMonth; d++) {
+              const stats = dayStats.get(getLocalDateString(new Date(year, month, d)));
+              if (!stats) continue;
+              monthDays += 1;
+              monthSets += stats.sets;
+            }
+
+            return (
+              <section key={ordinal} className="calendar-month-section" data-month={ordinal}>
+                <div className="calendar-month-header">
+                  <span className="calendar-month-title">{monthLabel}</span>
+                  <span className="calendar-month-total">
+                    {monthDays > 0 ? `${monthDays} ${monthDays === 1 ? 'day' : 'days'} · ${monthSets} sets` : 'No workouts'}
                   </span>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>{d.exercises} exercises - {d.sets} sets</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div
-            className="calendar-container calendar-container-swipable"
-            onPointerDown={handleCalendarPointerDown}
-            onPointerUp={handleCalendarPointerUp}
-            onPointerCancel={handleCalendarPointerCancel}
-          >
-            <div className="calendar-header">
-              <h2 style={{ fontSize: '20px', fontWeight: 700 }}>
-                {new Date(calendarYear, calendarMonth).toLocaleString('default', { month: 'long', year: 'numeric' })}
-              </h2>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={handlePrevMonth}><ChevronLeft size={16} /></button>
-                <button className="btn btn-secondary" style={{ padding: '8px' }} onClick={handleNextMonth}><ChevronRight size={16} /></button>
-              </div>
-            </div>
+                <div className="calendar-week-labels">
+                  <div>Week</div>
+                  {dayLabels.map(label => <div key={label}>{label}</div>)}
+                </div>
 
-            <div className="calendar-grid">
-              {dayLabels.map(day => <div key={day} className="calendar-day-label">{day}</div>)}
-              {(() => {
-                const firstDay = new Date(calendarYear, calendarMonth, 1).getDay();
-                const startDayIndex = (firstDay - weekStart + 7) % 7;
-                const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
-                const cells = [];
+                {weeks.map(week => (
+                  <div className="calendar-week-row" key={week[0].getTime()}>
+                    {renderWeekSummary(week)}
+                    {week.map(day => {
+                      const dateStr = getLocalDateString(day);
+                      const inMonth = day.getMonth() === month;
+                      if (!inMonth) return <div key={dateStr} className="calendar-cell outside" />;
 
-                for (let i = 0; i < startDayIndex; i++) {
-                  cells.push(<div key={`empty-${i}`} className="calendar-day empty" />);
-                }
-
-                const todayStr = getLocalDateString();
-                for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
-                  const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                  const isToday = dateStr === todayStr;
-                  const chips = workoutChipsByDate.get(dateStr) ?? [];
-                  cells.push(
-                    <div
-                      key={`day-${dayNum}`}
-                      className={`calendar-day ${selectedDate === dateStr ? 'active' : ''} ${isToday ? 'today' : ''}`}
-                      onClick={() => {
-                        if (swipeRef.current.swiped) return;
-                        selectCalendarDate(dateStr);
-                      }}
-                      style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
-                    >
-                      <button
-                        className="calendar-day-number"
-                        onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
-                        aria-label={`Open workout summary for ${dateStr}`}
-                      >
-                        {dayNum}
-                      </button>
-                      <div className="calendar-workout-chips">
-                        {chips.slice(0, 2).map(chip => (
+                      const chips = workoutChipsByDate.get(dateStr) ?? [];
+                      return (
+                        <div
+                          key={dateStr}
+                          className={`calendar-cell ${selectedDate === dateStr ? 'active' : ''} ${dateStr === todayStr ? 'today' : ''}`}
+                          onClick={() => selectCalendarDate(dateStr)}
+                        >
                           <button
-                            key={chip.exerciseId}
-                            className="calendar-workout-chip"
-                            style={{ '--chip-color': chip.color } as CSSProperties}
-                            title={`${chip.name} · ${chip.sets} set${chip.sets === 1 ? '' : 's'}`}
+                            className="calendar-cell-number"
                             onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
+                            aria-label={`Open workout summary for ${dateStr}`}
                           >
-                            <span className="calendar-workout-chip-dot" />
-                            <span className="calendar-workout-chip-name">{chip.name}</span>
-                            <span className="calendar-workout-chip-stat">{chip.sets}</span>
+                            {day.getDate()}
                           </button>
-                        ))}
-                        {chips.length > 2 && <span className="calendar-workout-more">+{chips.length - 2} more</span>}
-                      </div>
-                    </div>
-                  );
-                }
+                          <div className="calendar-workout-chips">
+                            {chips.slice(0, 2).map(chip => (
+                              <button
+                                key={chip.exerciseId}
+                                className="calendar-workout-chip"
+                                style={{ '--chip-color': chip.color } as CSSProperties}
+                                title={`${chip.name} · ${chip.sets} set${chip.sets === 1 ? '' : 's'}`}
+                                onClick={event => { event.stopPropagation(); selectCalendarDate(dateStr); }}
+                              >
+                                <span className="calendar-workout-chip-dot" />
+                                <span className="calendar-workout-chip-name">{chip.name}</span>
+                                <span className="calendar-workout-chip-stat">{chip.sets}</span>
+                              </button>
+                            ))}
+                            {chips.length > 2 && <span className="calendar-workout-more">+{chips.length - 2} more</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </section>
+            );
+          })}
 
-                return cells;
-              })()}
-            </div>
+          <div className="calendar-sentinel" ref={bottomSentinelRef}>
+            {range.end < latestOrdinal ? 'Loading later months' : ''}
           </div>
-        )}
+        </div>
       </div>
 
       <div className={`calendar-right-pane ${detailOpen ? 'detail-open' : ''}`}>
@@ -548,7 +684,7 @@ export function CalendarView() {
         <div className="workout-summary-scroll">
           {summaryItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '36px 12px', color: 'var(--text-secondary-dark)', fontSize: '13px' }}>
-              <Calendar size={32} style={{ opacity: 0.2, marginBottom: '8px', display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
+              <CalendarDays size={32} style={{ opacity: 0.2, marginBottom: '8px', display: 'block', marginLeft: 'auto', marginRight: 'auto' }} />
               No workout logged for this day.
             </div>
           ) : (

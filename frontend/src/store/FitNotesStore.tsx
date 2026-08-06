@@ -339,6 +339,9 @@ export function useFitNotesController() {
             case 'c':
               targetTab = 'calendar';
               break;
+            case 'h':
+              targetTab = 'history';
+              break;
             case 'e':
               targetTab = 'exercises';
               break;
@@ -514,17 +517,16 @@ export function useFitNotesController() {
         return;
       }
 
-      // 6.5. Global Month Navigation Hotkeys ([ / ] to shift backwards/forwards one month)
-      if (e.key === '[') {
+      // 6.5. Global Month Navigation Hotkeys ([ / ] to shift backwards/forwards
+      // one month). The calendar scrolls continuously rather than paging, so
+      // this asks the open view to scroll; the legacy month state is kept in
+      // step for anything else still reading it.
+      if (e.key === '[' || e.key === ']') {
         e.preventDefault();
-        handlePrevMonth();
-        triggerToast('Calendar shifted backwards one month');
-        return;
-      }
-      if (e.key === ']') {
-        e.preventDefault();
-        handleNextMonth();
-        triggerToast('Calendar shifted forwards one month');
+        const back = e.key === '[';
+        if (back) handlePrevMonth(); else handleNextMonth();
+        window.dispatchEvent(new CustomEvent('fitnotes:calendar-shift', { detail: { delta: back ? -1 : 1 } }));
+        triggerToast(`Calendar shifted ${back ? 'backwards' : 'forwards'} one month`);
         return;
       }
     };
