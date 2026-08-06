@@ -257,6 +257,12 @@ body.light-theme .nav-item {
   margin: 0 auto;
 }
 
+/* Views that are grids rather than reading columns (the calendar) opt out of
+   the shared content cap and use the full viewport width. */
+.main-panel.main-panel-wide {
+  max-width: none;
+}
+
 .header {
   display: flex;
   justify-content: space-between;

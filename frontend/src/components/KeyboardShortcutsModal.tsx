@@ -28,6 +28,7 @@ const GROUPS: ShortcutGroup[] = [
     rows: [
       { keys: ['g', 'l'], description: 'Workout Log' },
       { keys: ['g', 'c'], description: 'Calendar' },
+      { keys: ['g', 'h'], description: 'History' },
       { keys: ['g', 'e'], description: 'Exercises' },
       { keys: ['g', 'r'], description: 'Routines' },
       { keys: ['g', 'b'], description: 'Body Weight' },

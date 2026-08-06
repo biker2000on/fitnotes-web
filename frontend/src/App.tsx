@@ -18,7 +18,8 @@ import {
   Target,
   Ruler,
   Settings as SettingsIcon,
-  Keyboard
+  Keyboard,
+  History as HistoryIcon
 } from 'lucide-react';
 import { intColorToHex } from './lib/colors';
 import { getLocalDateString, addDays } from './lib/date';
@@ -29,6 +30,7 @@ import { AnalysisView } from './views/AnalysisView';
 import { GoalsView } from './views/GoalsView';
 import { MeasurementsView } from './views/MeasurementsView';
 import { CalendarView } from './views/CalendarView';
+import { HistoryView } from './views/HistoryView';
 import { SyncView } from './views/SyncView';
 import { RoutinesView } from './views/RoutinesView';
 import { ExercisesView } from './views/ExercisesView';
@@ -315,6 +317,11 @@ export default function App() {
             </div>
           </li>
           <li>
+            <div className={`nav-item ${activeTab === 'history' ? 'active' : ''}`} onClick={() => setActiveTab('history')}>
+              <HistoryIcon size={18} /> History
+            </div>
+          </li>
+          <li>
             <div className={`nav-item ${activeTab === 'exercises' ? 'active' : ''}`} onClick={() => setActiveTab('exercises')}>
               <Flame size={18} /> Exercises
             </div>
@@ -497,12 +504,18 @@ export default function App() {
           </header>
         )}
 
-        <div className="main-panel">
+        {/* The calendar grid earns every pixel it can get: it opts out of the
+            shared content cap so the month grid fills the viewport beside the
+            fixed-width workout summary. */}
+        <div className={`main-panel ${activeTab === 'calendar' ? 'main-panel-wide' : ''}`}>
           {/* -------------------- LOG TAB -------------------- */}
           {activeTab === 'log' && <WorkoutLogView />}
 
           {/* -------------------- CALENDAR TAB -------------------- */}
           {activeTab === 'calendar' && <CalendarView />}
+
+          {/* -------------------- HISTORY TAB -------------------- */}
+          {activeTab === 'history' && <HistoryView />}
 
           {/* -------------------- EXERCISES CATALOG TAB -------------------- */}
           {activeTab === 'exercises' && <ExercisesView />}
