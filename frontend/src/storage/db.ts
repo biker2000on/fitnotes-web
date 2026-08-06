@@ -13,6 +13,7 @@ import {
   AuthExpiredError,
   UUID_FIELDS,
   buildShorthandStatements,
+  coerceRowBooleans,
   isBuiltInSeedRow,
   normalizeForSync,
   normalizeTimestamp,
@@ -581,7 +582,7 @@ export class TauriNativeDriver implements DBDriver {
       return [settingsFromKeyValueRows(rows)] as T[];
     }
 
-    return (invoke as any)('tauri_query', { sql, params }) as Promise<T[]>;
+    return coerceRowBooleans(await (invoke as any)('tauri_query', { sql, params }) as T[]);
   }
 
   async execute(sql: string, params: any[] = []): Promise<void> {

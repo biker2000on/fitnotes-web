@@ -293,7 +293,7 @@ export function RoutineEditorView() {
                                               <label style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '12px', fontWeight: 700 }}>
                                                 <input type="checkbox" checked={se.progression_enabled ?? false} onChange={(e) => handleUpdateRoutineSectionExercise(se.id, { progression_enabled: e.target.checked })} style={{ width: '16px' }} /> Auto-progress after all targets
                                               </label>
-                                              {se.progression_enabled && <>
+                                              {!!se.progression_enabled && <>
                                                 <label style={{ fontSize: '11px' }}>Weight +
                                                   <input type="number" step="0.5" value={se.progression_increment ?? ''} placeholder="exercise default" onChange={(e) => handleUpdateRoutineSectionExercise(se.id, { progression_increment: numOrNull(e.target.value, parseFloat) })} style={{ width: '90px', padding: '4px' }} />
                                                 </label>

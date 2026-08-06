@@ -120,7 +120,7 @@ export function MeasurementsView() {
             <span style={{ fontSize: '13px', fontWeight: 600 }}>{m.name}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{resolveUnit(m.unit_id, customUnits)}</span>
-              {m.custom && (
+              {!!m.custom && (
                 <button onClick={(e) => { e.stopPropagation(); deleteMeasurement(m.id); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }} title="Delete">
                   <Trash2 size={13} color="var(--danger)" />
                 </button>
