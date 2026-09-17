@@ -41,6 +41,7 @@ export interface TrainingLog {
   unit: number | null;
   is_personal_record: boolean;
   is_complete: boolean;
+  completed_at?: string | null;
   distance: number | null;
   duration_seconds: number | null;
   comment?: string | null;

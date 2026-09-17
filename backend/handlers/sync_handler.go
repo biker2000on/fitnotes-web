@@ -418,8 +418,8 @@ func pullExercises(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.
 
 func pushTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []models.TrainingLog) error {
 	query := `
-		INSERT INTO training_logs (id, user_id, exercise_id, date, metric_weight, reps, unit, routine_section_exercise_set_id, is_personal_record, is_complete, distance, duration_seconds, comment, rpe, rir, set_type, last_modified, is_deleted)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE(NULLIF($16, ''), 'working'), $17, $18)
+		INSERT INTO training_logs (id, user_id, exercise_id, date, metric_weight, reps, unit, routine_section_exercise_set_id, is_personal_record, is_complete, distance, duration_seconds, comment, rpe, rir, set_type, last_modified, is_deleted, completed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, COALESCE(NULLIF($16, ''), 'working'), $17, $18, CASE WHEN $10 THEN $19::timestamptz ELSE NULL END)
 		ON CONFLICT (id) DO UPDATE SET
 			exercise_id = EXCLUDED.exercise_id,
 			date = EXCLUDED.date,
@@ -429,6 +429,10 @@ func pushTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []
 			routine_section_exercise_set_id = EXCLUDED.routine_section_exercise_set_id,
 			is_personal_record = EXCLUDED.is_personal_record,
 			is_complete = EXCLUDED.is_complete,
+            completed_at = CASE WHEN NOT EXCLUDED.is_complete THEN NULL
+              WHEN $20::boolean THEN EXCLUDED.completed_at
+              WHEN training_logs.date <> EXCLUDED.date THEN NULL
+              ELSE training_logs.completed_at END,
 			distance = EXCLUDED.distance,
 			duration_seconds = EXCLUDED.duration_seconds,
 			comment = EXCLUDED.comment,
@@ -446,7 +450,7 @@ func pushTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []
 		if err != nil {
 			return err
 		}
-		_, err = tx.Exec(ctx, query, item.ID, userID, item.ExerciseID, parsedDate, item.MetricWeight, item.Reps, item.Unit, item.RoutineSectionExerciseSetID, item.IsPersonalRecord, item.IsComplete, item.Distance, item.DurationSeconds, item.Comment, item.RPE, item.RIR, item.SetType, item.LastModified, item.IsDeleted)
+		_, err = tx.Exec(ctx, query, item.ID, userID, item.ExerciseID, parsedDate, item.MetricWeight, item.Reps, item.Unit, item.RoutineSectionExerciseSetID, item.IsPersonalRecord, item.IsComplete, item.Distance, item.DurationSeconds, item.Comment, item.RPE, item.RIR, item.SetType, item.LastModified, item.IsDeleted, item.CompletedAt, item.CompletedAtProvided || item.CompletedAt != nil)
 		if err != nil {
 			return err
 		}
@@ -456,7 +460,7 @@ func pushTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, items []
 
 func pullTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since time.Time) ([]models.TrainingLog, error) {
 	rows, err := tx.Query(ctx,
-		"SELECT id, user_id, exercise_id, date, metric_weight, reps, unit, routine_section_exercise_set_id, is_personal_record, is_complete, distance, duration_seconds, comment, rpe, rir, set_type, last_modified, is_deleted FROM training_logs WHERE user_id = $1 AND last_modified > $2",
+		"SELECT id, user_id, exercise_id, date, metric_weight, reps, unit, routine_section_exercise_set_id, is_personal_record, is_complete, distance, duration_seconds, comment, rpe, rir, set_type, last_modified, is_deleted, completed_at FROM training_logs WHERE user_id = $1 AND last_modified > $2",
 		userID, since,
 	)
 	if err != nil {
@@ -468,7 +472,7 @@ func pullTrainingLogs(ctx context.Context, tx pgx.Tx, userID uuid.UUID, since ti
 	for rows.Next() {
 		var item models.TrainingLog
 		var dateVal time.Time
-		err := rows.Scan(&item.ID, &item.UserID, &item.ExerciseID, &dateVal, &item.MetricWeight, &item.Reps, &item.Unit, &item.RoutineSectionExerciseSetID, &item.IsPersonalRecord, &item.IsComplete, &item.Distance, &item.DurationSeconds, &item.Comment, &item.RPE, &item.RIR, &item.SetType, &item.LastModified, &item.IsDeleted)
+		err := rows.Scan(&item.ID, &item.UserID, &item.ExerciseID, &dateVal, &item.MetricWeight, &item.Reps, &item.Unit, &item.RoutineSectionExerciseSetID, &item.IsPersonalRecord, &item.IsComplete, &item.Distance, &item.DurationSeconds, &item.Comment, &item.RPE, &item.RIR, &item.SetType, &item.LastModified, &item.IsDeleted, &item.CompletedAt)
 		if err != nil {
 			return nil, err
 		}

@@ -117,6 +117,9 @@ func runMigrations(pool *pgxpool.Pool) error {
 		return fmt.Errorf("failed to apply API keys migration: %w", err)
 	}
 	log.Println("API keys migration applied.")
+	if err := applyMigration(ctx, pool, "000007_completion_time.up.sql"); err != nil {
+		return fmt.Errorf("failed to apply completion time migration: %w", err)
+	}
 	return nil
 }
 

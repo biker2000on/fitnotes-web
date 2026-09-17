@@ -33,7 +33,7 @@ GET /api/v1/
 ```
 
 Lists the available resources: exercises, workouts, body-weights,
-workout-groups, and workout-routines.
+workout-groups, workout-routines, and workout-times.
 
 ### Exercises
 
@@ -54,6 +54,36 @@ All filters are optional. The response includes weight, reps, RPE, RIR, set
 type, completion/PR flags, cardio fields, comments, and modification time.
 Each set also carries `routine_section_exercise_set_id` (nullable UUID) linking
 the logged set back to the routine template set it was populated from.
+
+### Completion timing
+
+Workout sets include nullable `completed_at` (ISO 8601). An individual check
+on today's local workout records the client time; weight, rep, and comment
+edits preserve it. Undo clears it, and rechecking records a new time. Copying
+or moving a set clears timing. Bulk completion and historical checks leave
+it null because they do not establish when the work occurred. Existing data
+is not backfilled from `last_modified`, which changes on ordinary edits.
+Missing historical checkmarks do not establish that a set was not performed.
+
+The field survives web/offline/native storage and sync. Older clients that
+omit it on edits preserve an existing timestamp while the set stays complete
+on the same workout date. Explicit `null` clears timing even when the set
+remains complete (for example, an offline undo followed by bulk completion).
+Backend migration 000007 and the native SQLite
+column upgrade are additive; deploy the backend before the new clients.
+
+### Workout times
+
+```http
+GET /api/v1/workout-times?from=2026-01-01&to=2026-12-31&limit=200&offset=0
+```
+
+Returns `id`, `date`, nullable `start_time`, `end_time`, `duration_seconds`,
+`last_modified`, and `is_deleted`. Date filters and pagination follow workouts.
+Unlike other read resources, this includes deletion markers so an integration
+can clear a previously imported timer. A running timer has no end time and
+must not be treated as a finished workout duration. Only the authenticated
+user's records are returned.
 
 ### Body weights
 

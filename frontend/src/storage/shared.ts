@@ -34,7 +34,7 @@ export const TABLE_COLUMNS: Record<string, string[]> = {
   routine_sections: ["id", "routine_id", "name", "sort_order", "week_number", "day_of_week", "phase", "last_modified", "is_deleted", "is_dirty"],
   routine_section_exercises: ["id", "routine_section_id", "exercise_id", "sort_order", "populate_sets_type", "progression_enabled", "progression_increment", "progression_reps_step", "last_modified", "is_deleted", "is_dirty"],
   routine_section_exercise_sets: ["id", "routine_section_exercise_id", "metric_weight", "reps", "sort_order", "distance", "duration_seconds", "unit", "min_reps", "max_reps", "set_type", "target_rir", "tempo", "notes", "last_modified", "is_deleted", "is_dirty"],
-  training_logs: ["id", "exercise_id", "date", "metric_weight", "reps", "unit", "routine_section_exercise_set_id", "is_personal_record", "is_complete", "distance", "duration_seconds", "comment", "rpe", "rir", "set_type", "last_modified", "is_deleted", "is_dirty"],
+  training_logs: ["id", "exercise_id", "date", "metric_weight", "reps", "unit", "routine_section_exercise_set_id", "is_personal_record", "is_complete", "completed_at", "distance", "duration_seconds", "comment", "rpe", "rir", "set_type", "last_modified", "is_deleted", "is_dirty"],
   body_weights: ["id", "date", "measured_at", "body_weight_metric", "body_fat", "comments", "last_modified", "is_deleted", "is_dirty"],
   plates: ["id", "weight", "unit", "count", "enabled", "colour", "width_ratio", "height_ratio", "last_modified", "is_deleted", "is_dirty"],
   barbells: ["id", "weight", "unit", "exercise_id", "last_modified", "is_deleted", "is_dirty"],

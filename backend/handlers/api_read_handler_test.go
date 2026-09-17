@@ -51,6 +51,7 @@ func TestAPIInfoHandlerListsResources(t *testing.T) {
 		"/api/v1/body-weights",
 		"/api/v1/workout-groups",
 		"/api/v1/workout-routines",
+		"/api/v1/workout-times",
 	}
 	for _, resource := range want {
 		found := false
@@ -76,6 +77,7 @@ func TestAPIHandlersRequireUser(t *testing.T) {
 		{"/api/v1/body-weights", APIBodyWeightsHandler},
 		{"/api/v1/workout-groups", APIWorkoutGroupsHandler},
 		{"/api/v1/workout-routines", APIWorkoutRoutinesHandler},
+		{"/api/v1/workout-times", APIWorkoutTimesHandler},
 	}
 	for _, tt := range tests {
 		req := httptest.NewRequest(http.MethodGet, tt.path, nil)
@@ -96,6 +98,7 @@ func TestAPIHandlersRejectInvalidDates(t *testing.T) {
 		{"/api/v1/body-weights", APIBodyWeightsHandler},
 		{"/api/v1/workout-groups", APIWorkoutGroupsHandler},
 		{"/api/v1/workout-routines", APIWorkoutRoutinesHandler},
+		{"/api/v1/workout-times", APIWorkoutTimesHandler},
 	}
 	for _, tt := range tests {
 		for _, query := range []string{"?from=07/23/2026", "?to=not-a-date", "?from=2026-02-30"} {

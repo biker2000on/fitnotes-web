@@ -30,27 +30,27 @@ type Category struct {
 }
 
 type Exercise struct {
-	ID              uuid.UUID  `json:"id"`
-	UserID          uuid.UUID  `json:"user_id"`
-	Name            string     `json:"name"`
-	CategoryID      *uuid.UUID `json:"category_id"`
-	ExerciseTypeID  int        `json:"exercise_type_id"`
-	Notes           *string    `json:"notes"`
-	WeightIncrement *float64   `json:"weight_increment"`
-	DefaultRestTime *int       `json:"default_rest_time"`
-	WeightUnitID    *int       `json:"weight_unit_id"`
-	IsFavourite     bool       `json:"is_favourite"`
-	Aliases         *string    `json:"aliases"`
-	Instructions    *string    `json:"instructions"`
-	VideoURL        *string    `json:"video_url"`
-	Equipment       *string    `json:"equipment"`
-	PrimaryMuscles   *string   `json:"primary_muscles"`
-	SecondaryMuscles *string   `json:"secondary_muscles"`
-	Regressions      *string   `json:"regressions"`
-	Progressions    *string    `json:"progressions"`
-	Substitutions   *string    `json:"substitutions"`
-	LastModified    time.Time  `json:"last_modified"`
-	IsDeleted       bool       `json:"is_deleted"`
+	ID               uuid.UUID  `json:"id"`
+	UserID           uuid.UUID  `json:"user_id"`
+	Name             string     `json:"name"`
+	CategoryID       *uuid.UUID `json:"category_id"`
+	ExerciseTypeID   int        `json:"exercise_type_id"`
+	Notes            *string    `json:"notes"`
+	WeightIncrement  *float64   `json:"weight_increment"`
+	DefaultRestTime  *int       `json:"default_rest_time"`
+	WeightUnitID     *int       `json:"weight_unit_id"`
+	IsFavourite      bool       `json:"is_favourite"`
+	Aliases          *string    `json:"aliases"`
+	Instructions     *string    `json:"instructions"`
+	VideoURL         *string    `json:"video_url"`
+	Equipment        *string    `json:"equipment"`
+	PrimaryMuscles   *string    `json:"primary_muscles"`
+	SecondaryMuscles *string    `json:"secondary_muscles"`
+	Regressions      *string    `json:"regressions"`
+	Progressions     *string    `json:"progressions"`
+	Substitutions    *string    `json:"substitutions"`
+	LastModified     time.Time  `json:"last_modified"`
+	IsDeleted        bool       `json:"is_deleted"`
 }
 
 type Routine struct {
@@ -123,6 +123,8 @@ type TrainingLog struct {
 	RoutineSectionExerciseSetID *uuid.UUID `json:"routine_section_exercise_set_id"`
 	IsPersonalRecord            bool       `json:"is_personal_record"`
 	IsComplete                  bool       `json:"is_complete"`
+	CompletedAt                 *time.Time `json:"completed_at"`
+	CompletedAtProvided         bool       `json:"-"`
 	Distance                    *float64   `json:"distance"`
 	DurationSeconds             *int       `json:"duration_seconds"`
 	Comment                     *string    `json:"comment"`

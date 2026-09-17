@@ -1154,6 +1154,7 @@ async fn tauri_sync(
                     "routine_section_exercise_set_id",
                     "is_personal_record",
                     "is_complete",
+                    "completed_at",
                     "distance",
                     "duration_seconds",
                     "comment",
@@ -1563,6 +1564,7 @@ fn add_column_if_missing(
 
 fn run_sqlite_upgrades(conn: &Connection) -> Result<()> {
     add_column_if_missing(conn, "training_logs", "comment", "comment TEXT")?;
+    add_column_if_missing(conn, "training_logs", "completed_at", "completed_at TEXT")?;
     add_column_if_missing(conn, "training_logs", "rpe", "rpe REAL")?;
     add_column_if_missing(conn, "training_logs", "rir", "rir REAL")?;
     add_column_if_missing(conn, "training_logs", "set_type", "set_type TEXT NOT NULL DEFAULT 'working'")?;

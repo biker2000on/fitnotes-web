@@ -3,6 +3,7 @@
 // groups, bulk edit actions, and sharing. Code moved verbatim from
 // FitNotesStore.tsx.
 import { useState, useEffect, useRef, type MutableRefObject } from 'react';
+import { withCompletion } from '../../lib/completion';
 import { db } from '../../storage/db';
 import { uuidv4 } from '../../lib/uuid';
 import { getLocalDateString } from '../../lib/date';
@@ -212,6 +213,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
       unit: userUnit === 'kg' ? 1 : 2,
       is_personal_record: pr,
       is_complete: false,
+      completed_at: null,
       distance,
       duration_seconds: duration,
       comment: logComment || null,
@@ -410,7 +412,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
   };
 
   const handleToggleComplete = async (log: TrainingLog) => {
-    const updated = { ...log, is_complete: !log.is_complete };
+    const updated = withCompletion(log, !log.is_complete);
     // Optimistic: flip the row in place immediately; persistence and the
     // auto-stop check follow. A full refreshData here re-sorts the day and
     // adds a visible delay before the checkmark appears.
@@ -425,10 +427,10 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     if (uncompleted.length === 0) return;
 
     const ids = new Set(uncompleted.map(l => l.id));
-    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
-    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
+    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? withCompletion(l, true, new Date(), false) : l)));
+    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? withCompletion(l, true, new Date(), false) : l)));
     for (const log of uncompleted) {
-      const updated = { ...log, is_complete: true };
+      const updated = withCompletion(log, true, new Date(), false);
       await db.execute('INSERT INTO training_logs', [updated]);
     }
     await maybeAutoStopWorkoutTimer(selectedDateRef.current);
@@ -440,10 +442,10 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     if (exLogs.length === 0) return;
 
     const ids = new Set(exLogs.map(l => l.id));
-    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
-    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? { ...l, is_complete: true } : l)));
+    setCurrentLogs(prev => prev.map(l => (ids.has(l.id) ? withCompletion(l, true, new Date(), false) : l)));
+    setAllLogs(prev => prev.map(l => (ids.has(l.id) ? withCompletion(l, true, new Date(), false) : l)));
     for (const log of exLogs) {
-      const updated = { ...log, is_complete: true };
+      const updated = withCompletion(log, true, new Date(), false);
       await db.execute('INSERT INTO training_logs', [updated]);
     }
     await maybeAutoStopWorkoutTimer(selectedDateRef.current);
@@ -561,6 +563,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
         id: uuidv4(),
         date: targetDate,
         is_complete: false,
+        completed_at: null,
         is_personal_record: false,
         last_modified: new Date().toISOString()
       };
@@ -625,7 +628,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     for (const id of selectedLogIdsForGroup) {
       const target = allLogs.find(x => x.id === id);
       if (target) {
-        const moved = { ...target, date: targetDate };
+        const moved = { ...target, date: targetDate, completed_at: null };
         await db.execute('INSERT INTO training_logs', [moved]);
       }
     }

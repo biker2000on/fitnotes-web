@@ -39,6 +39,7 @@ type apiWorkoutSet struct {
 	SetType                     string     `json:"set_type"`
 	IsPersonalRecord            bool       `json:"is_personal_record"`
 	IsComplete                  bool       `json:"is_complete"`
+	CompletedAt                 *time.Time `json:"completed_at"`
 	Distance                    *float64   `json:"distance"`
 	DurationSeconds             *int       `json:"duration_seconds"`
 	Comment                     *string    `json:"comment"`
@@ -113,7 +114,7 @@ func APIInfoHandler(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"name":      "FitNotes read-only API",
 		"version":   "v1",
-		"resources": []string{"/api/v1/exercises", "/api/v1/workouts", "/api/v1/body-weights", "/api/v1/workout-groups", "/api/v1/workout-routines"},
+		"resources": []string{"/api/v1/exercises", "/api/v1/workouts", "/api/v1/body-weights", "/api/v1/workout-groups", "/api/v1/workout-routines", "/api/v1/workout-times"},
 	})
 }
 
@@ -182,7 +183,7 @@ func APIWorkoutsHandler(w http.ResponseWriter, r *http.Request) {
 		SELECT tl.id, to_char(tl.date, 'YYYY-MM-DD'), tl.exercise_id, e.name, c.name,
 		       tl.metric_weight, tl.reps, tl.unit, tl.rpe, tl.rir, tl.set_type,
 		       tl.is_personal_record, tl.is_complete, tl.distance, tl.duration_seconds,
-		       tl.comment, tl.routine_section_exercise_set_id, tl.last_modified
+		       tl.comment, tl.routine_section_exercise_set_id, tl.last_modified, tl.completed_at
 		FROM training_logs tl
 		JOIN exercises e ON e.id = tl.exercise_id AND e.user_id = tl.user_id
 		LEFT JOIN categories c ON c.id = e.category_id AND c.user_id = tl.user_id AND c.is_deleted = FALSE
@@ -208,7 +209,7 @@ func APIWorkoutsHandler(w http.ResponseWriter, r *http.Request) {
 			&item.ID, &item.Date, &item.ExerciseID, &item.Exercise, &item.Category,
 			&item.MetricWeight, &item.Reps, &item.Unit, &item.RPE, &item.RIR, &item.SetType,
 			&item.IsPersonalRecord, &item.IsComplete, &item.Distance, &item.DurationSeconds,
-			&item.Comment, &item.RoutineSectionExerciseSetID, &item.LastModified,
+			&item.Comment, &item.RoutineSectionExerciseSetID, &item.LastModified, &item.CompletedAt,
 		); err != nil {
 			http.Error(w, `{"error":"failed to read workouts"}`, http.StatusInternalServerError)
 			return
