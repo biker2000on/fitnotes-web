@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { X, Trophy, History as HistoryIcon, LineChart, ZoomOut } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
-import { personalRecords, sessionSummaries, exerciseGraphSeries } from '../lib/stats';
+import { personalRecords, sessionSummaries, exerciseGraphSeries, logWeightKg } from '../lib/stats';
 import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
 import { exerciseMuscleTargets } from '../lib/muscles';
 import { MuscleDiagramDetails } from './MuscleDiagram';
@@ -113,7 +113,10 @@ export function ExerciseHistoryDrawer() {
   };
 
   const close = () => setHistoryExerciseId(null);
-  const displayMetricWeight = (metricWeight: number) => displayWeight(metricWeight, 1);
+  const displayMetricWeight = (metricWeight: number) => {
+    const converted = userUnit === 'lbs' ? metricWeight * 2.20462 : metricWeight;
+    return `${Math.round(converted * 10) / 10} ${userUnit}`;
+  };
   const displayMetricVolume = (metricVolume: number) => {
     const converted = userUnit === 'lbs' ? metricVolume * 2.20462 : metricVolume;
     return `${Math.round(converted)} ${userUnit}`;
@@ -147,7 +150,7 @@ export function ExerciseHistoryDrawer() {
   const maxDistanceLog = logs.reduce<TrainingLog | null>((best, log) => ((log.distance ?? 0) > (best?.distance ?? 0) ? log : best), null);
   const maxDurationLog = logs.reduce<TrainingLog | null>((best, log) => ((log.duration_seconds ?? 0) > (best?.duration_seconds ?? 0) ? log : best), null);
   const maxRepsLog = logs.reduce<TrainingLog | null>((best, log) => ((log.reps ?? 0) > (best?.reps ?? 0) ? log : best), null);
-  const maxWeightLog = logs.reduce<TrainingLog | null>((best, log) => ((log.metric_weight ?? 0) > (best?.metric_weight ?? 0) ? log : best), null);
+  const maxWeightLog = logs.reduce<TrainingLog | null>((best, log) => (logWeightKg(log) > (best ? logWeightKg(best) : 0) ? log : best), null);
   const totalDistance = logs.reduce((sum, log) => sum + (log.distance ?? 0), 0);
   const totalDuration = logs.reduce((sum, log) => sum + (log.duration_seconds ?? 0), 0);
   const totalReps = logs.reduce((sum, log) => sum + (log.reps ?? 0), 0);
@@ -250,7 +253,7 @@ export function ExerciseHistoryDrawer() {
                   </>
                 )}
                 {hasWeight && !hasReps && (
-                  <Stat label="Max Weight" value={maxWeightLog?.metric_weight ? displayMetricWeight(maxWeightLog.metric_weight) : '-'} date={maxWeightLog?.date} />
+                  <Stat label="Max Weight" value={maxWeightLog?.metric_weight ? displayWeight(maxWeightLog.metric_weight, maxWeightLog.unit) : '-'} date={maxWeightLog?.date} />
                 )}
                 {hasReps && !hasWeight && (
                   <>

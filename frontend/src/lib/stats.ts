@@ -76,7 +76,7 @@ export const personalRecords = (
   const bestByReps = new Map<number, ActualRecord>();
 
   for (const log of activeWeightLogs(logs)) {
-    const weight = log.metric_weight as number;
+    const weight = logWeightKg(log);
     const reps = log.reps as number;
     const date = log.date;
 
@@ -137,7 +137,7 @@ export const sessionSummaries = (
     let maxWeight = 0;
     let bestE1RM = 0;
     for (const l of dateLogs) {
-      const w = l.metric_weight ?? 0;
+      const w = logWeightKg(l);
       const r = l.reps ?? 0;
       totalReps += r;
       totalVolume += w * r;
@@ -191,7 +191,7 @@ export const exerciseGraphSeries = (
   for (const [date, dl] of byDate) {
     let maxWeight = 0, e1rm = 0, volume = 0, maxReps = 0, totalReps = 0, maxDist = 0, totalDist = 0, maxDur = 0, totalDur = 0;
     for (const l of dl) {
-      const w = l.metric_weight ?? 0, reps = l.reps ?? 0, dist = l.distance ?? 0, dur = l.duration_seconds ?? 0;
+      const w = logWeightKg(l), reps = l.reps ?? 0, dist = l.distance ?? 0, dur = l.duration_seconds ?? 0;
       maxWeight = Math.max(maxWeight, w);
       volume += w * reps;
       maxReps = Math.max(maxReps, reps);
@@ -462,8 +462,10 @@ const LBS_PER_KG = 2.20462;
 // Training logs retain the unit used when they were entered. Normalize before
 // comparing records so a historical pounds set is not compared numerically to
 // a kilograms set.
-const strengthWeightKg = (log: TrainingLog): number =>
-  (log.metric_weight as number) / (log.unit === 2 ? LBS_PER_KG : 1);
+export const logWeightKg = (log: TrainingLog): number =>
+  (log.metric_weight ?? 0) / (log.unit === 2 ? LBS_PER_KG : 1);
+
+const strengthWeightKg = logWeightKg;
 
 const effortRpe = (log: TrainingLog): number | null => {
   if (Number.isFinite(log.rpe) && Number(log.rpe) >= 1 && Number(log.rpe) <= 10) return Number(log.rpe);

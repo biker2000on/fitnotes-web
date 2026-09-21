@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState, useRef, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { createPortal } from 'react-dom';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -760,8 +761,9 @@ export function WorkoutLogView() {
           </button>
         </div>
 
-        {showCommentsModal && (
-          <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCommentsModal(false)}>
+        {/* Escape the workout grid's transform containing block. */}
+        {showCommentsModal && createPortal(
+          <div className="modal-overlay" onClick={() => setShowCommentsModal(false)}>
             <div className="modal-content mobile-modal-content workout-comments-modal" onClick={(e) => e.stopPropagation()}>
               <div className="mobile-modal-header">
                 <div className="card-title"><FileText size={16} /> Workout Comments</div>
@@ -779,7 +781,8 @@ export function WorkoutLogView() {
                 Save Comments
               </button>
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
 

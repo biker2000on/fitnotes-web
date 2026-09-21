@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Exercise, TrainingLog } from '../types';
 import {
   estimated1RM,
+  personalRecords,
+  sessionSummaries,
+  exerciseGraphSeries,
+  logWeightKg,
   rpeAdjustedEstimated1RM,
   strengthAnalytics,
   trainingDayTotals,
@@ -34,6 +38,41 @@ const log = (overrides: Partial<TrainingLog> = {}): TrainingLog => ({
   duration_seconds: null,
   set_type: 'working',
   ...overrides,
+});
+
+describe('exercise drawer weight units', () => {
+  it('returns kilogram aggregates so pounds are converted only once for display', () => {
+    const logs = [log({ metric_weight: 225, unit: 2, reps: 5 })];
+    const records = personalRecords(logs);
+    expect(records.maxWeight!.weight * 2.20462).toBeCloseTo(225);
+    expect(records.maxReps!.weight * 2.20462).toBeCloseTo(225);
+    expect(records.byReps[0].weight * 2.20462).toBeCloseTo(225);
+    expect(records.bestEstimated1RM!.value * 2.20462).toBeCloseTo(262.5);
+    expect(records.maxSetVolume!.volume * 2.20462).toBeCloseTo(1125);
+    const session = sessionSummaries(logs)[0];
+    expect(session.maxWeight * 2.20462).toBeCloseTo(225);
+    expect(session.totalVolume * 2.20462).toBeCloseTo(1125);
+    expect(session.bestEstimated1RM * 2.20462).toBeCloseTo(262.5);
+    expect(session.logs[0]).toBe(logs[0]);
+    const graph = exerciseGraphSeries(logs)[0];
+    expect(graph.maxWeight * 2.20462).toBeCloseTo(225, 1);
+    expect(graph.estimated1RM * 2.20462).toBeCloseTo(262.5, 1);
+    expect(graph.volume * 2.20462).toBeCloseTo(1125, 1);
+  });
+
+  it('compares mixed-unit records by actual weight, preserving kg and legacy units', () => {
+    const logs = [
+      log({ id: 'pounds', metric_weight: 200, unit: 2 }),
+      log({ id: 'kilograms', metric_weight: 100, unit: 1 }),
+      log({ id: 'deleted', metric_weight: 500, unit: 1, is_deleted: true }),
+    ];
+    expect(personalRecords(logs).byReps[0]).toMatchObject({ logId: 'kilograms', weight: 100 });
+    expect(sessionSummaries(logs)[0].maxWeight).toBe(100);
+    expect(exerciseGraphSeries(logs)[0].maxWeight).toBe(100);
+    expect(logWeightKg(log({ metric_weight: 100, unit: null }))).toBe(100);
+    expect(logWeightKg(log({ metric_weight: null }))).toBe(0);
+    expect(logWeightKg(log({ metric_weight: 225, reps: null, unit: 2 }))).toBeCloseTo(102.06, 2);
+  });
 });
 
 describe('RPE-adjusted e1RM', () => {
