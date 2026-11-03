@@ -1123,15 +1123,17 @@ input[type="range"] { min-height: 0; padding: 0; border: none; background: trans
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
-  /* The signature move: completing a set reverses its line, wiped in left to right. */
-  background-image: linear-gradient(var(--fg), var(--fg));
+  /* Completing a set wipes a raised-ink band in left to right; the reversal to
+     paper lives in the check square so a finished day stays dark. */
+  background-image: linear-gradient(var(--done-band), var(--done-band));
   background-repeat: no-repeat;
   background-position: left center;
   background-size: 0% 100%;
   transition: background-size 0.26s var(--ease-out), color 0.18s var(--ease-out);
   color: var(--fg);
 }
-.set-line.is-done { background-size: 100% 100%; color: var(--bg); border-bottom-color: var(--bg); }
+.set-line.is-done { background-size: 100% 100%; color: var(--fg-muted); }
+.set-line.is-done .sv-num { color: var(--fg); opacity: 0.72; }
 .set-line-main {
   flex: 1;
   min-width: 0;
@@ -1186,10 +1188,10 @@ input[type="range"] { min-height: 0; padding: 0; border: none; background: trans
   border: 2px solid currentColor;
   color: transparent;
   stroke: transparent;
-  transition: color 0.18s var(--ease-out);
+  transition: background-color 0.22s var(--ease-out), stroke 0.18s var(--ease-out);
 }
 .set-check:hover svg { stroke: var(--fg-muted); }
-.set-line.is-done .set-check svg { background: var(--bg); color: var(--fg); stroke: var(--fg); border-color: var(--bg); }
+.set-line.is-done .set-check svg { background: var(--fg); color: var(--bg); stroke: var(--bg); border-color: var(--fg); }
 .set-line:not(.is-done) .set-check svg { border-color: var(--fg); }
 
 .superset-group { display: flex; flex-direction: column; gap: 14px; padding: 10px 0 0; border-top: 1px dashed var(--line-strong); }
@@ -1349,12 +1351,15 @@ button.exercise-catalog-name:hover { color: var(--accent); }
   white-space: nowrap;
 }
 
-/* Next set reads solid; later ones are outlined until they come up. */
-.set-line.is-later .sv-num {
-  color: transparent;
-  -webkit-text-stroke: 1.2px var(--fg);
+/* One next set for the whole workout, framed in red; the rest wait in muted ink. */
+.set-line.is-next {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background-color: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 .set-line.is-next .set-line-num { color: var(--accent); opacity: 1; }
+.set-line.is-later { color: var(--fg-muted); }
+.set-line.is-later .set-check svg { border-color: var(--line-strong); }
 
 .body-figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 2px solid var(--fg); border-bottom: 1px solid var(--line); margin: 0; }
 .body-figure { padding: 12px 4px; display: flex; flex-direction: column; gap: 2px; margin: 0; }
@@ -1453,4 +1458,22 @@ button.exercise-catalog-name:hover { color: var(--accent); }
   /* One meta line per exercise on phones: category and last used; the type lives in the detail. */
   .exercise-catalog-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; }
   .exercise-catalog-meta > span:nth-child(2) { display: none; }
+}
+
+/* ---------- Log critique fixes ---------- */
+/* The toolbar band runs edge to edge in ink; only its content aligns to the column. */
+@media (min-width: 768px) {
+  .log-masthead > .log-toolbar {
+    max-width: none;
+    padding-left: max(16px, calc((100% - var(--main-panel-max-width)) / 2 + 16px));
+    padding-right: max(16px, calc((100% - var(--main-panel-max-width)) / 2 + 16px));
+  }
+}
+.log-add-exercise .kbd { opacity: 1; }
+
+/* Desktop: superset members sit in the same two columns as everything else. */
+@media (min-width: 1100px) {
+  .ex-blocks { grid-auto-flow: row dense; }
+  .superset-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 36px; align-items: start; }
+  .superset-group-head { grid-column: 1 / -1; }
 }

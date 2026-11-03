@@ -70,6 +70,8 @@ body {
   --on-accent: var(--on-red);
   --pr: var(--pr-yellow);
   --scrim: rgba(8, 7, 6, 0.7);
+  /* Raised ink for completed sets: done reads as a quiet band, not a light. */
+  --done-band: color-mix(in srgb, var(--fg) 9%, var(--bg));
 }
 
 body.light-theme {
@@ -85,6 +87,7 @@ body.light-theme {
   --on-accent: #f8f4ea;
   --pr: #f3c23a;
   --scrim: rgba(26, 23, 21, 0.45);
+  --done-band: color-mix(in srgb, var(--fg) 8%, var(--bg));
   color-scheme: light;
 }
 

@@ -222,7 +222,7 @@ Motion is limited: completing a set wipes its line from ink to paper, left to ri
 - League Gothic caps for names, Barlow Condensed tabular numerals for figures, Barlow for running UI text.
 - Square corners (2px); lists are ruled, not carded.
 - Flat page; only floating layers cast a shadow.
-- Signature move: a done set reverses its line.
+- Signature move: a done set's check square reverses to paper as a raised-ink band wipes across its line.
 
 ## Colors
 
@@ -315,9 +315,9 @@ Square-cut. One radius (2px, `--radius`) for buttons, inputs, chips, cards, menu
 ## Components
 
 ### Set Line and the Reversal (signature)
-The unit of the app. A 52px row: muted SET n label (44px column, 13px condensed caps), the value as a 30px tabular numeral with muted caps unit, an optional yellow PR tag, and a 52px check column holding a 36px square with a 2px border. Set lines stack under a 2px `--fg` rule with 1px `--line` dividers. Completing a set reverses the line: a solid `--fg` fill wipes in left to right (background-size 0 to 100% over 0.26s, ease-out) and text turns `--bg`; the check square fills `--bg` with an `--fg` tick. The next set's label turns red; later sets' numerals are outlined.
+The unit of the app. A 52px row: muted SET n label (44px column, 13px condensed caps), the value as a 30px tabular numeral with muted caps unit (timed sets print as m:ss), an optional yellow PR tag, and a 52px check column holding a 36px square with a 2px border. Set lines stack under a 2px `--fg` rule with 1px `--line` dividers. Completing a set wipes a raised-ink `--done-band` (`--fg` 9% over `--bg`) in left to right (background-size 0 to 100% over 0.26s, ease-out), text drops to `--fg-muted` with the numerals at `--fg` 72%, and the check square reverses to a solid `--fg` square with a `--bg` tick. Exactly one set in the whole workout is next, in lift order (superset members alternate set by set): it is framed by a 2px `--accent` outline over a 9% accent wash with a red SET label. Later sets sit in `--fg-muted` with `--line-strong` check squares.
 
-**The Reversal Rule.** Done is shown by reversing the line to paper, never by a green tick, strikethrough or fade. It is the only animated state change on the page.
+**The Reversal Rule.** Done is shown by reversing the check square to paper and darkening the line to raised ink, never by a green tick, strikethrough, or a paper band across the row: a finished day must stay dark. It is the only animated state change on the page.
 
 ### Date Masthead
 A full-width red band at the top of the Log. A 56px chevron step on each side; centred, a 13px condensed caps weekday line (relative name or weekday, plus year when not current) over the 52px League Gothic date. Tapping the date opens the native date picker. Under the band, on `--bg`, a thin toolbar of ghost buttons (Jump to today, Load routine, Notes) and, on desktop, the Add exercise button; a 1px rule closes it.

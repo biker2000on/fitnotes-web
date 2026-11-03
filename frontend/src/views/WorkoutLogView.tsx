@@ -71,7 +71,7 @@ function WorkoutTimerChip() {
 
 // A set as a headline numeral: "45 lb × 8". Weights show in the user's unit.
 function SetValue({ log, typeId, userUnit, fallback }: {
-  log: { metric_weight: number | null; reps: number | null; unit: number | null };
+  log: { metric_weight: number | null; reps: number | null; unit: number | null; duration_seconds?: number | null };
   typeId: number;
   userUnit: 'kg' | 'lbs';
   fallback: string;
@@ -90,6 +90,11 @@ function SetValue({ log, typeId, userUnit, fallback }: {
   }
   if (reps != null && weight == null && !typeHasDistance(typeId) && !typeHasDuration(typeId)) {
     return <span className="set-value"><span className="sv-num">{reps}</span><span className="sv-unit">reps</span></span>;
+  }
+  if (typeHasDuration(typeId) && !typeHasDistance(typeId) && weight == null && log.duration_seconds != null) {
+    const minutes = Math.floor(log.duration_seconds / 60);
+    const seconds = String(log.duration_seconds % 60).padStart(2, '0');
+    return <span className="set-value"><span className="sv-num">{minutes}:{seconds}</span></span>;
   }
   return <span className="set-value sv-text">{fallback}</span>;
 }
@@ -837,6 +842,22 @@ export function WorkoutLogView() {
                 }
               }
 
+              const liftOrder: string[] = [];
+              for (const item of items) {
+                if (item.type === 'exercise') {
+                  liftOrder.push(...currentLogs.filter(l => l.exercise_id === item.exerciseId).map(l => l.id));
+                  continue;
+                }
+                const members = [...item.exerciseIds]
+                  .sort((a, b) => firstIndex(a) - firstIndex(b))
+                  .map(id => currentLogs.filter(l => l.exercise_id === id));
+                const rounds = Math.max(0, ...members.map(m => m.length));
+                for (let round = 0; round < rounds; round++) {
+                  for (const memberLogs of members) if (memberLogs[round]) liftOrder.push(memberLogs[round].id);
+                }
+              }
+              const nextId = liftOrder.find(id => !currentLogs.find(l => l.id === id)?.is_complete);
+
               const renderExercise = (exerciseId: string) => {
                 const ex = exercises.find(x => x.id === exerciseId);
                 if (!ex) return null;
@@ -844,8 +865,6 @@ export function WorkoutLogView() {
                 const cat = categories.find(c => c.id === ex.category_id);
                 const doneCount = exLogs.filter(l => l.is_complete).length;
                 const hasUncompleted = exLogs.some(l => !l.is_complete);
-                // The next set to lift reads solid; the ones after it are outlined.
-                const nextId = exLogs.find(l => !l.is_complete)?.id;
                 return (
                   <article key={ex.id} className="ex-block" style={{ ['--cat' as string]: cat ? intColorToHex(cat.colour) : 'var(--fg-muted)' }}>
                     <header className="ex-block-head">
@@ -871,7 +890,7 @@ export function WorkoutLogView() {
                             type="button"
                             className="set-line-main"
                             onClick={() => openEntryForLog(log)}
-                            aria-label={`Set ${index + 1}, ${formatLogValue(log, ex.exercise_type_id)}${log.is_complete ? ', done' : ''}. Edit set`}
+                            aria-label={`${ex.name} set ${index + 1}, ${formatLogValue(log, ex.exercise_type_id)}${log.is_complete ? ', done' : log.id === nextId ? ', next up' : ''}. Edit set`}
                           >
                             <span className="set-line-num">Set {index + 1}</span>
                             <SetValue log={log} typeId={ex.exercise_type_id} userUnit={userUnit} fallback={formatLogValue(log, ex.exercise_type_id)} />
@@ -881,7 +900,7 @@ export function WorkoutLogView() {
                             type="button"
                             className="set-check"
                             aria-pressed={!!log.is_complete}
-                            aria-label={`Set ${index + 1} done`}
+                            aria-label={`${ex.name} set ${index + 1} done`}
                             onClick={() => handleToggleComplete(log)}
                           >
                             <Check size={22} strokeWidth={3} aria-hidden />

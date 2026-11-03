@@ -4,74 +4,385 @@
   "title": "Design System: FitNotes",
   "extensions": {
     "colorMeta": {
-      "press-red": { "role": "primary", "displayName": "Press Red (Ink)", "canonical": "oklch(65.5% 0.195 32.2)", "cssVar": "--press-red / --accent", "tonalRamp": ["#2b0000", "#550000", "#820000", "#b22003", "#da4b32", "#f87a63", "#ffa791", "#ffd3c0"] },
-      "press-red-hover": { "role": "primary", "displayName": "Press Red Hover (Ink)", "cssVar": "--press-red-hover / --accent-hover" },
-      "on-red": { "role": "primary", "displayName": "Ink on Red", "cssVar": "--on-red / --on-accent" },
-      "newsprint-red": { "role": "primary", "displayName": "Press Red (Newsprint)", "canonical": "oklch(52.2% 0.173 32.3)", "cssVar": "--accent on body.light-theme", "tonalRamp": ["#280000", "#500000", "#7c1301", "#aa2f1a", "#d1553e", "#f0816b", "#ffac98", "#ffd7c5"] },
-      "newsprint-red-hover": { "role": "primary", "displayName": "Press Red Hover (Newsprint)", "cssVar": "--accent-hover on body.light-theme" },
-      "on-newsprint-red": { "role": "primary", "displayName": "Paper on Red (Newsprint)", "cssVar": "--on-accent on body.light-theme" },
-      "pr-yellow": { "role": "secondary", "displayName": "PR Yellow", "canonical": "oklch(83.6% 0.154 87.8)", "cssVar": "--pr-yellow / --pr", "tonalRamp": ["#1a0500", "#3a1e00", "#5d3a00", "#835900", "#a67b00", "#c6a03a", "#e6c576", "#ffecab"] },
-      "go-green": { "role": "tertiary", "displayName": "Go Green", "canonical": "oklch(74.9% 0.126 133.5)", "cssVar": "--go-green", "tonalRamp": ["#011000", "#112d00", "#2a4d07", "#446f20", "#659144", "#8bb370", "#b3d69c", "#dcfac9"] },
-      "ink": { "role": "neutral", "displayName": "Warm Ink", "canonical": "oklch(18.4% 0.005 67.5)", "cssVar": "--ink / --bg", "tonalRamp": ["#0e0c0b", "#141210", "#1e1a17", "#322c27", "#4f463e", "#84827f", "#a69d8f", "#f1eadb"] },
-      "ink-raised": { "role": "neutral", "displayName": "Raised Ink", "cssVar": "--ink-raised / --surface" },
-      "ink-sunk": { "role": "neutral", "displayName": "Sunk Ink", "cssVar": "--ink-sunk / --sunk" },
-      "ink-rule": { "role": "neutral", "displayName": "Rule", "cssVar": "--rule / --line" },
-      "ink-rule-strong": { "role": "neutral", "displayName": "Strong Rule", "cssVar": "--rule-strong / --line-strong" },
-      "paper-text": { "role": "neutral", "displayName": "Paper Text", "canonical": "oklch(93.8% 0.021 85.9)", "cssVar": "--paper / --fg", "tonalRamp": ["#0d0b06", "#28251d", "#464138", "#666155", "#888275", "#aaa499", "#cdc9bf", "#f2eee6"] },
-      "ink-muted": { "role": "neutral", "displayName": "Muted (Ink)", "canonical": "oklch(70.0% 0.023 79.0)", "cssVar": "--muted / --fg-muted", "tonalRamp": ["#0e0b06", "#29241d", "#474137", "#686054", "#898174", "#aba499", "#cfc8be", "#f3eee5"] },
-      "newsprint": { "role": "neutral", "displayName": "Warm Newsprint", "canonical": "oklch(93.3% 0.020 84.6)", "cssVar": "--bg on body.light-theme", "tonalRamp": ["#1a1715", "#5e564c", "#b3a68f", "#d3c9b6", "#e6ddcb", "#efe8da", "#f8f4ea", "#f2eee6"] },
-      "newsprint-raised": { "role": "neutral", "displayName": "Raised Newsprint", "cssVar": "--surface on body.light-theme" },
-      "newsprint-sunk": { "role": "neutral", "displayName": "Sunk Newsprint", "cssVar": "--sunk on body.light-theme" },
-      "newsprint-rule": { "role": "neutral", "displayName": "Rule (Newsprint)", "cssVar": "--line on body.light-theme" },
-      "newsprint-rule-strong": { "role": "neutral", "displayName": "Strong Rule (Newsprint)", "cssVar": "--line-strong on body.light-theme" },
-      "newsprint-text": { "role": "neutral", "displayName": "Newsprint Text", "cssVar": "--fg on body.light-theme" },
-      "newsprint-muted": { "role": "neutral", "displayName": "Muted (Newsprint)", "cssVar": "--fg-muted on body.light-theme" }
+      "press-red": {
+        "role": "primary",
+        "displayName": "Press Red (Ink)",
+        "canonical": "oklch(65.5% 0.195 32.2)",
+        "cssVar": "--press-red / --accent",
+        "tonalRamp": [
+          "#2b0000",
+          "#550000",
+          "#820000",
+          "#b22003",
+          "#da4b32",
+          "#f87a63",
+          "#ffa791",
+          "#ffd3c0"
+        ]
+      },
+      "press-red-hover": {
+        "role": "primary",
+        "displayName": "Press Red Hover (Ink)",
+        "cssVar": "--press-red-hover / --accent-hover"
+      },
+      "on-red": {
+        "role": "primary",
+        "displayName": "Ink on Red",
+        "cssVar": "--on-red / --on-accent"
+      },
+      "newsprint-red": {
+        "role": "primary",
+        "displayName": "Press Red (Newsprint)",
+        "canonical": "oklch(52.2% 0.173 32.3)",
+        "cssVar": "--accent on body.light-theme",
+        "tonalRamp": [
+          "#280000",
+          "#500000",
+          "#7c1301",
+          "#aa2f1a",
+          "#d1553e",
+          "#f0816b",
+          "#ffac98",
+          "#ffd7c5"
+        ]
+      },
+      "newsprint-red-hover": {
+        "role": "primary",
+        "displayName": "Press Red Hover (Newsprint)",
+        "cssVar": "--accent-hover on body.light-theme"
+      },
+      "on-newsprint-red": {
+        "role": "primary",
+        "displayName": "Paper on Red (Newsprint)",
+        "cssVar": "--on-accent on body.light-theme"
+      },
+      "pr-yellow": {
+        "role": "secondary",
+        "displayName": "PR Yellow",
+        "canonical": "oklch(83.6% 0.154 87.8)",
+        "cssVar": "--pr-yellow / --pr",
+        "tonalRamp": [
+          "#1a0500",
+          "#3a1e00",
+          "#5d3a00",
+          "#835900",
+          "#a67b00",
+          "#c6a03a",
+          "#e6c576",
+          "#ffecab"
+        ]
+      },
+      "go-green": {
+        "role": "tertiary",
+        "displayName": "Go Green",
+        "canonical": "oklch(74.9% 0.126 133.5)",
+        "cssVar": "--go-green",
+        "tonalRamp": [
+          "#011000",
+          "#112d00",
+          "#2a4d07",
+          "#446f20",
+          "#659144",
+          "#8bb370",
+          "#b3d69c",
+          "#dcfac9"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Warm Ink",
+        "canonical": "oklch(18.4% 0.005 67.5)",
+        "cssVar": "--ink / --bg",
+        "tonalRamp": [
+          "#0e0c0b",
+          "#141210",
+          "#1e1a17",
+          "#322c27",
+          "#4f463e",
+          "#84827f",
+          "#a69d8f",
+          "#f1eadb"
+        ]
+      },
+      "ink-raised": {
+        "role": "neutral",
+        "displayName": "Raised Ink",
+        "cssVar": "--ink-raised / --surface"
+      },
+      "ink-sunk": {
+        "role": "neutral",
+        "displayName": "Sunk Ink",
+        "cssVar": "--ink-sunk / --sunk"
+      },
+      "ink-rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "cssVar": "--rule / --line"
+      },
+      "ink-rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule",
+        "cssVar": "--rule-strong / --line-strong"
+      },
+      "paper-text": {
+        "role": "neutral",
+        "displayName": "Paper Text",
+        "canonical": "oklch(93.8% 0.021 85.9)",
+        "cssVar": "--paper / --fg",
+        "tonalRamp": [
+          "#0d0b06",
+          "#28251d",
+          "#464138",
+          "#666155",
+          "#888275",
+          "#aaa499",
+          "#cdc9bf",
+          "#f2eee6"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Muted (Ink)",
+        "canonical": "oklch(70.0% 0.023 79.0)",
+        "cssVar": "--muted / --fg-muted",
+        "tonalRamp": [
+          "#0e0b06",
+          "#29241d",
+          "#474137",
+          "#686054",
+          "#898174",
+          "#aba499",
+          "#cfc8be",
+          "#f3eee5"
+        ]
+      },
+      "newsprint": {
+        "role": "neutral",
+        "displayName": "Warm Newsprint",
+        "canonical": "oklch(93.3% 0.020 84.6)",
+        "cssVar": "--bg on body.light-theme",
+        "tonalRamp": [
+          "#1a1715",
+          "#5e564c",
+          "#b3a68f",
+          "#d3c9b6",
+          "#e6ddcb",
+          "#efe8da",
+          "#f8f4ea",
+          "#f2eee6"
+        ]
+      },
+      "newsprint-raised": {
+        "role": "neutral",
+        "displayName": "Raised Newsprint",
+        "cssVar": "--surface on body.light-theme"
+      },
+      "newsprint-sunk": {
+        "role": "neutral",
+        "displayName": "Sunk Newsprint",
+        "cssVar": "--sunk on body.light-theme"
+      },
+      "newsprint-rule": {
+        "role": "neutral",
+        "displayName": "Rule (Newsprint)",
+        "cssVar": "--line on body.light-theme"
+      },
+      "newsprint-rule-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule (Newsprint)",
+        "cssVar": "--line-strong on body.light-theme"
+      },
+      "newsprint-text": {
+        "role": "neutral",
+        "displayName": "Newsprint Text",
+        "cssVar": "--fg on body.light-theme"
+      },
+      "newsprint-muted": {
+        "role": "neutral",
+        "displayName": "Muted (Newsprint)",
+        "cssVar": "--fg-muted on body.light-theme"
+      }
     },
     "themes": {
-      "ink": { "selector": "body", "default": true, "scrim": "rgba(8, 7, 6, 0.7)" },
-      "newsprint": { "selector": "body.light-theme", "scrim": "rgba(26, 23, 21, 0.45)" }
+      "ink": {
+        "selector": "body",
+        "default": true,
+        "scrim": "rgba(8, 7, 6, 0.7)"
+      },
+      "newsprint": {
+        "selector": "body.light-theme",
+        "scrim": "rgba(26, 23, 21, 0.45)"
+      }
     },
     "typographyMeta": {
-      "display": { "displayName": "Display", "cssVar": "--t-display", "purpose": "The date on the Log masthead. One per screen." },
-      "page-title": { "displayName": "Page Title", "purpose": "Page headers; off the token ramp but reused." },
-      "headline": { "displayName": "Headline", "cssVar": "--t-4", "purpose": "Exercise block names on the Log; empty-state titles at desk width." },
-      "row-headline": { "displayName": "Row Headline", "purpose": "Routine names in lists, day names in day cards." },
-      "numeral": { "displayName": "Numeral", "purpose": "The set value; every figure a lifter reads." },
-      "title": { "displayName": "Title", "cssVar": "--t-3", "purpose": "Stepper values, range readouts." },
-      "body": { "displayName": "Body", "cssVar": "--t-2", "purpose": "Running text; notes cap at 70ch." },
-      "control": { "displayName": "Control", "purpose": "Buttons, menu items, toasts, desktop rail links." },
-      "label": { "displayName": "Label", "cssVar": "--t-1", "purpose": "SET n, DAY n, field labels, section titles, tab labels, the masthead weekday line. Always carries data." }
+      "display": {
+        "displayName": "Display",
+        "cssVar": "--t-display",
+        "purpose": "The date on the Log masthead. One per screen."
+      },
+      "page-title": {
+        "displayName": "Page Title",
+        "purpose": "Page headers; off the token ramp but reused."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "cssVar": "--t-4",
+        "purpose": "Exercise block names on the Log; empty-state titles at desk width."
+      },
+      "row-headline": {
+        "displayName": "Row Headline",
+        "purpose": "Routine names in lists, day names in day cards."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "The set value; every figure a lifter reads."
+      },
+      "title": {
+        "displayName": "Title",
+        "cssVar": "--t-3",
+        "purpose": "Stepper values, range readouts."
+      },
+      "body": {
+        "displayName": "Body",
+        "cssVar": "--t-2",
+        "purpose": "Running text; notes cap at 70ch."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Buttons, menu items, toasts, desktop rail links."
+      },
+      "label": {
+        "displayName": "Label",
+        "cssVar": "--t-1",
+        "purpose": "SET n, DAY n, field labels, section titles, tab labels, the masthead weekday line. Always carries data."
+      }
     },
-    "typeRamp": { "tokens": ["13px", "16px", "22px", "34px", "52px"], "cssVars": ["--t-1", "--t-2", "--t-3", "--t-4", "--t-display"] },
+    "typeRamp": {
+      "tokens": [
+        "13px",
+        "16px",
+        "22px",
+        "34px",
+        "52px"
+      ],
+      "cssVars": [
+        "--t-1",
+        "--t-2",
+        "--t-3",
+        "--t-4",
+        "--t-display"
+      ]
+    },
     "fonts": {
       "selfHosted": "@fontsource imports in frontend/src/main.tsx",
       "families": {
-        "League Gothic": [400],
-        "Barlow": [400, 500, 600, 700],
-        "Barlow Condensed": [500, 600, 700]
+        "League Gothic": [
+          400
+        ],
+        "Barlow": [
+          400,
+          500,
+          600,
+          700
+        ],
+        "Barlow Condensed": [
+          500,
+          600,
+          700
+        ]
       }
     },
     "shadows": [
-      { "name": "float", "value": "0 18px 40px -12px rgba(0, 0, 0, 0.55)", "cssVar": "--shadow-lg", "purpose": "Toast, overflow menu, exercise detail drawer." },
-      { "name": "sheet-lift", "value": "0 -18px 40px -16px rgba(0, 0, 0, 0.7)", "purpose": "Bottom sheets and modals, cast upward." },
-      { "name": "action-bar", "value": "0 10px 24px -10px rgba(0, 0, 0, 0.7)", "purpose": "Fixed ADD EXERCISE bar above the phone tab bar." },
-      { "name": "none", "value": "none", "cssVar": "--shadow-sm / --shadow-md / --shadow-glow", "purpose": "Everything that scrolls with the page." }
+      {
+        "name": "float",
+        "value": "0 18px 40px -12px rgba(0, 0, 0, 0.55)",
+        "cssVar": "--shadow-lg",
+        "purpose": "Toast, overflow menu, exercise detail drawer."
+      },
+      {
+        "name": "sheet-lift",
+        "value": "0 -18px 40px -16px rgba(0, 0, 0, 0.7)",
+        "purpose": "Bottom sheets and modals, cast upward."
+      },
+      {
+        "name": "action-bar",
+        "value": "0 10px 24px -10px rgba(0, 0, 0, 0.7)",
+        "purpose": "Fixed ADD EXERCISE bar above the phone tab bar."
+      },
+      {
+        "name": "none",
+        "value": "none",
+        "cssVar": "--shadow-sm / --shadow-md / --shadow-glow",
+        "purpose": "Everything that scrolls with the page."
+      }
     ],
     "motion": [
-      { "name": "ease-out", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "cssVar": "--ease-out", "purpose": "The only easing curve." },
-      { "name": "transition-fast", "value": "0.14s var(--ease-out)", "cssVar": "--transition-fast", "purpose": "Hover colour changes, scrim fade, menu fade." },
-      { "name": "transition-normal", "value": "0.22s var(--ease-out)", "cssVar": "--transition-normal", "purpose": "Sheet rise (24px), panel slide-in (28px), toast rise (12px)." },
-      { "name": "transition-slow", "value": "0.36s var(--ease-out)", "cssVar": "--transition-slow", "purpose": "Defined; rarely used." },
-      { "name": "set-reversal", "value": "background-size 0.26s var(--ease-out), color 0.18s var(--ease-out)", "purpose": "Set line ink wipe, left to right, on completion." },
-      { "name": "reduced-motion", "value": "animation/transition-duration 0.01ms", "purpose": "prefers-reduced-motion collapses every animation, including the wipe and sheet rise." }
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "cssVar": "--ease-out",
+        "purpose": "The only easing curve."
+      },
+      {
+        "name": "transition-fast",
+        "value": "0.14s var(--ease-out)",
+        "cssVar": "--transition-fast",
+        "purpose": "Hover colour changes, scrim fade, menu fade."
+      },
+      {
+        "name": "transition-normal",
+        "value": "0.22s var(--ease-out)",
+        "cssVar": "--transition-normal",
+        "purpose": "Sheet rise (24px), panel slide-in (28px), toast rise (12px)."
+      },
+      {
+        "name": "transition-slow",
+        "value": "0.36s var(--ease-out)",
+        "cssVar": "--transition-slow",
+        "purpose": "Defined; rarely used."
+      },
+      {
+        "name": "set-reversal",
+        "value": "background-size 0.26s var(--ease-out), color 0.18s var(--ease-out)",
+        "purpose": "Set line ink wipe, left to right, on completion."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation/transition-duration 0.01ms",
+        "purpose": "prefers-reduced-motion collapses every animation, including the wipe and sheet rise."
+      }
     ],
     "breakpoints": [
-      { "name": "rail", "value": "768px", "purpose": "Tab bar becomes 84px compact side rail; exercise rows go one ruled line." },
-      { "name": "dock", "value": "900px", "purpose": "Sheets and set entry dock to the right edge as full-height panels." },
-      { "name": "day-grid", "value": "1000px", "purpose": "Routine day cards tile at 380px minimum." },
-      { "name": "split", "value": "1024px", "purpose": "Routines list and detail side by side." },
-      { "name": "wide", "value": "1100px", "purpose": "Log exercise blocks run two columns; exercise drawer docks beside the page." },
-      { "name": "rail-wide", "value": "1200px", "purpose": "Side rail widens to 232px with wordmark and group titles." }
+      {
+        "name": "rail",
+        "value": "768px",
+        "purpose": "Tab bar becomes 84px compact side rail; exercise rows go one ruled line."
+      },
+      {
+        "name": "dock",
+        "value": "900px",
+        "purpose": "Sheets and set entry dock to the right edge as full-height panels."
+      },
+      {
+        "name": "day-grid",
+        "value": "1000px",
+        "purpose": "Routine day cards tile at 380px minimum."
+      },
+      {
+        "name": "split",
+        "value": "1024px",
+        "purpose": "Routines list and detail side by side."
+      },
+      {
+        "name": "wide",
+        "value": "1100px",
+        "purpose": "Log exercise blocks run two columns; exercise drawer docks beside the page."
+      },
+      {
+        "name": "rail-wide",
+        "value": "1200px",
+        "purpose": "Side rail widens to 232px with wordmark and group titles."
+      }
     ],
     "sizes": {
       "radius": "2px (--radius)",
@@ -90,9 +401,9 @@
       "name": "Set Line (Reversal)",
       "kind": "custom",
       "refersTo": "set-line",
-      "description": "The signature: a ruled set row with a headline numeral; completing it wipes the line from ink to paper.",
+      "description": "The signature: a ruled set row with a headline numeral; completing it wipes a raised-ink band across the line and reverses the check square to paper. One framed next set per workout.",
       "html": "<ul class=\"ds-set-lines\"><li class=\"ds-set-line is-done\"><button class=\"ds-set-main\"><span class=\"ds-set-num\">Set 1</span><span class=\"ds-sv\"><b class=\"ds-sv-num\">45</b><span class=\"ds-sv-unit\">lb</span><span class=\"ds-sv-x\">&times;</span><b class=\"ds-sv-num\">8</b></span><span class=\"ds-pr\">PR</span></button><button class=\"ds-set-check\" aria-label=\"Done\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"3\"><path d=\"M5 12l5 5L20 7\"/></svg></button></li><li class=\"ds-set-line is-next\"><button class=\"ds-set-main\"><span class=\"ds-set-num\">Set 2</span><span class=\"ds-sv\"><b class=\"ds-sv-num\">45</b><span class=\"ds-sv-unit\">lb</span><span class=\"ds-sv-x\">&times;</span><b class=\"ds-sv-num\">8</b></span></button><button class=\"ds-set-check\" aria-label=\"Mark done\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"3\"><path d=\"M5 12l5 5L20 7\"/></svg></button></li><li class=\"ds-set-line is-later\"><button class=\"ds-set-main\"><span class=\"ds-set-num\">Set 3</span><span class=\"ds-sv\"><b class=\"ds-sv-num\">15</b><span class=\"ds-sv-unit\">reps</span></span></button><button class=\"ds-set-check\" aria-label=\"Mark done\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke-width=\"3\"><path d=\"M5 12l5 5L20 7\"/></svg></button></li></ul>",
-      "css": ".ds-set-lines { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--fg, #f1eadb); background: var(--bg, #141210); color: var(--fg, #f1eadb); } .ds-set-line { display: flex; border-bottom: 1px solid var(--line, #322c27); background-image: linear-gradient(var(--fg, #f1eadb), var(--fg, #f1eadb)); background-repeat: no-repeat; background-position: left center; background-size: 0% 100%; transition: background-size 0.26s cubic-bezier(0.16,1,0.3,1), color 0.18s cubic-bezier(0.16,1,0.3,1); color: var(--fg, #f1eadb); } .ds-set-line.is-done { background-size: 100% 100%; color: var(--bg, #141210); border-bottom-color: var(--bg, #141210); } .ds-set-main { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 4px; border: none; background: transparent; color: inherit; text-align: left; cursor: pointer; } .ds-set-num { width: 44px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; } .ds-set-line.is-next .ds-set-num { color: var(--accent, #f0553a); opacity: 1; } .ds-sv { display: inline-flex; align-items: baseline; gap: 4px; font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; } .ds-sv-num { font-size: 30px; font-weight: 700; line-height: 1; } .ds-set-line.is-later .ds-sv-num { color: transparent; -webkit-text-stroke: 1.2px var(--fg, #f1eadb); } .ds-sv-unit { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; } .ds-sv-x { font-size: 20px; margin: 0 4px; opacity: 0.75; } .ds-pr { margin-left: 4px; padding: 2px 6px; background: var(--pr, #f3c23a); color: #141210; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; } .ds-set-check { width: 52px; display: grid; place-items: center; border: none; background: transparent; color: inherit; cursor: pointer; } .ds-set-check svg { width: 36px; height: 36px; padding: 6px; border: 2px solid var(--fg, #f1eadb); stroke: transparent; transition: color 0.18s cubic-bezier(0.16,1,0.3,1); } .ds-set-check:hover svg { stroke: var(--fg-muted, #a69d8f); } .ds-set-line.is-done .ds-set-check svg { background: var(--bg, #141210); stroke: var(--fg, #f1eadb); border-color: var(--bg, #141210); } .ds-set-check:focus-visible, .ds-set-main:focus-visible { outline: 2px solid var(--accent, #f0553a); outline-offset: 2px; }"
+      "css": ".ds-set-lines { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--fg, #f1eadb); background: var(--bg, #141210); color: var(--fg, #f1eadb); } .ds-set-line { display: flex; border-bottom: 1px solid var(--line, #322c27); background-image: linear-gradient(var(--done-band, #2a2621), var(--done-band, #2a2621)); background-repeat: no-repeat; background-position: left center; background-size: 0% 100%; transition: background-size 0.26s cubic-bezier(0.16,1,0.3,1), color 0.18s cubic-bezier(0.16,1,0.3,1); color: var(--fg, #f1eadb); } .ds-set-line.is-done { background-size: 100% 100%; color: var(--fg-muted, #a69d8f); } .ds-set-line.is-done .ds-sv-num { color: var(--fg, #f1eadb); opacity: 0.72; } .ds-set-line.is-next { outline: 2px solid var(--accent, #f0553a); outline-offset: -2px; background-color: rgba(240, 85, 58, 0.09); } .ds-set-line.is-later { color: var(--fg-muted, #a69d8f); } .ds-set-main { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 4px 8px 4px 4px; border: none; background: transparent; color: inherit; text-align: left; cursor: pointer; } .ds-set-num { width: 44px; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; opacity: 0.75; } .ds-set-line.is-next .ds-set-num { color: var(--accent, #f0553a); opacity: 1; } .ds-sv { display: inline-flex; align-items: baseline; gap: 4px; font-family: 'Barlow Condensed', sans-serif; font-variant-numeric: tabular-nums; } .ds-sv-num { font-size: 30px; font-weight: 700; line-height: 1; }  .ds-sv-unit { font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75; } .ds-sv-x { font-size: 20px; margin: 0 4px; opacity: 0.75; } .ds-pr { margin-left: 4px; padding: 2px 6px; background: var(--pr, #f3c23a); color: #141210; font-family: 'Barlow Condensed', sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.1em; } .ds-set-check { width: 52px; display: grid; place-items: center; border: none; background: transparent; color: inherit; cursor: pointer; } .ds-set-check svg { width: 36px; height: 36px; padding: 6px; border: 2px solid var(--fg, #f1eadb); stroke: transparent; transition: color 0.18s cubic-bezier(0.16,1,0.3,1); } .ds-set-check:hover svg { stroke: var(--fg-muted, #a69d8f); } .ds-set-line.is-done .ds-set-check svg { background: var(--fg, #f1eadb); stroke: var(--bg, #141210); border-color: var(--fg, #f1eadb); } .ds-set-check:focus-visible, .ds-set-main:focus-visible { outline: 2px solid var(--accent, #f0553a); outline-offset: 2px; }"
     },
     {
       "name": "Date Masthead",
@@ -175,19 +486,59 @@
       "League Gothic caps for names, Barlow Condensed tabular numerals for figures, Barlow for running UI text.",
       "Square corners (2px); lists are ruled, not carded.",
       "Flat page; only floating layers cast a shadow.",
-      "Signature move: a done set reverses its line."
+      "Signature move: a done set's check square reverses to paper as a raised-ink band wipes across its line."
     ],
     "rules": [
-      { "name": "The Two Inks Rule", "body": "Red is the only accent. It marks the current thing (today, the next set, the active tab, the primary action) or a destructive thing. Never add a second accent hue to the chrome.", "section": "colors" },
-      { "name": "The Spot Colour Rule", "body": "Category and superset colours appear only as a small solid square swatch (10 to 12px) beside neutral text. They never tint a row, a chip fill, a border or a label. Yellow appears only on the PR tag.", "section": "colors" },
-      { "name": "The Theme Through Tokens Rule", "body": "Components read the semantic names (`--bg`, `--fg`, `--accent`...), never the raw Ink hexes, so Newsprint follows for free. A literal colour in a component is drift.", "section": "colors" },
-      { "name": "The Caps Name the Lift Rule", "body": "League Gothic in uppercase is for names: the date, page, exercise, routine, day, sheet. It never sets sentences, metadata or ordinary buttons; the one action that earns it is the large red action bar.", "section": "typography" },
-      { "name": "The Numeral Rule", "body": "Every figure a lifter reads (weight, reps, time, counts) is Barlow Condensed with tabular numerals. The next set's value is solid; later planned sets are outlined (1.2px text stroke) until they come up.", "section": "typography" },
-      { "name": "The Data Label Rule", "body": "Small condensed caps labels carry data: a sequence number (SET 2, DAY 1), a date, a count, a status (\"Up next\"), a nav group. They never carry a tagline or a decorative category over a heading.", "section": "typography" },
-      { "name": "The Ruled List Rule", "body": "Lists are rows divided by 1px `--line` rules, opened by a 2px `--fg` rule (set lines, weigh-ins, settings, page headers, routine identity, Body figures). Do not wrap list rows in individual cards.", "section": "layout" },
-      { "name": "The Flat Page Rule", "body": "Nothing that scrolls with the page casts a shadow. Cards, rows, buttons and inputs are flat; `--shadow-sm`, `--shadow-md` and `--shadow-glow` are intentionally `none`. No glass, no backdrop blur.", "section": "elevation" },
-      { "name": "The Square Corner Rule", "body": "Corners are 2px or 0. Nothing on-system is pill-shaped or softly rounded.", "section": "shapes" },
-      { "name": "The Reversal Rule", "body": "Done is shown by reversing the line to paper, never by a green tick, strikethrough or fade. It is the only animated state change on the page.", "section": "components" }
+      {
+        "name": "The Two Inks Rule",
+        "body": "Red is the only accent. It marks the current thing (today, the next set, the active tab, the primary action) or a destructive thing. Never add a second accent hue to the chrome.",
+        "section": "colors"
+      },
+      {
+        "name": "The Spot Colour Rule",
+        "body": "Category and superset colours appear only as a small solid square swatch (10 to 12px) beside neutral text. They never tint a row, a chip fill, a border or a label. Yellow appears only on the PR tag.",
+        "section": "colors"
+      },
+      {
+        "name": "The Theme Through Tokens Rule",
+        "body": "Components read the semantic names (`--bg`, `--fg`, `--accent`...), never the raw Ink hexes, so Newsprint follows for free. A literal colour in a component is drift.",
+        "section": "colors"
+      },
+      {
+        "name": "The Caps Name the Lift Rule",
+        "body": "League Gothic in uppercase is for names: the date, page, exercise, routine, day, sheet. It never sets sentences, metadata or ordinary buttons; the one action that earns it is the large red action bar.",
+        "section": "typography"
+      },
+      {
+        "name": "The Numeral Rule",
+        "body": "Every figure a lifter reads (weight, reps, time, counts) is Barlow Condensed with tabular numerals. The next set's value is solid; later planned sets are outlined (1.2px text stroke) until they come up.",
+        "section": "typography"
+      },
+      {
+        "name": "The Data Label Rule",
+        "body": "Small condensed caps labels carry data: a sequence number (SET 2, DAY 1), a date, a count, a status (\"Up next\"), a nav group. They never carry a tagline or a decorative category over a heading.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled List Rule",
+        "body": "Lists are rows divided by 1px `--line` rules, opened by a 2px `--fg` rule (set lines, weigh-ins, settings, page headers, routine identity, Body figures). Do not wrap list rows in individual cards.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Page Rule",
+        "body": "Nothing that scrolls with the page casts a shadow. Cards, rows, buttons and inputs are flat; `--shadow-sm`, `--shadow-md` and `--shadow-glow` are intentionally `none`. No glass, no backdrop blur.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Square Corner Rule",
+        "body": "Corners are 2px or 0. Nothing on-system is pill-shaped or softly rounded.",
+        "section": "shapes"
+      },
+      {
+        "name": "The Reversal Rule",
+        "body": "Done is shown by reversing the check square to paper and darkening the line to raised ink, never by a green tick, strikethrough, or a paper band across the row: a finished day must stay dark. It is the only animated state change on the page.",
+        "section": "components"
+      }
     ],
     "dos": [
       "**Do** read colours through the semantic tokens on `body` (`--bg`, `--surface`, `--sunk`, `--line`, `--fg`, `--fg-muted`, `--accent`, `--on-accent`, `--pr`) so both Ink and Newsprint print correctly.",
