@@ -4,7 +4,7 @@
 import {
   TrendingUp, Calculator, Plus, Check, Trash2, GripVertical, X,
   Dumbbell, Layers, Bookmark, Copy, FileText, Timer, Share2, History as HistoryIcon,
-  RefreshCw, WifiOff, ArrowLeftRight, Square, Play,
+  ArrowLeftRight, Square, Play,
 } from 'lucide-react';
 import { useEffect, useMemo, useState, useRef, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
@@ -12,11 +12,12 @@ import { createPortal } from 'react-dom';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
-import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../lib/units';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight, weightInUnit } from '../lib/units';
 import { aggregateMuscleTargets } from '../lib/muscles';
 import { formatSessionSets, getProgressionSuggestion } from '../lib/progression';
 import { MuscleDiagramDetails } from '../components/MuscleDiagram';
 import { AttentionCard } from '../components/AttentionCard';
+import { OverflowMenu } from '../components/OverflowMenu';
 import type { RoutineSection } from '../types';
 import { addDays } from '../lib/date';
 
@@ -68,75 +69,29 @@ function WorkoutTimerChip() {
   );
 }
 
-const formatSyncAge = (timestamp: string): string => {
-  if (!timestamp) return 'Never synced';
-  const parsed = Date.parse(timestamp);
-  if (Number.isNaN(parsed)) return 'Never synced';
-
-  const diffSec = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
-  if (diffSec < 10) return 'Synced just now';
-  if (diffSec < 60) return `Synced ${diffSec}s ago`;
-
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `Synced ${diffMin}m ago`;
-
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `Synced ${diffHour}h ago`;
-
-  return `Synced ${new Date(parsed).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-};
-
-function WorkoutSyncIndicator() {
-  const { token, syncStatus, lastSyncTime, triggerSync } = useFitNotesStore();
-  const [, setTick] = useState(0);
-  const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
-  const isSyncing = syncStatus === 'syncing';
-
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  let label = token ? 'Auto-sync ready' : 'Not signed in';
-  let detail = token ? formatSyncAge(lastSyncTime) : 'Cloud sync off';
-  let tone = 'ready';
-
-  if (!isOnline) {
-    label = 'Offline';
-    detail = 'Changes will sync on reconnect';
-    tone = 'offline';
-  } else if (isSyncing) {
-    label = 'Syncing';
-    detail = 'Pushing workout changes';
-    tone = 'syncing';
-  } else if (syncStatus === 'success') {
-    label = 'Synced';
-    detail = formatSyncAge(lastSyncTime);
-    tone = 'success';
-  } else if (syncStatus === 'error') {
-    label = 'Sync failed';
-    detail = 'Tap to retry';
-    tone = 'error';
+// A set as a headline numeral: "45 lb × 8". Weights show in the user's unit.
+function SetValue({ log, typeId, userUnit, fallback }: {
+  log: { metric_weight: number | null; reps: number | null; unit: number | null };
+  typeId: number;
+  userUnit: 'kg' | 'lbs';
+  fallback: string;
+}) {
+  const unit = userUnit === 'kg' ? 'kg' : 'lb';
+  const weight = typeHasWeight(typeId) && log.metric_weight ? weightInUnit(log.metric_weight, log.unit, userUnit) : null;
+  const reps = typeHasReps(typeId) ? log.reps : null;
+  if (weight != null && reps != null) {
+    return (
+      <span className="set-value">
+        <span className="sv-num">{weight}</span><span className="sv-unit">{unit}</span>
+        <span className="sv-x" aria-hidden="true">×</span>
+        <span className="sv-num">{reps}</span>
+      </span>
+    );
   }
-
-  return (
-    <button
-      type="button"
-      className={`workout-sync-pill workout-sync-${tone}`}
-      onClick={() => triggerSync()}
-      disabled={!token || isSyncing}
-      aria-label={token ? 'Sync workout data' : 'Cloud sync is off'}
-      title={token ? 'Sync workout data' : 'Cloud sync is off'}
-    >
-      <span className="workout-sync-icon">
-        {!isOnline ? <WifiOff size={16} /> : <RefreshCw size={16} className={isSyncing ? 'spin-animation' : ''} />}
-      </span>
-      <span className="workout-sync-copy">
-        <span>{label}</span>
-        <small>{detail}</small>
-      </span>
-    </button>
-  );
+  if (reps != null && weight == null && !typeHasDistance(typeId) && !typeHasDuration(typeId)) {
+    return <span className="set-value"><span className="sv-num">{reps}</span><span className="sv-unit">reps</span></span>;
+  }
+  return <span className="set-value sv-text">{fallback}</span>;
 }
 
 export function WorkoutLogView() {
@@ -177,7 +132,7 @@ export function WorkoutLogView() {
       // Ignore swipes when modals or sidebar are open
       if (
         document.querySelector('.modal-overlay') || 
-        document.querySelector('.sidebar-backdrop.open')
+        document.querySelector('.sheet-overlay, .drawer-scrim')
       ) {
         return;
       }
@@ -442,12 +397,8 @@ export function WorkoutLogView() {
 
   return (
     <div className="workout-grid" ref={gridRef}>
-      <div className="workout-mobile-sync-row">
-        <WorkoutSyncIndicator />
-      </div>
       {/* Left: Active set Logger & comments */}
       <div className="workout-log-input-column">
-        <AttentionCard />
 
         {selectedExercise ? (
           <div className="card active-exercise-card" style={{ gap: '16px' }}>
@@ -519,8 +470,8 @@ export function WorkoutLogView() {
             {progression && !editingLog && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '12px',
-                border: '1px solid var(--border-dark)', borderLeft: '3px solid var(--primary)',
-                borderRadius: '10px', padding: '10px 12px', fontSize: '12px',
+                border: '1px solid var(--border-dark)',
+                borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: '12px',
               }}>
                 <div style={{ color: 'var(--text-secondary-dark)' }}>
                   Last session ({progression.lastSessionDate}): {formatSessionSets(progression.lastSessionSets)} {userUnit}
@@ -543,7 +494,7 @@ export function WorkoutLogView() {
               </div>
             )}
             {(selectedExercise.instructions || selectedExercise.video_url || selectedExercise.regressions || selectedExercise.progressions || selectedExercise.substitutions) && (
-              <details style={{ marginBottom: '12px', border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '9px 11px', fontSize: '12px' }}>
+              <details style={{ marginBottom: '12px', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', padding: '9px 11px', fontSize: '12px' }}>
                 <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Exercise guidance</summary>
                 {selectedExercise.instructions && <p style={{ whiteSpace: 'pre-wrap' }}>{selectedExercise.instructions}</p>}
                 {selectedExercise.equipment && <p><strong>Equipment:</strong> {selectedExercise.equipment}</p>}
@@ -735,7 +686,7 @@ export function WorkoutLogView() {
 
             {/* Superset trigger button */}
             {selectedLogIdsForGroup.length > 0 && (
-              <div style={{ backgroundColor: 'var(--primary-glow)', padding: '16px', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ backgroundColor: 'var(--primary-glow)', padding: '16px', borderRadius: 'var(--radius)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '13px', fontWeight: 600 }}>{selectedLogIdsForGroup.length} sets selected</span>
                 <button className="btn btn-primary" onClick={handleCreateSuperset}>
                   <Layers size={14} /> Create Superset Group
@@ -786,464 +737,184 @@ export function WorkoutLogView() {
         )}
       </div>
 
-      {/* Right: Today's Workout Summary side panel */}
-      <div className="card workout-summary-card" style={{ gap: '16px', height: 'fit-content' }}>
-        <div className="workout-summary-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Layers size={18} color="var(--primary)" />
-            <span>Today's Workout Summary</span>
-          </div>
+      {/* The day's workout: every exercise as a block of set lines. */}
+      <section className="workout-summary" aria-label="Workout">
+        <div className="workout-summary-bar">
           <WorkoutTimerChip />
-          <div className="workout-summary-actions" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {currentLogs.length > 0 && (
-              <button className="btn btn-primary complete-all-icon-btn summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={handleMarkAllComplete} title="Complete All" aria-label="Complete All">
-                ✓ Complete All
-              </button>
-            )}
-            <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowCopyWorkoutDrawer(true)} title="Copy Workout" aria-label="Copy Workout">
-              <Copy size={14} /> Copy
-            </button>
-            <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => setShowPlateCalc(true)} title="Plate Calculator" aria-label="Plate Calculator">
-              <Calculator size={14} /> Plate Calc
-            </button>
-            {currentLogs.length > 0 && (
-              <>
-                <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={shareWorkout} title="Share Workout" aria-label="Share Workout">
-                  <Share2 size={14} /> Share
+          {dayRoutines.map(wr => {
+            const routine = routines.find(r => r.id === wr.routine_id);
+            if (!routine) return null;
+            const sectionName = wr.routine_section_id ? sectionNames[wr.routine_section_id] : null;
+            const label = `${routine.name}${sectionName ? ` · ${sectionName}` : ''}`;
+            return (
+              <span key={wr.id} className="routine-chip" title="Routine loaded for this day">
+                <Bookmark size={14} aria-hidden />
+                <span className="routine-chip-label">{label}</span>
+                <button type="button" className="routine-chip-x" onClick={() => handleDeleteWorkoutRoutine(wr.id)} aria-label={`Unlink ${label} from this workout`}>
+                  <X size={14} aria-hidden />
                 </button>
-                <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px', color: 'var(--danger)' }} onClick={handleClearDay} title="Clear Workout" aria-label="Clear Workout">
-                  <Trash2 size={14} /> Clear
-                </button>
-              </>
-            )}
-            {currentLogs.length > 0 && (
-              <button className="btn btn-secondary summary-action-btn" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => {
-                setSelectedExIdsForSuperset([]);
-                setShowSupersetManagerModal(true);
-              }} title="Link Superset" aria-label="Link Superset">
-                <Plus size={14} /> Link Superset
-              </button>
-            )}
-          </div>
+              </span>
+            );
+          })}
+          <span className="workout-summary-spacer" />
+          <OverflowMenu
+            label="Workout actions"
+            items={[
+              ...(currentLogs.some(l => !l.is_complete) ? [{ label: 'Complete every set', icon: <Check size={16} aria-hidden />, onSelect: handleMarkAllComplete }] : []),
+              { label: 'Copy a past workout', icon: <Copy size={16} aria-hidden />, onSelect: () => setShowCopyWorkoutDrawer(true) },
+              { label: 'Plate calculator', icon: <Calculator size={16} aria-hidden />, onSelect: () => setShowPlateCalc(true) },
+              ...(currentLogs.length > 0 ? [
+                { label: 'Link a superset', icon: <Plus size={16} aria-hidden />, onSelect: () => { setSelectedExIdsForSuperset([]); setShowSupersetManagerModal(true); } },
+                { label: 'Share workout', icon: <Share2 size={16} aria-hidden />, onSelect: shareWorkout },
+                { label: 'Clear this day', icon: <Trash2 size={16} aria-hidden />, tone: 'danger' as const, onSelect: handleClearDay },
+              ] : []),
+            ]}
+          />
         </div>
 
-        {dayRoutines.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-            {dayRoutines.map(wr => {
-              const routine = routines.find(r => r.id === wr.routine_id);
-              if (!routine) return null;
-              const sectionName = wr.routine_section_id ? sectionNames[wr.routine_section_id] : null;
-              return (
-                <span
-                  key={wr.id}
-                  title="Routine loaded for this day"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                    fontSize: '12px', fontWeight: 700,
-                    color: 'var(--primary)', backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    border: '1px solid rgba(99, 102, 241, 0.25)',
-                    borderRadius: '999px', padding: '4px 12px',
-                  }}
-                >
-                  <Bookmark size={12} />
-                  {routine.name}{sectionName ? ` - ${sectionName}` : ''}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteWorkoutRoutine(wr.id)}
-                    aria-label={`Remove ${routine.name}${sectionName ? ` - ${sectionName}` : ''} from this workout`}
-                    title="Remove routine from this workout"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      width: '18px', height: '18px', marginRight: '-6px',
-                      border: 'none', borderRadius: '50%', cursor: 'pointer',
-                      background: 'rgba(239, 68, 68, 0.12)', color: 'var(--danger)',
-                    }}
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        )}
-
         {workoutComment.trim() && (
-          <div className="workout-summary-comment">
-            <FileText size={15} />
+          <button type="button" className="workout-note" onClick={() => setShowCommentsModal(true)}>
+            <FileText size={16} aria-hidden />
             <span>{workoutComment}</span>
-          </div>
+          </button>
         )}
 
         {currentLogs.length === 0 ? (
-          <div className="workout-empty-state" style={{ textAlign: 'center', padding: '32px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-            <p style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', margin: 0 }}>
-              No sets logged for today yet. Use the logger or copy a past session.
-            </p>
-            <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '8px 16px' }} onClick={() => setShowCopyWorkoutDrawer(true)}>
-              <Bookmark size={14} color="var(--primary)" /> Copy Past Workout
-            </button>
+          <div className="empty-state workout-empty">
+            <p className="empty-title">Nothing logged</p>
+            <p>Add an exercise, load a routine day, or copy a past workout into this day.</p>
+            <div className="empty-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowRoutineImportModal(true)}>
+                <Bookmark size={16} aria-hidden /> Load routine
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCopyWorkoutDrawer(true)}>
+                <Copy size={16} aria-hidden /> Copy a workout
+              </button>
+            </div>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="ex-blocks">
             {(() => {
-              // 1. Identify superset groups active today
+              // Superset groups active on this date, keyed by member exercise.
               const activeGroups = workoutGroups.filter(wg => wg.date === selectedDate && !wg.is_deleted);
-              
-              // Group exercise IDs that are part of today's supersets
-              const groupExerciseIds = new Set<string>();
-              const groupMap: Record<string, typeof activeGroups[0]> = {}; // exerciseId -> group
-              
+              const groupMap: Record<string, typeof activeGroups[0]> = {};
               for (const wg of activeGroups) {
-                const linked = groupExercises.filter(ge => ge.workout_group_id === wg.id && ge.date === selectedDate && !ge.is_deleted);
-                for (const ge of linked) {
-                  groupExerciseIds.add(ge.exercise_id);
+                for (const ge of groupExercises.filter(ge => ge.workout_group_id === wg.id && ge.date === selectedDate && !ge.is_deleted)) {
                   groupMap[ge.exercise_id] = wg;
                 }
               }
 
-              // 2. All exercise IDs with sets logged today
-              const loggedExerciseIds = Array.from(new Set(currentLogs.map(l => l.exercise_id)));
+              const firstIndex = (exerciseId: string) => {
+                const index = currentLogs.findIndex(l => l.exercise_id === exerciseId);
+                return index === -1 ? 999999 : index;
+              };
 
-              // Create a list of workout items
+              // One item per standalone exercise or superset, ordered by first set.
               const items: Array<
                 | { type: 'superset'; group: typeof activeGroups[0]; exerciseIds: string[]; sortIndex: number }
                 | { type: 'exercise'; exerciseId: string; sortIndex: number }
               > = [];
-
-              // Tracks which superset groups we have already added to the items list
               const addedGroupIds = new Set<string>();
-
-              for (const exId of loggedExerciseIds) {
+              for (const exId of Array.from(new Set(currentLogs.map(l => l.exercise_id)))) {
                 const parentGroup = groupMap[exId];
-                if (parentGroup) {
-                  if (!addedGroupIds.has(parentGroup.id)) {
-                    addedGroupIds.add(parentGroup.id);
-                    
-                    // Get all exercises linked to this group
-                    const linked = groupExercises
-                      .filter(ge => ge.workout_group_id === parentGroup.id && ge.date === selectedDate && !ge.is_deleted)
-                      .map(ge => ge.exercise_id);
-                      
-                    // Find the minimum index of any set in currentLogs belonging to any of these exercises
-                    let sortIndex = Infinity;
-                    for (const linkedId of linked) {
-                      const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === linkedId);
-                      if (firstSetIndex !== -1 && firstSetIndex < sortIndex) {
-                        sortIndex = firstSetIndex;
-                      }
-                    }
-                    
-                    // If no sets are logged yet, fall back to a high number
-                    if (sortIndex === Infinity) sortIndex = 999999;
-
-                    items.push({
-                      type: 'superset',
-                      group: parentGroup,
-                      exerciseIds: linked,
-                      sortIndex
-                    });
-                  }
-                } else {
-                  // Individual normal exercise
-                  const firstSetIndex = currentLogs.findIndex(l => l.exercise_id === exId);
-                  items.push({
-                    type: 'exercise',
-                    exerciseId: exId,
-                    sortIndex: firstSetIndex !== -1 ? firstSetIndex : 999999
-                  });
+                if (!parentGroup) {
+                  items.push({ type: 'exercise', exerciseId: exId, sortIndex: firstIndex(exId) });
+                  continue;
                 }
+                if (addedGroupIds.has(parentGroup.id)) continue;
+                addedGroupIds.add(parentGroup.id);
+                const linked = groupExercises
+                  .filter(ge => ge.workout_group_id === parentGroup.id && ge.date === selectedDate && !ge.is_deleted)
+                  .map(ge => ge.exercise_id);
+                items.push({ type: 'superset', group: parentGroup, exerciseIds: linked, sortIndex: Math.min(...linked.map(firstIndex)) });
               }
+              items.sort((a, b) => a.sortIndex - b.sortIndex);
 
-              // Sort ascending by sortIndex
-              const sortedItems = items.sort((a, b) => a.sortIndex - b.sortIndex);
               const groupLabelById = new Map<string, string>();
-              for (const item of sortedItems) {
+              for (const item of items) {
                 if (item.type === 'superset' && isGenericSupersetName(item.group.name) && !groupLabelById.has(item.group.id)) {
                   groupLabelById.set(item.group.id, `Superset ${groupLabelById.size + 1}`);
                 }
               }
 
-              return sortedItems.map((item) => {
-                if (item.type === 'superset') {
-                  const wg = item.group;
-                  const color = intColorToHex(wg.colour);
-                  const groupLabel = groupLabelById.get(wg.id) || wg.name || 'Superset Group';
-                  
-                  // Sort exercises inside the superset chronologically based on their first logged set
-                  const sortedExIds = [...item.exerciseIds].sort((a, b) => {
-                    const idxA = currentLogs.findIndex(l => l.exercise_id === a);
-                    const idxB = currentLogs.findIndex(l => l.exercise_id === b);
-                    return (idxA !== -1 ? idxA : 9999) - (idxB !== -1 ? idxB : 9999);
-                  });
-
-                  return (
-                    <div key={wg.id} className="superset-container-panel" style={{ borderLeft: `6px solid ${color}`, paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255, 255, 255, 0.01)', borderRadius: '0 12px 12px 0', border: '1px solid var(--border-dark)', borderLeftWidth: '6px', padding: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', backgroundColor: color + '20', color: color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{groupLabel}</span>
-                          {!!wg.auto_jump_enabled && <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 600 }}>• Auto-Jump</span>}
-                        </div>
-                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }} onClick={() => handleClearGroup(wg.id)}>
-                          Unlink
-                        </button>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        {sortedExIds.map(exId => {
-                          const ex = exercises.find(x => x.id === exId);
-                          if (!ex) return null;
-                          const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
-                          const cat = categories.find(c => c.id === ex.category_id);
-                          const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
-                          const hasUncompleted = exLogs.some(l => !l.is_complete);
-
-                          return (
-                            <div key={exId} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                                  <div style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => openEntryForExercise(ex)}>
-                                    {ex.name}
-                                  </div>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                                    {cat?.name || 'Misc'}
-                                  </span>
-                                  {exLogs.length > 0 && hasUncompleted && (
-                                    <button 
-                                      className="btn btn-secondary complete-all-icon-btn" 
-                                      style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
-                                      onClick={() => handleMarkExerciseComplete(ex.id)}
-                                      title="Complete All"
-                                      aria-label={`Complete all sets for ${ex.name}`}
-                                    >
-                                      ✓ Complete All
-                                    </button>
-                                  )}
-                                  <button
-                                    className="icon-btn workout-history-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setReplaceTargetExerciseId(ex.id);
-                                      setShowCommandPalette(true);
-                                    }}
-                                    title="Replace exercise (swap all of today's sets to another exercise)"
-                                    aria-label={`Replace ${ex.name} with another exercise`}
-                                  >
-                                    <ArrowLeftRight size={15} />
-                                  </button>
-                                  <button
-                                    className="icon-btn workout-history-btn"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setHistoryExerciseId(ex.id);
-                                    }}
-                                    title="History, records, and graph"
-                                    aria-label={`Open history, records, and graph for ${ex.name}`}
-                                  >
-                                    <HistoryIcon size={15} />
-                                  </button>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {exLogs.length === 0 ? (
-                                  <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)', fontStyle: 'italic' }}>No sets logged</span>
-                                ) : (
-                                  exLogs.map((log, index) => (
-                                    <div 
-                                      key={log.id} 
-                                      onClick={() => openEntryForLog(log)} 
-                                      style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'space-between', 
-                                        padding: '8px 12px', 
-                                        borderRadius: '8px', 
-                                        fontSize: '13px', 
-                                        backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
-                                        border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
-                                        cursor: 'pointer',
-                                        transition: 'all 0.15s ease'
-                                      }}
-                                    >
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <span style={{ 
-                                          fontSize: '10px', 
-                                          fontWeight: 800, 
-                                          background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
-                                          color: 'var(--text-main-dark)', 
-                                          padding: '2px 6px', 
-                                          borderRadius: '4px',
-                                          minWidth: '20px',
-                                          textAlign: 'center'
-                                        }}>
-                                          {index + 1}
-                                        </span>
-                                        <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
-                                          {formatLogValue(log, ex.exercise_type_id)}
-                                        </span>
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <button
-                                          className={`set-complete-toggle ${log.is_complete ? 'checked' : ''}`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleToggleComplete(log);
-                                          }}
-                                          title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
-                                          aria-label={log.is_complete ? "Mark set incomplete" : "Mark set complete"}
-                                        >
-                                          <Check size={18} strokeWidth={3} />
-                                        </button>
-                                        <button 
-                                          className="btn btn-secondary" 
-                                          style={{ padding: '8px 10px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.6, fontSize: '14px' }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleDeleteSet(log.id);
-                                          }}
-                                        >
-                                          ✕
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                } else {
-                  const ex = exercises.find(x => x.id === item.exerciseId);
-                  if (!ex) return null;
-                  const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
-                  const cat = categories.find(c => c.id === ex.category_id);
-                  const catColor = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
-                  const hasUncompleted = exLogs.some(l => !l.is_complete);
-
-                  return (
-                    <div key={ex.id} className="summary-exercise-card" style={{ padding: '16px', border: '1px solid var(--border-dark)', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(255,255,255,0.005)', borderLeft: `4px solid ${catColor}` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: '15px', cursor: 'pointer', color: 'var(--text-primary-dark)' }} onClick={() => openEntryForExercise(ex)}>
-                            {ex.name}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: catColor + '15', color: catColor, fontWeight: 700 }}>
-                            {cat?.name || 'Misc'}
-                          </span>
-                          {exLogs.length > 0 && hasUncompleted && (
-                            <button 
-                              className="btn btn-secondary complete-all-icon-btn" 
-                              style={{ padding: '2px 8px', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '4px', height: '24px' }} 
-                              onClick={() => handleMarkExerciseComplete(ex.id)}
-                              title="Complete All"
-                              aria-label={`Complete all sets for ${ex.name}`}
-                            >
-                              ✓ Complete All
-                            </button>
-                          )}
+              const renderExercise = (exerciseId: string) => {
+                const ex = exercises.find(x => x.id === exerciseId);
+                if (!ex) return null;
+                const exLogs = currentLogs.filter(l => l.exercise_id === ex.id);
+                const cat = categories.find(c => c.id === ex.category_id);
+                const doneCount = exLogs.filter(l => l.is_complete).length;
+                const hasUncompleted = exLogs.some(l => !l.is_complete);
+                // The next set to lift reads solid; the ones after it are outlined.
+                const nextId = exLogs.find(l => !l.is_complete)?.id;
+                return (
+                  <article key={ex.id} className="ex-block" style={{ ['--cat' as string]: cat ? intColorToHex(cat.colour) : 'var(--fg-muted)' }}>
+                    <header className="ex-block-head">
+                      <button type="button" className="ex-block-name" onClick={() => openEntryForExercise(ex)}>{ex.name}</button>
+                      <OverflowMenu
+                        label={`${ex.name} actions`}
+                        items={[
+                          { label: 'Add a set', icon: <Plus size={16} aria-hidden />, onSelect: () => openEntryForExercise(ex) },
+                          ...(hasUncompleted && exLogs.length > 1 ? [{ label: 'Complete all sets', icon: <Check size={16} aria-hidden />, onSelect: () => handleMarkExerciseComplete(ex.id) }] : []),
+                          { label: 'History & records', icon: <HistoryIcon size={16} aria-hidden />, onSelect: () => setHistoryExerciseId(ex.id) },
+                          { label: 'Swap exercise', icon: <ArrowLeftRight size={16} aria-hidden />, onSelect: () => { setReplaceTargetExerciseId(ex.id); setShowCommandPalette(true); } },
+                        ]}
+                      />
+                    </header>
+                    <p className="ex-block-meta">
+                      <span className="cat-swatch" aria-hidden="true" />
+                      {cat?.name || 'Uncategorised'} · {doneCount} of {exLogs.length} done
+                    </p>
+                    <ol className="set-lines">
+                      {exLogs.map((log, index) => (
+                        <li key={log.id} className={`set-line${log.is_complete ? ' is-done' : log.id === nextId ? ' is-next' : ' is-later'}${log.is_personal_record ? ' is-pr' : ''}`}>
                           <button
-                            className="icon-btn workout-history-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setReplaceTargetExerciseId(ex.id);
-                              setShowCommandPalette(true);
-                            }}
-                            title="Replace exercise (swap all of today's sets to another exercise)"
-                            aria-label={`Replace ${ex.name} with another exercise`}
+                            type="button"
+                            className="set-line-main"
+                            onClick={() => openEntryForLog(log)}
+                            aria-label={`Set ${index + 1}, ${formatLogValue(log, ex.exercise_type_id)}${log.is_complete ? ', done' : ''}. Edit set`}
                           >
-                            <ArrowLeftRight size={15} />
+                            <span className="set-line-num">Set {index + 1}</span>
+                            <SetValue log={log} typeId={ex.exercise_type_id} userUnit={userUnit} fallback={formatLogValue(log, ex.exercise_type_id)} />
+                            {!!log.is_personal_record && <span className="pr-tag">PR</span>}
                           </button>
                           <button
-                            className="icon-btn workout-history-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setHistoryExerciseId(ex.id);
-                            }}
-                            title="History, records, and graph"
-                            aria-label={`Open history, records, and graph for ${ex.name}`}
+                            type="button"
+                            className="set-check"
+                            aria-pressed={!!log.is_complete}
+                            aria-label={`Set ${index + 1} done`}
+                            onClick={() => handleToggleComplete(log)}
                           >
-                            <HistoryIcon size={15} />
+                            <Check size={22} strokeWidth={3} aria-hidden />
                           </button>
-                        </div>
-                      </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                );
+              };
 
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {exLogs.map((log, index) => (
-                          <div 
-                            key={log.id} 
-                            onClick={() => openEntryForLog(log)} 
-                            style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'space-between', 
-                              padding: '8px 12px', 
-                              borderRadius: '8px', 
-                              fontSize: '13px', 
-                              backgroundColor: log.is_complete ? 'var(--success-glow)' : 'rgba(255,255,255,0.02)', 
-                              border: log.is_complete ? '1px solid var(--success)' : '1px solid var(--border-dark)', 
-                              cursor: 'pointer',
-                              transition: 'all 0.15s ease'
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ 
-                                fontSize: '10px', 
-                                fontWeight: 800, 
-                                background: log.is_complete ? 'var(--success)' : 'rgba(255, 255, 255, 0.08)', 
-                                color: 'var(--text-main-dark)', 
-                                padding: '2px 6px', 
-                                borderRadius: '4px',
-                                minWidth: '20px',
-                                textAlign: 'center'
-                              }}>
-                                {index + 1}
-                              </span>
-                              <span style={{ color: log.is_complete ? 'var(--success-text)' : 'var(--text-primary-dark)' }}>
-                                {formatLogValue(log, ex.exercise_type_id)}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <button
-                                className={`set-complete-toggle ${log.is_complete ? 'checked' : ''}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleComplete(log);
-                                }}
-                                title={log.is_complete ? "Mark Incomplete" : "Mark Complete"}
-                                aria-label={log.is_complete ? "Mark set incomplete" : "Mark set complete"}
-                              >
-                                <Check size={18} strokeWidth={3} />
-                              </button>
-                              <button 
-                                className="btn btn-secondary" 
-                                style={{ padding: '8px 10px', border: 'none', backgroundColor: 'transparent', color: 'var(--danger)', opacity: 0.6, fontSize: '14px' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteSet(log.id);
-                                }}
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+              return items.map(item => {
+                if (item.type === 'exercise') return renderExercise(item.exerciseId);
+                const wg = item.group;
+                const sortedExIds = [...item.exerciseIds].sort((a, b) => firstIndex(a) - firstIndex(b));
+                return (
+                  <div key={wg.id} className="superset-group" style={{ ['--superset' as string]: intColorToHex(wg.colour) }}>
+                    <div className="superset-group-head">
+                      <span className="superset-tag">{groupLabelById.get(wg.id) || wg.name || 'Superset'}</span>
+                      {!!wg.auto_jump_enabled && <span className="superset-note">alternates sets</span>}
+                      <button type="button" className="btn btn-ghost" onClick={() => handleClearGroup(wg.id)}>Unlink</button>
                     </div>
-                  );
-                }
+                    {sortedExIds.map(renderExercise)}
+                  </div>
+                );
               });
             })()}
           </div>
         )}
 
-        {/* Per-day muscles worked, aggregated from every exercise logged today */}
+        {/* Coaching notes come after the workout, never before it. */}
+        <AttentionCard />
+
         {currentLogs.length > 0 && (() => {
           const todayExerciseIds = new Set(currentLogs.filter(l => !l.is_deleted).map(l => l.exercise_id));
           const targets = aggregateMuscleTargets(exercises.filter(ex => todayExerciseIds.has(ex.id)));
@@ -1256,7 +927,7 @@ export function WorkoutLogView() {
             />
           );
         })()}
-      </div>
+      </section>
     </div>
   );
 }

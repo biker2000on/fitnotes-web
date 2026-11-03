@@ -1,6 +1,6 @@
 // GoalsView.tsx - Create and track per-exercise goals.
 import { useState } from 'react';
-import { Target, Plus, Trash2, Check, ChevronUp, ChevronDown, Pencil } from 'lucide-react';
+import { Plus, Trash2, Check, ChevronUp, ChevronDown, Pencil } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { GOAL_TYPE, type Goal } from '../types';
 import { GOAL_TYPE_OPTIONS, goalTypeLabel, goalUnit, goalCurrentValue, goalTargetValue } from '../lib/goals';
@@ -68,7 +68,7 @@ export function GoalsView() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div className="card-title" style={{ margin: 0 }}><Target size={18} /> Goals</div>
+        <p className="field-hint">A target weight or rep count for a lift, with a date to hit it by.</p>
         <button className="btn btn-primary" onClick={() => { setEditingId(null); setExerciseId(''); setTarget(''); setTargetReps(''); setTargetDate(''); setShowForm(s => !s); }}>
           <Plus size={16} /> New Goal
         </button>

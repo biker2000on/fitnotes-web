@@ -23,6 +23,7 @@ export interface RoutinesSliceDeps {
   activeTab: TabId;
   setActiveTab: Dispatch<SetStateAction<TabId>>;
   selectedDate: string;
+  setSelectedDate: Dispatch<SetStateAction<string>>;
   selectedDateRef: MutableRefObject<string>;
   userUnit: 'kg' | 'lbs';
   exercises: Exercise[];
@@ -43,6 +44,12 @@ const routineMutationQueues = new Map<string, Promise<void>>();
 let routineMutationEnqueueTail: Promise<void> = Promise.resolve();
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+// "Tue 3 Nov" for a YYYY-MM-DD local date.
+export const formatTargetDate = (date: string) => {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+};
 
 // The promise queue preserves mutation arrival order within this tab. Web
 // Locks additionally coordinate tabs that share the same backing store.
@@ -538,7 +545,7 @@ async function switchRoutineSectionExerciseLocked(
 export function useRoutinesSlice(deps: RoutinesSliceDeps) {
   const {
     late, triggerToast, triggerConfirm, activeTab, setActiveTab,
-    selectedDate, selectedDateRef, userUnit, exercises, allLogs,
+    selectedDate, setSelectedDate, selectedDateRef, userUnit, exercises, allLogs,
     workoutGroups, supersetName, supersetColor, getHighest1RM, recordWorkoutRoutine,
   } = deps;
 
@@ -570,6 +577,9 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
 
   const [activeRoutineForPopulate, setActiveRoutineForPopulate] = useState<Routine | null>(null);
   const [activeSectionForPopulate, setActiveSectionForPopulate] = useState<RoutineSection | null>(null);
+  // The date a routine start writes to. Starting from the Routines page means
+  // "today"; starting from the Log means the day being viewed. Never implicit.
+  const [populateTargetDate, setPopulateTargetDate] = useState<string | null>(null);
 
   const [editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId] = useState<string | null>(null);
 
@@ -578,7 +588,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
   const [pastImporterDate, setPastImporterDate] = useState('');
 
   // Start Routine with Populators
-  const copyRoutineSectionSupersetsToWorkout = async (sectionId: string, sectionExerciseIds: string[]) => {
+  const copyRoutineSectionSupersetsToWorkout = async (sectionId: string, sectionExerciseIds: string[], targetDate: string) => {
     await withOrderedRoutineSectionMutation(sectionId, async () => {
     const groups = await db.query<WorkoutGroup>('SELECT * FROM workout_groups');
     const links = await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises');
@@ -600,7 +610,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       const newGroup: WorkoutGroup = {
         id: newGroupId,
         name: templateGroup.name || 'Superset',
-        date: selectedDate,
+        date: targetDate,
         routine_section_id: null,
         colour: templateGroup.colour,
         auto_jump_enabled: templateGroup.auto_jump_enabled,
@@ -612,7 +622,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
         const newLink: WorkoutGroupExercise = {
           id: uuidv4(),
           exercise_id: templateLink.exercise_id,
-          date: selectedDate,
+          date: targetDate,
           routine_section_id: null,
           workout_group_id: newGroupId
         };
@@ -628,9 +638,10 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     routineId: string,
     type: 'template' | 'last_workout' | 'one_rep_max',
     percentage: number = 75,
-    sectionId?: string
+    sectionId?: string,
+    targetDateOverride?: string
   ) => {
-    const targetDate = selectedDateRef.current;
+    const targetDate = targetDateOverride ?? selectedDateRef.current;
     const defaultUnit = userUnit === 'kg' ? 1 : 2;
     const findLastSessionLogs = (exerciseId: string) => {
       const pastExLogs = allLogs.filter(l =>
@@ -784,6 +795,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
             for (const s of sourceSets) {
               await insertLogFromSource(se.exercise_id, s, {
                 metric_weight: roundedWeight,
+                unit: defaultUnit,
                 routine_section_exercise_set_id: usingTemplateSets ? s.id : undefined
               });
               sectionSetsLogged++;
@@ -800,7 +812,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       }
 
       if (sectionSetsLogged > 0) {
-        await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
+        await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds, targetDate);
         await recordWorkoutRoutine(routineId, sec.id, targetDate);
       }
     }
@@ -808,11 +820,14 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     setShowRoutineImportModal(false);
     setActiveRoutineForPopulate(null);
     setActiveSectionForPopulate(null);
-    await late.refreshData();
+    setPopulateTargetDate(null);
+    if (targetDate !== selectedDateRef.current) setSelectedDate(targetDate);
+    await late.refreshData(targetDate);
     if (totalSetsLogged > 0) {
-      triggerToast(`Routine loaded using ${type === 'one_rep_max' ? `${percentage}% 1RM` : type === 'last_workout' ? 'last session' : 'routine set types'}.`);
+      setActiveTab('log');
+      triggerToast(`Loaded ${totalSetsLogged} set${totalSetsLogged === 1 ? '' : 's'} into ${formatTargetDate(targetDate)}.`);
     } else {
-      triggerToast('No routine sets were logged. Add template sets or log this exercise once before using history-based loading.', 'error');
+      triggerToast('Nothing to load: plan some sets for this day, or log these exercises once so "Last time" has something to copy.', 'error');
     }
   };
 
@@ -822,15 +837,17 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     routineId: string,
     type: 'template' | 'last_workout' | 'one_rep_max',
     percentage: number = 75,
-    sectionId?: string
+    sectionId?: string,
+    targetDate?: string
   ) => {
     try {
-      await importRoutinePopulated(routineId, type, percentage, sectionId);
+      await importRoutinePopulated(routineId, type, percentage, sectionId, targetDate ?? populateTargetDate ?? undefined);
     } catch (error) {
       console.error('Failed to load routine into workout:', error);
       setShowRoutineImportModal(false);
       setActiveRoutineForPopulate(null);
       setActiveSectionForPopulate(null);
+      setPopulateTargetDate(null);
       await late.refreshData().catch(refreshError => console.error('Failed to reconcile workout data:', refreshError));
       triggerToast(`Couldn't load routine: ${errorMessage(error)}`, 'error');
     }
@@ -849,7 +866,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       }
       await late.refreshData();
       if (editingRoutine) await loadEditorData(editingRoutine.id);
-      triggerToast('Routine superset created successfully!');
+      triggerToast('Superset linked.');
       return true;
     } catch (error) {
       console.error('Failed to create routine superset:', error);
@@ -921,7 +938,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
   // is only those two fields; structure is built afterwards in the routine view).
   const handleCreateRoutineTemplate = async () => {
     if (!newRoutineName) {
-      triggerToast('Please enter a routine template name!', 'error');
+      triggerToast('Give the routine a name.', 'error');
       return;
     }
 
@@ -1011,7 +1028,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
 
     triggerConfirm(
       'Delete routine?',
-      `Delete "${target.name}" and all of its workout days, template sets, and routine supersets?`,
+      `Delete "${target.name}" with all its days and planned sets? Workouts you already logged stay.`,
       async () => {
         const result = await deleteRoutineGraph(db, routineId);
         if (!result.ok) {
@@ -1121,7 +1138,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
             date: selectedDate,
             metric_weight: s.metric_weight,
             reps: s.reps,
-            unit: userUnit === 'kg' ? 1 : 2,
+            unit: s.unit ?? (userUnit === 'kg' ? 1 : 2),
             is_personal_record: false,
             is_complete: false,
             distance: s.distance,
@@ -1131,13 +1148,13 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
         }
       }
 
-      await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds);
+      await copyRoutineSectionSupersetsToWorkout(sec.id, importedExerciseIds, selectedDate);
       await recordWorkoutRoutine(routineId, sec.id);
     }
 
     setShowRoutineImportModal(false);
     await late.refreshData();
-    triggerToast('Routine templates loaded successfully!');
+    triggerToast('Routine loaded.');
   };
 
   // Routine Day Editor loaders and mutators
@@ -1178,7 +1195,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       return;
     }
     await loadEditorData(editingRoutine.id);
-    triggerToast('Workout day added to template.');
+    triggerToast('Day added.');
   };
 
   // Open the "add exercise to section" modal targeting a section.
@@ -1218,7 +1235,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
         return false;
       }
       if (editingRoutine) await loadEditorData(editingRoutine.id);
-      triggerToast('Exercise added to template.');
+      triggerToast('Exercise added to the day.');
       return true;
     } catch (error) {
       console.error('Failed to add routine exercise:', error);
@@ -1244,7 +1261,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       }
       await late.refreshData();
       if (editingRoutine) await loadEditorData(editingRoutine.id);
-      triggerToast('Routine exercise switched. Template sets and superset links were preserved.');
+      triggerToast('Exercise swapped. Its planned sets and superset stay.');
       return true;
     } catch (error) {
       console.error('Failed to switch routine exercise:', error);
@@ -1282,15 +1299,34 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
   const handleDeleteExerciseFromSection = async (rseId: string) => {
     const target = editorSectionExercises.find(item => item.id === rseId && !item.is_deleted);
     if (!target) return;
+    // Snapshot what the delete removes so Undo can put it back exactly.
+    const sets = (await db.query<RoutineSectionExerciseSet>('SELECT * FROM routine_section_exercise_sets'))
+      .filter(item => item.routine_section_exercise_id === target.id && !item.is_deleted);
+    const links = (await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises'))
+      .filter(item => !item.is_deleted && item.routine_section_id === target.routine_section_id && item.exercise_id === target.exercise_id);
     const result = await deleteRoutineSectionExercise(db, rseId, target.routine_section_id);
     if (!result.ok) {
       triggerToast(result.message, 'error');
       return;
     }
-    if (editingRoutine) {
-      await loadEditorData(editingRoutine.id);
+    const routineId = editingRoutine?.id;
+    if (routineId) {
+      await loadEditorData(routineId);
     }
-    triggerToast('Exercise removed from template.');
+    const restore: DBOperation[] = [
+      { sql: 'INSERT INTO routine_section_exercises', params: [{ ...target, is_deleted: false }] },
+      ...sets.map(item => ({ sql: 'INSERT INTO routine_section_exercise_sets', params: [{ ...item, is_deleted: false }] })),
+      ...links.map(item => ({ sql: 'INSERT INTO workout_group_exercises', params: [{ ...item, is_deleted: false }] })),
+    ];
+    triggerToast('Exercise removed.', 'info', {
+      label: 'Undo',
+      onAction: async () => {
+        if (db.executeBatch) await db.executeBatch(restore);
+        else for (const operation of restore) await db.execute(operation.sql, operation.params || []);
+        if (routineId) await loadEditorData(routineId);
+        await late.refreshData();
+      },
+    });
   };
 
   const handleAddSetToTemplateExercise = async (rseId: string) => {
@@ -1325,7 +1361,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     if (editingRoutine) {
       await loadEditorData(editingRoutine.id);
     }
-    triggerToast('Set added to template exercise.');
+    triggerToast('Set added.');
   };
 
   // Change how an exercise's sets are populated when its routine is loaded
@@ -1355,10 +1391,10 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     if (editingRoutine) {
       await loadEditorData(editingRoutine.id);
     }
-    triggerToast('Set deleted from template exercise.');
+    triggerToast('Set removed.');
   };
 
-  const handleUpdateTemplateSetValues = async (setId: string, values: Partial<Pick<RoutineSectionExerciseSet, 'metric_weight' | 'reps' | 'distance' | 'duration_seconds' | 'min_reps' | 'max_reps' | 'set_type' | 'target_rir' | 'tempo' | 'notes'>>) => {
+  const handleUpdateTemplateSetValues = async (setId: string, values: Partial<Pick<RoutineSectionExerciseSet, 'metric_weight' | 'unit' | 'reps' | 'distance' | 'duration_seconds' | 'min_reps' | 'max_reps' | 'set_type' | 'target_rir' | 'tempo' | 'notes'>>) => {
     const set = editorExerciseSets.find(item => item.id === setId && !item.is_deleted);
     const target = set && editorSectionExercises.find(item => item.id === set.routine_section_exercise_id && !item.is_deleted);
     if (!target) return;
@@ -1400,6 +1436,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
   };
 
   const handleDeleteSection = async (sectionId: string) => {
+    let snapshot: DBOperation[] = [];
     await withOrderedRoutineSectionMutation(sectionId, async () => {
       const sections = await db.query<RoutineSection>('SELECT * FROM routine_sections');
       const section = sections.find(item => item.id === sectionId && !item.is_deleted);
@@ -1414,6 +1451,14 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       const groupIds = new Set(groups.map(item => item.id));
       const links = (await db.query<WorkoutGroupExercise>('SELECT * FROM workout_group_exercises'))
         .filter(item => item.routine_section_id === sectionId && groupIds.has(item.workout_group_id) && !item.is_deleted);
+      // Re-inserting every removed row (parents first) restores the day exactly.
+      snapshot = [
+        { sql: 'INSERT INTO routine_sections', params: [{ ...section, is_deleted: false }] },
+        ...sectionExercises.map(item => ({ sql: 'INSERT INTO routine_section_exercises', params: [{ ...item, is_deleted: false }] })),
+        ...sets.map(item => ({ sql: 'INSERT INTO routine_section_exercise_sets', params: [{ ...item, is_deleted: false }] })),
+        ...groups.map(item => ({ sql: 'INSERT INTO workout_groups', params: [{ ...item, is_deleted: false }] })),
+        ...links.map(item => ({ sql: 'INSERT INTO workout_group_exercises', params: [{ ...item, is_deleted: false }] })),
+      ];
       const operations: DBOperation[] = [
         ...links.map(item => ({ sql: 'DELETE FROM workout_group_exercises WHERE id = ?', params: [item.id] })),
         ...groups.map(item => ({ sql: 'DELETE FROM workout_groups WHERE id = ?', params: [item.id] })),
@@ -1427,15 +1472,24 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     if (editingRoutine) {
       await loadEditorData(editingRoutine.id);
     }
-    triggerToast('Workout day deleted.');
+    if (snapshot.length === 0) return;
+    const routineId = editingRoutine?.id;
+    triggerToast('Day deleted.', 'info', {
+      label: 'Undo',
+      onAction: async () => {
+        if (db.executeBatch) await db.executeBatch(snapshot);
+        else for (const operation of snapshot) await db.execute(operation.sql, operation.params || []);
+        if (routineId) await loadEditorData(routineId);
+        await late.refreshData();
+      },
+    });
   };
 
   const handleAddAllSectionLogs = async (sectionId: string) => {
     if (!editingRoutine) return;
     // Route through the shared populate path so each exercise's populate_sets_type
     // (predefined / copy previous / none) is honored.
-    await handleImportRoutinePopulated(editingRoutine.id, 'template', 75, sectionId);
-    setActiveTab('log');
+    await handleImportRoutinePopulated(editingRoutine.id, 'template', 75, sectionId, getLocalDateString());
   };
 
   const handleImportPastLogsToSection = async (sectionId: string, pastDate: string) => {
@@ -1502,7 +1556,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
       await loadEditorData(editingRoutine.id);
     }
     triggerToast(exercisesAdded > 0
-      ? `Successfully imported exercises from ${pastDate} into day template.`
+      ? `Added the exercises from ${pastDate} to this day.`
       : 'All exercises from that workout are already in this day.', exercisesAdded > 0 ? 'success' : 'error');
   };
 
@@ -1520,6 +1574,7 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
     newRoutineCategory, setNewRoutineCategory,
     activeRoutineForPopulate, setActiveRoutineForPopulate,
     activeSectionForPopulate, setActiveSectionForPopulate,
+    populateTargetDate, setPopulateTargetDate,
     editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId,
     showPastImporterModal, setShowPastImporterModal,
     pastImporterTargetSectionId, setPastImporterTargetSectionId, pastImporterDate, setPastImporterDate,

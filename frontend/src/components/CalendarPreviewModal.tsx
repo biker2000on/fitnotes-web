@@ -121,7 +121,7 @@ export const CalendarPreviewModal: React.FC<CalendarPreviewModalProps> = ({
         </div>
 
         {comment && (
-          <div style={{ padding: '10px 14px', borderLeft: '3px solid var(--primary)', backgroundColor: 'rgba(99, 102, 241, 0.05)', borderRadius: '0 8px 8px 0', fontSize: '13px', color: 'var(--text-secondary-dark)', fontStyle: 'italic' }}>
+          <div style={{ padding: '10px 14px', borderLeft: '3px solid var(--primary)', backgroundColor: 'color-mix(in srgb, var(--accent) 5%, transparent)', borderRadius: '0 8px 8px 0', fontSize: '13px', color: 'var(--text-secondary-dark)', fontStyle: 'italic' }}>
             <span style={{ fontWeight: 700, fontSize: '11px', display: 'block', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--primary)', fontStyle: 'normal', marginBottom: '4px' }}>Day Notes</span>
             "{comment}"
           </div>

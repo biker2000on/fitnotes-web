@@ -19,7 +19,12 @@ export interface LateDeps {
   setPlateCalcTarget: Dispatch<SetStateAction<number>>;
 }
 
-export type TriggerToast = (msg: string, type?: 'success' | 'error' | 'info') => void;
+export interface ToastAction {
+  label: string;
+  onAction: () => void;
+}
+
+export type TriggerToast = (msg: string, type?: 'success' | 'error' | 'info', action?: ToastAction) => void;
 export type TriggerConfirm = (
   title: string,
   msg: string,

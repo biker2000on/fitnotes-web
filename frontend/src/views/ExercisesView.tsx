@@ -1,7 +1,7 @@
 // ExercisesView.tsx - Exercise catalog: filter exercises, create custom
 // exercises in a modal, favourite/edit, bulk edit, and open per-exercise history.
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, CheckSquare, Dumbbell, History as HistoryIcon, Plus, Search, Star, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Check, CheckSquare, History as HistoryIcon, Search, Star, Trash2, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -311,6 +311,11 @@ export function ExercisesView() {
     setShowCreateModal(false);
   };
 
+  const formatLastUsed = (date: string) => {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+  };
+
   const ExerciseRow = ({ ex }: { ex: Exercise }) => {
     const cat = categories.find(c => c.id === ex.category_id);
     const color = cat ? intColorToHex(cat.colour) : 'var(--text-secondary-dark)';
@@ -325,8 +330,8 @@ export function ExercisesView() {
           style={{
             cursor: 'pointer',
             outline: selected ? '2px solid var(--primary)' : 'none',
-            borderRadius: '8px',
-            background: selected ? 'rgba(99, 102, 241, 0.08)' : undefined,
+            borderRadius: 'var(--radius)',
+            background: selected ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : undefined,
             // Leading checkbox column spanning the card height, content beside it.
             flexDirection: 'row',
             alignItems: 'center',
@@ -339,11 +344,11 @@ export function ExercisesView() {
             <div className="exercise-catalog-name">{ex.name}</div>
             <div className="exercise-catalog-meta-row">
               <div className="exercise-catalog-meta">
-                <span className="exercise-category-chip" style={{ backgroundColor: color + '15', color }}>
-                  {cat?.name || 'Misc'}
+                <span className="exercise-category-chip" style={{ ['--cat' as string]: color }}>
+                  <span className="cat-swatch" aria-hidden="true" />{cat?.name || 'Uncategorised'}
                 </span>
                 <span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
-                {stats?.lastUsed && <span>last {stats.lastUsed} - {stats.workouts}x</span>}
+                {stats?.lastUsed && <span>{formatLastUsed(stats.lastUsed)} · {stats.workouts}×</span>}
               </div>
             </div>
           </div>
@@ -353,14 +358,14 @@ export function ExercisesView() {
 
     return (
       <div className="exercise-catalog-row">
-        <div className="exercise-catalog-name">{ex.name}</div>
+        <button type="button" className="exercise-catalog-name" onClick={() => setHistoryExerciseId(ex.id)}>{ex.name}</button>
         <div className="exercise-catalog-meta-row">
           <div className="exercise-catalog-meta">
-            <span className="exercise-category-chip" style={{ backgroundColor: color + '15', color }}>
-              {cat?.name || 'Misc'}
+            <span className="exercise-category-chip" style={{ ['--cat' as string]: color }}>
+              <span className="cat-swatch" aria-hidden="true" />{cat?.name || 'Uncategorised'}
             </span>
             <span>{getExerciseTypeLabel(ex.exercise_type_id)}</span>
-            {stats?.lastUsed && <span>last {stats.lastUsed} - {stats.workouts}x</span>}
+            {stats?.lastUsed && <span>{formatLastUsed(stats.lastUsed)} · {stats.workouts}×</span>}
             {ex.equipment && <span>{ex.equipment}</span>}
           </div>
           <div className="exercise-catalog-actions">
@@ -376,7 +381,7 @@ export function ExercisesView() {
             <button className="icon-btn" onClick={() => setHistoryExerciseId(ex.id)} title="History & Records" aria-label="History & Records">
               <HistoryIcon size={17} />
             </button>
-            <button className="btn btn-secondary exercise-edit-btn" onClick={() => openExerciseEditor(ex)}>
+            <button className="btn btn-ghost exercise-edit-btn" onClick={() => openExerciseEditor(ex)} aria-label={`Edit ${ex.name}`}>
               Edit
             </button>
           </div>
@@ -410,7 +415,7 @@ export function ExercisesView() {
     <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCreateModal(false)}>
       <div className="modal-content mobile-modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="mobile-modal-header">
-          <h2><Plus size={18} /> Create Custom Exercise</h2>
+          <h2>New exercise</h2>
           <button className="icon-btn" onClick={() => setShowCreateModal(false)} aria-label="Close create exercise">
             <X size={20} />
           </button>
@@ -493,9 +498,9 @@ export function ExercisesView() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', marginTop: '16px' }}>
-            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(99,102,241,0.08)' }}><strong>{activeMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Recommended fixes</span></div>
-            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(245,158,11,0.08)' }}><strong>{deniedMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Denied</span></div>
-            <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(16,185,129,0.08)' }}><strong>{acceptedMergeCount}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Accepted this session</span></div>
+            <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'color-mix(in srgb, var(--accent) 8%, transparent)' }}><strong>{activeMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Recommended fixes</span></div>
+            <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(245,158,11,0.08)' }}><strong>{deniedMergeRecommendations.length}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Denied</span></div>
+            <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(16,185,129,0.08)' }}><strong>{acceptedMergeCount}</strong><br /><span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Accepted this session</span></div>
           </div>
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
@@ -521,7 +526,7 @@ export function ExercisesView() {
           const busy = reviewMergeBusyId === recommendation.id;
 
           const recordPanel = (ex: Exercise, summary: ReturnType<typeof exerciseSummary>, role: 'keep' | 'remove') => (
-            <div style={{ flex: '1 1 280px', padding: '14px', border: `1px solid ${role === 'keep' ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.35)'}`, borderRadius: '12px', background: role === 'keep' ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.035)' }}>
+            <div style={{ flex: '1 1 280px', padding: '14px', border: `1px solid ${role === 'keep' ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.35)'}`, borderRadius: 'var(--radius)', background: role === 'keep' ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.035)' }}>
               <div style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', color: role === 'keep' ? 'var(--success)' : 'var(--danger)', marginBottom: '5px' }}>{role === 'keep' ? 'Keep this record' : 'Merge and remove'}</div>
               <div style={{ fontSize: '16px', fontWeight: 800 }}>{ex.name}</div>
               <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', marginTop: '2px' }}>Record …{ex.id.slice(-8)}</div>
@@ -570,15 +575,15 @@ export function ExercisesView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', width: '100%' }}>
-      <div className="card exercise-database-card">
+      <div className="exercise-database-card">
         <div className="exercise-catalog-header">
-          <div className="card-title" style={{ margin: 0 }}><Dumbbell size={16} /> Exercises ({filteredExercises.length})</div>
+          <p className="field-hint">{filteredExercises.length} exercise{filteredExercises.length === 1 ? '' : 's'}</p>
           <div className="exercise-catalog-controls">
-            <button className="btn btn-secondary" onClick={() => setShowMergeReview(true)} title="Review recommended duplicate fixes">
+            <button className="btn btn-secondary desk-only" onClick={() => setShowMergeReview(true)} title="Review recommended duplicate fixes">
               Review duplicates{activeMergeRecommendations.length > 0 ? ` (${activeMergeRecommendations.length})` : ''}
             </button>
             <button
-              className={`btn ${bulkMode ? 'btn-primary' : 'btn-secondary'}`}
+              className={`btn ${bulkMode ? 'btn-primary' : 'btn-secondary'} desk-only`}
               onClick={() => (bulkMode ? exitBulkMode() : setBulkMode(true))}
               title="Select multiple exercises to edit at once (b)"
             >
@@ -587,10 +592,10 @@ export function ExercisesView() {
             <button className={`btn ${favouritesOnly ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFavouritesOnly(v => !v)}>
               <Star size={15} fill={favouritesOnly ? 'currentColor' : 'transparent'} /> Favorites
             </button>
-            <select value={sortMode} onChange={e => updateSortMode(e.target.value as ExerciseSortMode)}>
-              <option value="name">Sort: A-Z</option>
-              <option value="lastUsed">Sort: Last Used</option>
-              <option value="workouts">Sort: Most Workouts</option>
+            <select value={sortMode} onChange={e => updateSortMode(e.target.value as ExerciseSortMode)} aria-label="Sort exercises">
+              <option value="name">Name</option>
+              <option value="lastUsed">Last used</option>
+              <option value="workouts">Most used</option>
             </select>
           </div>
         </div>
@@ -613,9 +618,9 @@ export function ExercisesView() {
                 onClick={() => toggleCategoryExpand('favourites')}
                 className="exercise-category-header exercise-favourites-header"
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--warning)' }}>
-                  <Star size={16} fill="var(--warning)" />
-                  <span>Starred / Favorites ({favourites.length})</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Star size={16} fill="var(--pr)" color="var(--pr)" aria-hidden />
+                  <span>Favorites <span className="count">{favourites.length}</span></span>
                 </div>
                 <span>{expandedCategories['favourites'] !== false ? 'Collapse' : 'Expand'}</span>
               </div>
@@ -638,9 +643,9 @@ export function ExercisesView() {
                 <div
                   onClick={() => toggleCategoryExpand(cat.id)}
                   className="exercise-category-header"
-                  style={{ borderLeftColor: catColor }}
+                  style={{ ['--cat' as string]: catColor }}
                 >
-                  <span style={{ color: catColor }}>{cat.name} ({catExercises.length})</span>
+                  <span className="category-heading"><span className="cat-swatch" aria-hidden="true" />{cat.name} <span className="count">{catExercises.length}</span></span>
                   <span>{isExpanded ? 'Collapse' : 'Expand'}</span>
                 </div>
                 {isExpanded && (
@@ -666,9 +671,8 @@ export function ExercisesView() {
                 <div
                   onClick={() => toggleCategoryExpand('misc')}
                   className="exercise-category-header"
-                  style={{ borderLeftColor: 'var(--text-secondary-dark)' }}
                 >
-                  <span style={{ color: 'var(--text-secondary-dark)' }}>Misc ({miscExercises.length})</span>
+                  <span className="category-heading">Uncategorised <span className="count">{miscExercises.length}</span></span>
                   <span>{isExpanded ? 'Collapse' : 'Expand'}</span>
                 </div>
                 {isExpanded && (
@@ -697,7 +701,7 @@ export function ExercisesView() {
         <div style={{
           position: 'sticky', bottom: '12px', zIndex: 50,
           background: 'var(--bg-surface-dark)', border: '1px solid var(--primary)',
-          borderRadius: '14px', padding: '12px 16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          borderRadius: 'var(--radius)', padding: '12px 16px', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
           display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap',
         }}>
           <span style={{ fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap' }}>
@@ -732,7 +736,7 @@ export function ExercisesView() {
               }
             }}
             disabled={bulkBusy}
-            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '8px', width: 'auto', maxWidth: '180px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--radius)', width: 'auto', maxWidth: '180px' }}
           >
             <option value="">Set Category...</option>
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -749,7 +753,7 @@ export function ExercisesView() {
               }
             }}
             disabled={bulkBusy}
-            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '8px', width: 'auto', maxWidth: '180px' }}
+            style={{ padding: '6px 10px', fontSize: '12px', borderRadius: 'var(--radius)', width: 'auto', maxWidth: '180px' }}
           >
             <option value="">Set Type...</option>
             <option value="0">Weight & Reps</option>

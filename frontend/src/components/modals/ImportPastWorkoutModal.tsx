@@ -58,7 +58,7 @@ export function ImportPastWorkoutModal() {
                     key={dStr}
                     className="btn btn-secondary"
                     onClick={() => handleImportPastLogsToSection(pastImporterTargetSectionId, dStr)}
-                    style={{ width: '100%', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '12px', color: 'var(--text-primary-dark)' }}
+                    style={{ width: '100%', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 'var(--radius)', color: 'var(--text-primary-dark)' }}
                   >
                     <span style={{ fontWeight: 700, fontSize: '13px' }}>{dStr}</span>
                     <span style={{ fontSize: '11px', color: 'var(--primary)' }}>Select & Import</span>

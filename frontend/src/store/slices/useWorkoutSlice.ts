@@ -8,7 +8,7 @@ import { db } from '../../storage/db';
 import { uuidv4 } from '../../lib/uuid';
 import { getLocalDateString } from '../../lib/date';
 import { beep, vibrate, notify } from '../../lib/notify';
-import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight } from '../../lib/units';
+import { typeHasDistance, typeHasDuration, typeHasReps, typeHasWeight, weightInUnit } from '../../lib/units';
 import { hexToSignedArgb } from '../../lib/colors';
 import type {
   Exercise, TrainingLog, WorkoutGroup, WorkoutGroupExercise, WorkoutRoutine,
@@ -59,8 +59,8 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
   // Selected Log State
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
-  const [logWeight, setLogWeight] = useState('60');
-  const [logReps, setLogReps] = useState('10');
+  const [logWeight, setLogWeight] = useState('');
+  const [logReps, setLogReps] = useState('');
   const [logDistance, setLogDistance] = useState('5');
   const [logDuration, setLogDuration] = useState('30');
   const [logComment, setLogComment] = useState('');
@@ -72,6 +72,21 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
   const selectedExerciseRef = useRef<Exercise | null>(null);
   const workoutCommentRef = useRef<string>('');
+
+  // Picking an exercise starts from what you last did on it, in your unit,
+  // never from whatever the previous exercise left in the inputs.
+  const prefilledExerciseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedExercise || editingLog) return;
+    if (prefilledExerciseRef.current === selectedExercise.id) return;
+    prefilledExerciseRef.current = selectedExercise.id;
+    const previous = allLogs
+      .filter(l => l.exercise_id === selectedExercise.id && !l.is_deleted && l.date <= selectedDate)
+      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    const t = selectedExercise.exercise_type_id;
+    setLogWeight(typeHasWeight(t) && previous?.metric_weight ? String(weightInUnit(previous.metric_weight, previous.unit, userUnit)) : '');
+    setLogReps(typeHasReps(t) && previous?.reps != null ? String(previous.reps) : '');
+  }, [selectedExercise, editingLog]);
 
   useEffect(() => {
     selectedExerciseRef.current = selectedExercise;
@@ -134,8 +149,9 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     if (activeExLogs.length === 0) return 0;
 
     let max1RM = 0;
+    // Logs can be recorded in either unit; compare them in the user's unit.
     for (const log of activeExLogs) {
-      const w = log.metric_weight || 0;
+      const w = weightInUnit(log.metric_weight || 0, log.unit, userUnit);
       const r = log.reps || 0;
       const oneRM = calculateEstimated1RM(w, r);
       if (oneRM > max1RM) {
@@ -501,6 +517,16 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
       setAllLogs(prev => prev.map(l => l.id === id ? deleted : l));
       await db.execute('INSERT INTO training_logs', [deleted]);
       await late.refreshDateData(target.date);
+      // Deleting sits one tap from completing a set, so every delete is undoable.
+      triggerToast('Set deleted.', 'info', {
+        label: 'Undo',
+        onAction: async () => {
+          const restored = { ...target, is_deleted: false };
+          await db.execute('INSERT INTO training_logs', [restored]);
+          setAllLogs(prev => prev.map(l => l.id === id ? restored : l));
+          await late.refreshDateData(target.date);
+        },
+      });
     }
   };
 
@@ -520,7 +546,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     const targetDate = selectedDateRef.current;
     const sourceLogs = allLogs.filter(l => l.date === sourceDate && !l.is_deleted);
     if (sourceLogs.length === 0) {
-      triggerToast('No active sets found for selected date!', 'error');
+      triggerToast('There are no sets on this day yet.', 'error');
       return;
     }
 
@@ -588,7 +614,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
     setShowCopyWorkoutDrawer(false);
     await late.refreshData();
-    triggerToast(`Successfully copied workout from ${sourceDate}.`);
+    triggerToast(`Copied the workout from ${sourceDate}.`);
   };
 
   // Record that a routine (and optionally a specific workout-day split) was
@@ -710,7 +736,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
       comment: workoutComment
     };
     await db.execute('INSERT INTO workout_comments', [commentObj]);
-    triggerToast('Workout comment saved!');
+    triggerToast('Notes saved.');
   };
 
   // Build a shareable text summary of the selected day and share/copy it.
@@ -744,7 +770,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
   // Active workout supersets linker
   const handleCreateWorkoutSuperset = async () => {
     if (selectedExIdsForSuperset.length === 0) {
-      triggerToast('Please select at least 1 exercise!', 'error');
+      triggerToast('Pick at least one exercise.', 'error');
       return;
     }
 
@@ -754,7 +780,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
     if (!groupId) {
       if (selectedExIdsForSuperset.length < 2) {
-        triggerToast('Please select at least 2 exercises to create a new superset!', 'error');
+        triggerToast('Pick two or more exercises to make a superset.', 'error');
         return;
       }
       groupId = uuidv4();
@@ -799,13 +825,13 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     setTargetSupersetGroupId('');
     setShowSupersetManagerModal(false);
     await late.refreshData();
-    triggerToast(targetSupersetGroupId ? 'Exercises added to superset!' : 'Superset created successfully!');
+    triggerToast(targetSupersetGroupId ? 'Added to the superset.' : 'Superset linked.');
   };
 
   // Supersets & Workout Groups Manager
   const handleCreateSuperset = async () => {
     if (selectedLogIdsForGroup.length < 2) {
-      triggerToast('Please select at least 2 exercise logs to form a superset!', 'error');
+      triggerToast('Pick two or more exercises to make a superset.', 'error');
       return;
     }
 
@@ -836,7 +862,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
 
     setSelectedLogIdsForGroup([]);
     await late.refreshData();
-    triggerToast('Superset created successfully!');
+    triggerToast('Superset linked.');
   };
 
   const handleClearGroup = async (groupId: string) => {

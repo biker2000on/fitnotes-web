@@ -50,7 +50,18 @@ interface ExercisePickerProps<T extends PickerExercise> {
   selectedCategoryId?: string | null;
   onSelectCategory?: (id: string | null) => void;
   getItemState?: (exercise: T) => PickerItemState;
+  /** Most recently logged exercise ids, newest first; they lead an empty search. */
+  recentExerciseIds?: string[];
 }
+
+// Search rank: exact name, then name start, then word start, then anywhere.
+const matchRank = (name: string, needle: string): number => {
+  const lower = name.toLowerCase();
+  if (lower === needle) return 0;
+  if (lower.startsWith(needle)) return 1;
+  if (lower.split(/[\s\-/(]+/).some(word => word.startsWith(needle))) return 2;
+  return lower.includes(needle) ? 3 : -1;
+};
 
 export function ExercisePicker<T extends PickerExercise>({
   isOpen,
@@ -66,6 +77,7 @@ export function ExercisePicker<T extends PickerExercise>({
   selectedCategoryId = null,
   onSelectCategory,
   getItemState,
+  recentExerciseIds = [],
 }: ExercisePickerProps<T>) {
   const [internalSearch, setInternalSearch] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -79,12 +91,19 @@ export function ExercisePicker<T extends PickerExercise>({
     if (!isControlledSearch) setInternalSearch(value);
   };
 
-  const filtered = exercises.filter(ex => {
-    if (ex.is_deleted) return false;
-    if (!ex.name.toLowerCase().includes(search.toLowerCase())) return false;
-    if (showCategoryFilter && selectedCategoryId !== null && ex.category_id !== selectedCategoryId) return false;
-    return true;
-  });
+  const needle = search.trim().toLowerCase();
+  const recency = new Map(recentExerciseIds.map((id, index) => [id, index]));
+  const byRecency = (a: T, b: T) => (recency.get(a.id) ?? Infinity) - (recency.get(b.id) ?? Infinity);
+  const filtered = exercises
+    .filter(ex => {
+      if (ex.is_deleted) return false;
+      if (needle && matchRank(ex.name, needle) < 0) return false;
+      if (showCategoryFilter && selectedCategoryId !== null && ex.category_id !== selectedCategoryId) return false;
+      return true;
+    })
+    .sort((a, b) => (needle ? matchRank(a.name, needle) - matchRank(b.name, needle) : 0)
+      || byRecency(a, b)
+      || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
 
   const stateFor = useCallback(
     (ex: T): PickerItemState => (getItemState ? getItemState(ex) : {}),
@@ -160,10 +179,9 @@ export function ExercisePicker<T extends PickerExercise>({
           maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
-          backgroundColor: 'rgba(30, 41, 59, 0.95)',
-          backdropFilter: 'blur(16px)',
+          backgroundColor: 'var(--surface)',
           border: '1px solid var(--border-dark)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius)',
           boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.5)',
           overflow: 'hidden',
           padding: 0,
@@ -200,7 +218,7 @@ export function ExercisePicker<T extends PickerExercise>({
             }}
           />
           <span style={{
-            fontSize: '11px', padding: '4px 8px', borderRadius: '6px',
+            fontSize: '11px', padding: '4px 8px', borderRadius: 'var(--radius)',
             backgroundColor: 'rgba(255,255,255,0.06)', color: 'var(--text-secondary-dark)', fontWeight: 700,
           }}>
             ESC
@@ -212,7 +230,7 @@ export function ExercisePicker<T extends PickerExercise>({
             <button
               className="btn"
               style={{
-                padding: '6px 12px', fontSize: '12px', borderRadius: '20px',
+                padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--radius)',
                 backgroundColor: selectedCategoryId === null ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
                 color: selectedCategoryId === null ? 'white' : 'var(--text-primary-dark)',
                 border: '1px solid var(--border-dark)',
@@ -226,7 +244,7 @@ export function ExercisePicker<T extends PickerExercise>({
                 key={cat.id}
                 className="btn"
                 style={{
-                  padding: '6px 12px', fontSize: '12px', borderRadius: '20px',
+                  padding: '6px 12px', fontSize: '12px', borderRadius: 'var(--radius)',
                   backgroundColor: selectedCategoryId === cat.id ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
                   color: selectedCategoryId === cat.id ? 'white' : 'var(--text-primary-dark)',
                   border: '1px solid var(--border-dark)',
@@ -270,10 +288,10 @@ export function ExercisePicker<T extends PickerExercise>({
                     textAlign: 'left',
                     width: '100%',
                     padding: '12px 16px',
-                    borderRadius: '8px',
+                    borderRadius: 'var(--radius)',
                     cursor: disabled ? 'not-allowed' : 'pointer',
-                    backgroundColor: isActive ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
-                    border: isActive ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
+                    backgroundColor: isActive ? 'color-mix(in srgb, var(--fg) 9%, transparent)' : 'transparent',
+                    border: isActive ? '1px solid var(--line-strong)' : '1px solid transparent',
                     transition: 'background-color 0.15s ease',
                   }}
                 >
@@ -285,7 +303,7 @@ export function ExercisePicker<T extends PickerExercise>({
                       // the translucent modal surface fell below readable.
                       color: disabled
                         ? 'var(--text-secondary-dark)'
-                        : isActive ? 'var(--primary)' : 'var(--text-primary-dark)',
+                        : 'var(--text-primary-dark)',
                     }}>
                       {ex.name}
                     </span>
@@ -297,7 +315,7 @@ export function ExercisePicker<T extends PickerExercise>({
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                     {reason && (
                       <span style={{
-                        fontSize: '10px', padding: '2px 8px', borderRadius: '10px',
+                        fontSize: '10px', padding: '2px 8px', borderRadius: 'var(--radius)',
                         backgroundColor: 'rgba(255,255,255,0.06)',
                         color: 'var(--text-secondary-dark)', fontWeight: 700, whiteSpace: 'nowrap',
                       }}>
@@ -305,7 +323,7 @@ export function ExercisePicker<T extends PickerExercise>({
                       </span>
                     )}
                     <span style={{
-                      fontSize: '10px', padding: '2px 8px', borderRadius: '10px',
+                      fontSize: '10px', padding: '2px 8px', borderRadius: 'var(--radius)',
                       backgroundColor: catColor + '15', color: catColor, fontWeight: 700, whiteSpace: 'nowrap',
                     }}>
                       {cat?.name || 'Misc'}
@@ -326,10 +344,10 @@ export function ExercisePicker<T extends PickerExercise>({
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <Keyboard size={12} />
-            <span>Use <kbd style={{ padding: '2px 4px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', margin: '0 2px' }}>↑↓</kbd> keys to navigate</span>
+            <span>Use <kbd style={{ padding: '2px 4px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 'var(--radius)', margin: '0 2px' }}>↑↓</kbd> keys to navigate</span>
           </div>
           <div>
-            <span>Press <kbd style={{ padding: '2px 4px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: '4px', margin: '0 2px' }}>Enter</kbd> to select</span>
+            <span>Press <kbd style={{ padding: '2px 4px', backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 'var(--radius)', margin: '0 2px' }}>Enter</kbd> to select</span>
           </div>
         </div>
       </div>

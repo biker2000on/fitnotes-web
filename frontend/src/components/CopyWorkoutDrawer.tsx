@@ -47,10 +47,9 @@ export const CopyWorkoutDrawer: React.FC<CopyWorkoutDrawerProps> = ({
         className="modal-content" 
         style={{ 
           maxWidth: '500px',
-          backgroundColor: 'rgba(30, 41, 59, 0.95)',
-          backdropFilter: 'blur(16px)',
+          backgroundColor: 'var(--surface)',
           border: '1px solid var(--border-dark)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow-lg)'
         }} 
         onClick={(e) => e.stopPropagation()}
@@ -80,7 +79,7 @@ export const CopyWorkoutDrawer: React.FC<CopyWorkoutDrawerProps> = ({
                   style={{
                     padding: '14px',
                     border: '1px solid var(--border-dark)',
-                    borderRadius: '12px',
+                    borderRadius: 'var(--radius)',
                     backgroundColor: 'rgba(255,255,255,0.02)',
                     cursor: 'pointer',
                     transition: 'all 0.15s ease',
@@ -89,8 +88,8 @@ export const CopyWorkoutDrawer: React.FC<CopyWorkoutDrawerProps> = ({
                     gap: '8px'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)';
+                    e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--accent) 8%, transparent)';
+                    e.currentTarget.style.borderColor = 'color-mix(in srgb, var(--accent) 40%, transparent)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.02)';
@@ -115,7 +114,7 @@ export const CopyWorkoutDrawer: React.FC<CopyWorkoutDrawerProps> = ({
                           style={{ 
                             fontSize: '10px', 
                             padding: '2px 8px', 
-                            borderRadius: '6px', 
+                            borderRadius: 'var(--radius)', 
                             backgroundColor: 'rgba(255,255,255,0.05)', 
                             color: 'var(--text-secondary-dark)',
                             border: '1px solid rgba(255,255,255,0.04)'

@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "frontend/src/styles/system.css"
+        ],
+        "createdAt": "2026-11-03T19:34:31.108Z",
+        "reason": "agent: flagged sheet top rule and day-card 'up next' top rule both set border-radius: 0 in the same rule; finish reviewer accepted the up-next rule"
+      }
+    ]
+  }
+}

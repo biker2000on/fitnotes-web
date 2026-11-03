@@ -10,9 +10,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Activity, Percent, RefreshCw, Scale, TrendingUp, X } from 'lucide-react';
+import { RefreshCw, Scale, Trash2, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { kgToLbs } from '../lib/units';
+import { getLocalDateString } from '../lib/date';
 import { exponentialMovingAverage } from '../lib/trends';
 
 type TimeRangePreset = '1M' | '1Y' | 'ALL' | 'CUSTOM';
@@ -26,11 +27,14 @@ export function BodyView() {
     newFat,
     setNewFat,
     handleAddWeight,
+    handleDeleteWeight,
     withingsConnected,
     withingsSyncing,
     syncWithings
   } = useFitNotesStore();
   const [showLogModal, setShowLogModal] = useState(false);
+  const [entryDate, setEntryDate] = useState(getLocalDateString());
+  const [showAllEntries, setShowAllEntries] = useState(false);
   const [rangePreset, setRangePreset] = useState<TimeRangePreset>('1Y');
   const [xDomain, setXDomain] = useState<[number, number] | null>(null);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
@@ -46,6 +50,7 @@ export function BodyView() {
           : `${w.date}T00:00:00`;
         const weight = userUnit === 'lbs' ? kgToLbs(w.body_weight_metric) : w.body_weight_metric;
         return {
+          id: w.id,
           date: w.date,
           measuredAt,
           timestamp: new Date(measuredAt).getTime(),
@@ -106,6 +111,7 @@ export function BodyView() {
       data = Array.from(months.values())
         .sort((a, b) => a.timestamp - b.timestamp)
         .map(bucket => ({
+          id: `month-${bucket.date}`,
           date: bucket.date,
           measuredAt: `${bucket.date}T00:00:00`,
           timestamp: bucket.timestamp,
@@ -310,14 +316,28 @@ export function BodyView() {
   };
 
   const saveWeight = async () => {
-    await handleAddWeight();
+    await handleAddWeight(entryDate);
     setShowLogModal(false);
   };
+
+  const openLogModal = () => {
+    setEntryDate(getLocalDateString());
+    setShowLogModal(true);
+  };
+
+  const unitLabel = userUnit === 'kg' ? 'kg' : 'lb';
+  const entries = [...rawBodyData].reverse();
+  const visibleEntries = showAllEntries ? entries : entries.slice(0, 14);
+  const formatEntryDate = (date: string) => {
+    const [y, m, d] = date.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: y === new Date().getFullYear() ? undefined : 'numeric' });
+  };
+  const formatValueTick = (value: number) => String(Math.round(value * 10) / 10);
 
   const tooltipStyle = {
     backgroundColor: 'var(--bg-surface-dark)',
     borderColor: 'var(--border-dark)',
-    borderRadius: '8px',
+    borderRadius: 'var(--radius)',
     color: 'var(--text-primary-dark)'
   };
 
@@ -326,14 +346,14 @@ export function BodyView() {
       <div className="card" style={{ gap: '18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div>
-            <div className="card-title"><TrendingUp size={18} color="var(--primary)" /> Body Weight</div>
-            <div style={{ color: 'var(--text-secondary-dark)', fontSize: '13px', marginTop: '6px' }}>
-              {rawBodyData.length} historical record{rawBodyData.length === 1 ? '' : 's'}
+            <div className="card-title">Weight</div>
+            <div className="field-hint">
+              {rawBodyData.length} weigh-in{rawBodyData.length === 1 ? '' : 's'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button className="btn btn-primary" onClick={() => setShowLogModal(true)}>
-              <Scale size={16} /> Log Weight
+            <button className="btn btn-primary" onClick={openLogModal}>
+              <Scale size={16} aria-hidden /> Log weigh-in
             </button>
             {withingsConnected && (
               <button
@@ -348,28 +368,26 @@ export function BodyView() {
           </div>
         </div>
 
-        <div className="cols-2" style={{ gap: '12px' }}>
-          <div style={{ padding: '14px', border: '1px solid var(--border-dark)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary-dark)', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
-              <Activity size={15} /> Latest Weight
-            </div>
-            <div style={{ fontSize: '24px', fontWeight: 800 }}>{latest ? `${latest.weight} ${userUnit}` : '-'}</div>
+        <dl className="body-figures">
+          <div className="body-figure">
+            <dt className="field-label">Latest weight</dt>
+            <dd>
+              <span className="body-figure-num">{latest ? latest.weight : '–'}</span>
+              {latest && <span className="sv-unit">{userUnit === 'kg' ? 'kg' : 'lb'}</span>}
+            </dd>
             {weightDelta != null && (
-              <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>
-                {weightDelta > 0 ? '+' : ''}{weightDelta} {userUnit} since {shortDate(first.date)}
-              </div>
+              <dd className="field-hint">{weightDelta > 0 ? '+' : ''}{weightDelta} {userUnit === 'kg' ? 'kg' : 'lb'} since {shortDate(first.date)}</dd>
             )}
           </div>
-          <div style={{ padding: '14px', border: '1px solid var(--border-dark)', borderRadius: '8px', background: 'rgba(255,255,255,0.02)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary-dark)', fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>
-              <Percent size={15} /> Latest Body Fat
-            </div>
-            <div style={{ fontSize: '24px', fontWeight: 800 }}>{latestFat == null ? '-' : `${latestFat}%`}</div>
-            <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>
-              {fatPoints.length} record{fatPoints.length === 1 ? '' : 's'} with body fat
-            </div>
+          <div className="body-figure">
+            <dt className="field-label">Latest body fat</dt>
+            <dd>
+              <span className="body-figure-num">{latestFat == null ? '–' : latestFat}</span>
+              {latestFat != null && <span className="sv-unit">%</span>}
+            </dd>
+            <dd className="field-hint">{fatPoints.length} reading{fatPoints.length === 1 ? '' : 's'}</dd>
           </div>
-        </div>
+        </dl>
 
         {rawBodyData.length === 0 ? (
           <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '48px 24px' }}>No body weight logs saved yet.</p>
@@ -381,7 +399,7 @@ export function BodyView() {
                 key={preset}
                 className={`btn ${rangePreset === preset ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setPreset(preset)}
-                style={{ minHeight: '32px', padding: '6px 10px', borderRadius: '8px', fontSize: '12px' }}
+                style={{ minHeight: '32px', padding: '6px 10px', borderRadius: 'var(--radius)', fontSize: '12px' }}
               >
                 {preset}
               </button>
@@ -394,7 +412,7 @@ export function BodyView() {
             <div style={{ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-secondary-dark)', textTransform: 'uppercase' }}>Weight</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Raw · <span style={{ color: 'var(--accent)' }}>EWMA</span> · {userUnit}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>Raw · <span style={{ color: 'var(--accent)' }}>EWMA</span> · {unitLabel}</span>
               </div>
               <div style={{ flex: 1, minHeight: 0 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -407,7 +425,7 @@ export function BodyView() {
                     onMouseUp={completeSelection}
                     onMouseLeave={completeSelection}
                   >
-                    <CartesianGrid stroke="rgba(148, 163, 184, 0.16)" vertical={false} />
+                    <CartesianGrid stroke="var(--line)" vertical={false} />
                     <XAxis
                       dataKey="timestamp"
                       type="number"
@@ -419,16 +437,16 @@ export function BodyView() {
                       minTickGap={28}
                       tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }}
                     />
-                    <YAxis width={48} domain={['dataMin - 5', 'dataMax + 5']} tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }} />
+                    <YAxis width={48} domain={['dataMin - 5', 'dataMax + 5']} tickFormatter={formatValueTick} tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }} />
                     {selectionStart != null && selectionEnd != null && (
                       <ReferenceArea x1={selectionStart} x2={selectionEnd} strokeOpacity={0.3} fill="var(--primary)" fillOpacity={0.16} />
                     )}
                     <Tooltip
                       contentStyle={tooltipStyle}
                       labelFormatter={(value) => shortDateTime(Number(value))}
-                      formatter={(value, name) => [`${value} ${userUnit}`, name]}
+                      formatter={(value, name) => [`${value} ${unitLabel}`, name]}
                     />
-                    <Line type="monotone" dataKey="weight" name="Weight" stroke="var(--primary)" strokeWidth={1.5} strokeOpacity={0.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="weight" name="Weight" stroke="var(--fg-muted)" strokeWidth={1.5} strokeOpacity={0.6} dot={false} activeDot={{ r: 5 }} connectNulls />
                     <Line type="monotone" dataKey="weightEwma" name="Weight EWMA" stroke="var(--accent)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
@@ -450,7 +468,7 @@ export function BodyView() {
                     onMouseUp={completeSelection}
                     onMouseLeave={completeSelection}
                   >
-                    <CartesianGrid stroke="rgba(148, 163, 184, 0.16)" vertical={false} />
+                    <CartesianGrid stroke="var(--line)" vertical={false} />
                     <XAxis
                       dataKey="timestamp"
                       type="number"
@@ -462,7 +480,7 @@ export function BodyView() {
                       minTickGap={28}
                       tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }}
                     />
-                    <YAxis width={48} domain={['dataMin - 2', 'dataMax + 2']} tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }} />
+                    <YAxis width={48} domain={['dataMin - 2', 'dataMax + 2']} tickFormatter={formatValueTick} tick={{ fill: 'var(--text-secondary-dark)', fontSize: 12 }} />
                     {selectionStart != null && selectionEnd != null && (
                       <ReferenceArea x1={selectionStart} x2={selectionEnd} strokeOpacity={0.3} fill="var(--primary)" fillOpacity={0.16} />
                     )}
@@ -471,7 +489,7 @@ export function BodyView() {
                       labelFormatter={(value) => shortDateTime(Number(value))}
                       formatter={(value, name) => [`${value}%`, name]}
                     />
-                    <Line type="monotone" dataKey="bodyFat" name="Body Fat" stroke="var(--success)" strokeWidth={1.5} strokeOpacity={0.5} dot={false} activeDot={{ r: 5 }} connectNulls />
+                    <Line type="monotone" dataKey="bodyFat" name="Body Fat" stroke="var(--fg-muted)" strokeWidth={1.5} strokeOpacity={0.6} dot={false} activeDot={{ r: 5 }} connectNulls />
                     <Line type="monotone" dataKey="bodyFatEwma" name="Body Fat EWMA" stroke="var(--accent)" strokeWidth={3} dot={false} activeDot={{ r: 5 }} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
@@ -482,33 +500,59 @@ export function BodyView() {
         )}
       </div>
 
+      {entries.length > 0 && (
+        <section className="weighins" aria-labelledby="weighins-title">
+          <h2 id="weighins-title" className="section-title">Weigh-ins</h2>
+          <ol className="weighin-list">
+            {visibleEntries.map(entry => (
+              <li key={entry.id} className="weighin-row">
+                <span className="weighin-date">{formatEntryDate(entry.date)}</span>
+                <span className="weighin-value"><span className="sv-num">{entry.weight}</span><span className="sv-unit">{unitLabel}</span></span>
+                <span className="weighin-fat">{entry.bodyFat != null ? `${entry.bodyFat}%` : ''}</span>
+                <button type="button" className="icon-btn" onClick={() => handleDeleteWeight(entry.id)} aria-label={`Delete weigh-in from ${formatEntryDate(entry.date)}`}>
+                  <Trash2 size={16} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ol>
+          {entries.length > 14 && (
+            <button type="button" className="btn btn-ghost" onClick={() => setShowAllEntries(v => !v)}>
+              {showAllEntries ? 'Show recent only' : `Show all ${entries.length}`}
+            </button>
+          )}
+        </section>
+      )}
+
       {showLogModal && (
         <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowLogModal(false)}>
           <div className="modal-content mobile-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '460px' }}>
             <div className="mobile-modal-header">
               <div>
-                <div className="card-title"><Scale size={18} color="var(--primary)" /> Log Weight</div>
-                <div style={{ color: 'var(--text-secondary-dark)', fontSize: '12px', marginTop: '4px' }}>Save a body record for today</div>
+                <h2>Log weigh-in</h2>
               </div>
               <button className="btn btn-secondary icon-btn" onClick={() => setShowLogModal(false)} aria-label="Close weight entry">
                 <X size={18} />
               </button>
             </div>
             <div className="mobile-modal-scroll">
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Weight ({userUnit})</label>
-                <input type="number" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} autoFocus />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', color: 'var(--text-secondary-dark)', fontWeight: 600, marginBottom: '6px' }}>Body Fat % (Optional)</label>
-                <input type="number" value={newFat} onChange={(e) => setNewFat(e.target.value)} />
-              </div>
+              <label className="field">
+                <span className="field-label">Date</span>
+                <input type="date" value={entryDate} max={getLocalDateString()} onChange={(e) => setEntryDate(e.target.value || getLocalDateString())} />
+              </label>
+              <label className="field">
+                <span className="field-label">Weight ({unitLabel})</span>
+                <input type="number" inputMode="decimal" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} autoFocus />
+              </label>
+              <label className="field">
+                <span className="field-label">Body fat % (optional)</span>
+                <input type="number" inputMode="decimal" value={newFat} onChange={(e) => setNewFat(e.target.value)} />
+              </label>
               <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
                 <button className="btn btn-secondary" onClick={() => setShowLogModal(false)} style={{ flex: 1 }}>
                   Cancel
                 </button>
                 <button className="btn btn-primary" onClick={saveWeight} style={{ flex: 1 }}>
-                  Save Record
+                  Save weigh-in
                 </button>
               </div>
             </div>

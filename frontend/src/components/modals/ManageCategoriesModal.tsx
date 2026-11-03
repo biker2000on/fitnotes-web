@@ -1,5 +1,4 @@
 // ManageCategoriesModal.tsx - Manage Categories Modal (list, edit, delete).
-import { Layers } from 'lucide-react';
 import { intColorToHex } from '../../lib/colors';
 import { useFitNotesStore } from '../../store/FitNotesStore';
 
@@ -16,7 +15,7 @@ export function ManageCategoriesModal() {
     <div className="modal-overlay" onClick={() => setShowManageCatsModal(false)}>
       <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Layers size={20} color="var(--primary)" /> Manage Categories</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Categories</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowManageCatsModal(false)}>Close</button>
         </div>
 
@@ -44,7 +43,7 @@ export function ManageCategoriesModal() {
             {categories.map(c => {
               const color = intColorToHex(c.colour);
               return (
-                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--border-dark)', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.005)' }}>
+                <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', backgroundColor: 'rgba(255,255,255,0.005)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{ width: '16px', height: '16px', borderRadius: '50%', backgroundColor: color }}></div>
                     <span style={{ fontWeight: 700 }}>{c.name}</span>

@@ -22,7 +22,6 @@ export function ToolsView() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', width: '100%' }}>
-      <div className="card-title" style={{ margin: 0 }}><Calculator size={18} /> Tools</div>
 
       <div className="card" style={{ gap: '14px' }}>
         <div className="card-title"><Calculator size={16} /> Estimated 1RM Calculator</div>
@@ -43,7 +42,7 @@ export function ToolsView() {
         {oneRm > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(90px, 1fr))', gap: '6px', marginTop: '8px' }}>
             {PCTS.map(p => (
-              <div key={p} style={{ textAlign: 'center', padding: '6px', border: '1px solid var(--border-dark)', borderRadius: '8px' }}>
+              <div key={p} style={{ textAlign: 'center', padding: '6px', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>{p}%</div>
                 <div style={{ fontWeight: 700 }}>{round(oneRm * p / 100)}</div>
               </div>
@@ -65,12 +64,12 @@ export function ToolsView() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
           {WARMUP.map((p, i) => (
-            <div key={p} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', padding: '8px 12px', border: '1px solid var(--border-dark)', borderRadius: '8px' }}>
+            <div key={p} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', padding: '8px 12px', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)' }}>
               <span style={{ color: 'var(--text-secondary-dark)' }}>Warmup {i + 1} · {p}%</span>
               <span style={{ fontWeight: 700 }}>{round(wk * p / 100)} {userUnit}</span>
             </div>
           ))}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', padding: '8px 12px', border: '1px solid var(--primary)', borderRadius: '8px', background: 'var(--primary-glow)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', padding: '8px 12px', border: '1px solid var(--primary)', borderRadius: 'var(--radius)', background: 'var(--primary-glow)' }}>
             <span style={{ fontWeight: 700 }}>Working Set · 100%</span>
             <span style={{ fontWeight: 800 }}>{round(wk)} {userUnit}</span>
           </div>

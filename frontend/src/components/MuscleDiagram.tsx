@@ -164,7 +164,7 @@ export function MuscleDiagramDetails({ primary, secondary, label = 'Muscles Work
   const secCount = secondary ? (secondary instanceof Set ? secondary.size : secondary.length) : 0;
   if (primCount === 0 && secCount === 0) return null;
   return (
-    <details open={defaultOpen} style={{ border: '1px solid var(--border-dark)', borderRadius: '12px', padding: '10px 12px' }}>
+    <details open={defaultOpen} style={{ border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', padding: '10px 12px' }}>
       <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: '13px' }}>{label}</summary>
       <div style={{ marginTop: '10px' }}>
         <MuscleDiagram primary={primary} secondary={secondary} height={height} showLegend={showLegend} />

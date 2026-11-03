@@ -1,6 +1,6 @@
 // MeasurementsView.tsx - Custom body-measurement tracker (neck, chest, ...).
 import { useEffect, useMemo, useState } from 'react';
-import { Ruler, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from 'recharts';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import type { Measurement, MeasurementRecord } from '../types';
@@ -88,12 +88,12 @@ export function MeasurementsView() {
       {/* Measurement list */}
       <div className="card" style={{ gap: '8px', alignContent: 'start' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="card-title" style={{ margin: 0 }}><Ruler size={16} /> Measurements</div>
-          <button className="btn btn-secondary" style={{ padding: '4px 8px' }} onClick={() => setShowNew(s => !s)} title="Add measurement"><Plus size={14} /></button>
+          <div className="section-title">Tracked</div>
+          <button className="btn btn-ghost" onClick={() => setShowNew(s => !s)}><Plus size={16} aria-hidden /> Add</button>
         </div>
 
         {showNew && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', border: '1px solid var(--border-dark)', borderRadius: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '8px', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)' }}>
             <input placeholder="Name (e.g. Wrist)" value={newName} onChange={e => setNewName(e.target.value)} />
             <select value={newUnit} onChange={e => { if (e.target.value === 'custom') { addCustomUnit(); } else { setNewUnit(parseInt(e.target.value, 10)); } }} style={{ padding: '8px' }}>
               <option value={1}>cm</option>
@@ -112,7 +112,7 @@ export function MeasurementsView() {
             onClick={() => setSelectedId(m.id)}
             style={{
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '10px 12px', borderRadius: '10px', cursor: 'pointer',
+              padding: '10px 12px', borderRadius: 'var(--radius)', cursor: 'pointer',
               background: selected?.id === m.id ? 'var(--primary-glow)' : 'transparent',
               border: '1px solid', borderColor: selected?.id === m.id ? 'var(--primary)' : 'var(--border-dark)',
             }}
@@ -185,7 +185,7 @@ export function MeasurementsView() {
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', textAlign: 'center', padding: '24px' }}>No records logged yet.</p>
             ) : (
               measurementRecords.map(r => (
-                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-dark)', borderRadius: '10px', fontSize: '14px' }}>
+                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', fontSize: '14px' }}>
                   <span style={{ fontWeight: 600 }}>{r.date}</span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <span style={{ fontWeight: 700 }}>{r.value} {selected ? resolveUnit(selected.unit_id, customUnits) : ''}</span>

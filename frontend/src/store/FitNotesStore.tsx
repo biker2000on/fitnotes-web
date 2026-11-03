@@ -97,7 +97,7 @@ export function useFitNotesController() {
 
   const {
     toastMessage, setToastMessage, toastType, setToastType, showToast, setShowToast,
-    toastTimerId, setToastTimerId, triggerToast,
+    toastTimerId, setToastTimerId, triggerToast, toastAction, dismissToast,
     confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
     confirmOnApprove, setConfirmOnApprove, confirmApproveLabel, setConfirmApproveLabel, confirmTone, setConfirmTone,
     triggerConfirm,
@@ -195,6 +195,7 @@ export function useFitNotesController() {
     newRoutineCategory, setNewRoutineCategory,
     activeRoutineForPopulate, setActiveRoutineForPopulate,
     activeSectionForPopulate, setActiveSectionForPopulate,
+    populateTargetDate, setPopulateTargetDate,
     editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId,
     showPastImporterModal, setShowPastImporterModal,
     pastImporterTargetSectionId, setPastImporterTargetSectionId, pastImporterDate, setPastImporterDate,
@@ -208,14 +209,14 @@ export function useFitNotesController() {
     handleAddAllSectionLogs, handleImportPastLogsToSection,
   } = useRoutinesSlice({
     late, triggerToast, triggerConfirm, activeTab, setActiveTab,
-    selectedDate, selectedDateRef, userUnit, exercises, allLogs,
+    selectedDate, setSelectedDate, selectedDateRef, userUnit, exercises, allLogs,
     workoutGroups, supersetName, supersetColor, getHighest1RM, recordWorkoutRoutine,
   });
 
   const {
     bodyWeights, setBodyWeights, newWeight, setNewWeight, newFat, setNewFat,
     goals, setGoals, measurements, setMeasurements, measurementRecords, setMeasurementRecords,
-    handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
+    handleAddWeight, handleDeleteWeight, saveGoal, deleteGoal, loadMeasurementRecords,
     saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord,
   } = useBodySlice({ late, triggerToast, selectedDate, userUnit });
 
@@ -873,10 +874,11 @@ export function useFitNotesController() {
     allLogs, setAllLogs, showCalendarPreviewModal, setShowCalendarPreviewModal,
     previewDate, setPreviewDate, previewLogs, setPreviewLogs, previewComment, setPreviewComment, calendarYear, setCalendarYear,
     calendarMonth, setCalendarMonth, toastMessage, setToastMessage, toastType, setToastType, showToast, setShowToast,
-    toastTimerId, setToastTimerId, confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
+    toastTimerId, setToastTimerId, toastAction, dismissToast, confirmOpen, setConfirmOpen, confirmTitle, setConfirmTitle, confirmMessage, setConfirmMessage,
     confirmOnApprove, setConfirmOnApprove, confirmApproveLabel, setConfirmApproveLabel, confirmTone, setConfirmTone,
     showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, activeRoutineForPopulate, setActiveRoutineForPopulate,
     activeSectionForPopulate, setActiveSectionForPopulate,
+    populateTargetDate, setPopulateTargetDate,
     showBulkMoveModal, setShowBulkMoveModal, bulkMoveTargetDate, setBulkMoveTargetDate, expandedCategories, setExpandedCategories,
     editorAddExerciseTargetSectionId, setEditorAddExerciseTargetSectionId, showPastImporterModal, setShowPastImporterModal,
     pastImporterTargetSectionId, setPastImporterTargetSectionId, pastImporterDate, setPastImporterDate, newWeight, setNewWeight,
@@ -899,9 +901,9 @@ export function useFitNotesController() {
     handleCreateExercise, handleCreateCategory, handleUpdateCategory, handleDeleteCategory, handleUpdateExercise, handleDeleteExercise, handleMergeExercises,
     handleCalendarDayClick, handlePrevMonth, handleNextMonth, handleCreateWorkoutSuperset, handleCreateSuperset, handleClearGroup,
     handleCreateRoutineSuperset, handleUpdateRoutineGroupName, handleClearRoutineGroup, handleCreateRoutineTemplate, handleDeleteRoutine, handleImportRoutine,
-    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openSwitchRoutineSectionExercise, openPastImporter, handleAddExerciseToSection, handleSwitchRoutineSectionExercise, handleDeleteExerciseFromSection,
+    loadEditorData, handleAddDayToRoutine, openAddExerciseToSection, openSwitchRoutineSectionExercise, openPastImporter, handleAddExerciseToSection, handleSwitchRoutineSectionExercise, handleReorderRoutineSections, handleReorderRoutineSectionExercises, handleDeleteExerciseFromSection,
     handleAddSetToTemplateExercise, handleDeleteSetFromTemplateExercise, handleUpdateTemplateSetValues, handleUpdatePopulateSetsType, handleUpdateRoutineSectionExercise, handleUpdateSectionName, handleUpdateSectionSchedule, handleDeleteSection,
-    handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, saveGoal, deleteGoal, loadMeasurementRecords,
+    handleAddAllSectionLogs, handleImportPastLogsToSection, handleAddWeight, handleDeleteWeight, saveGoal, deleteGoal, loadMeasurementRecords,
     saveMeasurement, deleteMeasurement, saveMeasurementRecord, deleteMeasurementRecord, calculatePlatesSolver,
   };
   return store;

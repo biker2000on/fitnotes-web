@@ -74,9 +74,9 @@ export const PlateCalculatorModal: React.FC<PlateCalculatorModalProps> = ({
             </p>
           ) : (
             calculatedPlates.map(p => (
-              <div key={p.weight} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-dark)', borderRadius: '12px' }}>
+              <div key={p.weight} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', backgroundColor: 'rgba(255,255,255,0.02)', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ width: '16px', height: '16px', borderRadius: '4px', backgroundColor: p.color }}></div>
+                  <div style={{ width: '16px', height: '16px', borderRadius: 'var(--radius)', backgroundColor: p.color }}></div>
                   <span style={{ fontWeight: 700 }}>{p.weight} {userUnit} plate</span>
                 </div>
                 <span style={{ fontWeight: 800 }}>x{p.count * 2} total <span style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', fontWeight: 400 }}>({p.count} per side)</span></span>

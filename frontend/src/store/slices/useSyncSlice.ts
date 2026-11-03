@@ -572,7 +572,7 @@ export function useSyncSlice(deps: SyncSliceDeps) {
       return true;
     }
     if (oidcLinked) {
-      triggerToast('Single sign-on identity linked to your account!');
+      triggerToast('Single sign-on linked to your account.');
       return true;
     }
     if (oidcToken) {
@@ -600,7 +600,7 @@ export function useSyncSlice(deps: SyncSliceDeps) {
           setSyncStatus('error');
           setTimeout(() => setSyncStatus('idle'), 3000);
         }
-        triggerToast('Signed in with single sign-on!');
+        triggerToast('Signed in.');
       })();
     }
     return true;

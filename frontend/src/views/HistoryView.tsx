@@ -156,8 +156,8 @@ export function HistoryView() {
         .history-exercise-sets { color: var(--text-secondary-dark); font-size: 11px; }
         .history-routine-chip {
           display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
-          color: var(--primary); background: rgba(99, 102, 241, 0.1);
-          border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 999px; padding: 3px 10px;
+          color: var(--primary); background: color-mix(in srgb, var(--accent) 10%, transparent);
+          border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 999px; padding: 3px 10px;
         }
         .history-session-actions { display: flex; gap: 8px; flex-wrap: wrap; }
       `}</style>

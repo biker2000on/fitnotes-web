@@ -3,7 +3,7 @@
 // led by a weekly overview cell. The selected day's workout summary sits beside
 // the grid on desktop and slides up as a dismissible sheet on mobile.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { CalendarDays, ArrowRight, FileText, Dumbbell, Menu, Bookmark, X } from 'lucide-react';
+import { CalendarDays, ArrowRight, FileText, Dumbbell, Bookmark, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { db } from '../storage/db';
 import { intColorToHex } from '../lib/colors';
@@ -30,7 +30,7 @@ export function CalendarView() {
   const {
     allLogs, selectedDate, setSelectedDate, settings, exercises, categories,
     workoutComment, setActiveTab, formatLogValue, handleSelectLogForEdit,
-    workoutGroups, groupExercises, routines, workoutRoutines, setSidebarOpen, userUnit,
+    workoutGroups, groupExercises, routines, workoutRoutines, userUnit,
   } = useFitNotesStore();
   const [filter, setFilter] = useState('');
   const [routineSections, setRoutineSections] = useState<RoutineSection[]>([]);
@@ -235,14 +235,14 @@ export function CalendarView() {
       .calendar-scroll {
         --week-col: 92px;
         flex: 1 1 auto; min-height: 240px; overflow-y: auto; overscroll-behavior: contain;
-        border: 1px solid var(--border-dark); border-radius: 12px; background: rgba(15, 23, 42, 0.16);
+        border: 1px solid var(--border-dark); border-radius: 12px; background: var(--sunk);
       }
       .calendar-month-section { position: relative; }
       /* Title and weekday labels stick together as one block, so the labels
          never need to guess the header's height to position themselves. */
       .calendar-month-sticky {
         position: sticky; top: 0; z-index: 3;
-        background: rgba(15, 23, 42, 0.96); backdrop-filter: blur(10px);
+        background: var(--surface);
         border-bottom: 1px solid var(--border-dark);
       }
       .calendar-month-header {
@@ -260,7 +260,7 @@ export function CalendarView() {
       }
       .calendar-week-summary {
         border-right: 1px solid var(--border-dark); border-bottom: 1px solid var(--border-dark);
-        padding: 6px 7px; background: rgba(99, 102, 241, 0.05);
+        padding: 6px 7px; background: color-mix(in srgb, var(--accent) 5%, transparent);
         display: flex; flex-direction: column; gap: 2px; min-width: 0;
       }
       .calendar-week-range { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary-dark); }
@@ -275,9 +275,9 @@ export function CalendarView() {
         text-align: left; min-width: 0;
       }
       .calendar-cell:nth-child(8n) { border-right: none; }
-      .calendar-cell:hover { background: rgba(99, 102, 241, 0.06); }
-      .calendar-cell.outside { background: rgba(15, 23, 42, 0.28); cursor: default; }
-      .calendar-cell.outside:hover { background: rgba(15, 23, 42, 0.28); }
+      .calendar-cell:hover { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+      .calendar-cell.outside { background: var(--sunk); cursor: default; }
+      .calendar-cell.outside:hover { background: var(--sunk); }
       .calendar-cell-number {
         align-self: flex-end; display: inline-flex; align-items: center; justify-content: center;
         min-width: 22px; height: 22px; padding: 0 5px; border: 0; border-radius: 999px;
@@ -292,8 +292,8 @@ export function CalendarView() {
       .calendar-routine-chips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
       .calendar-routine-chip {
         display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; padding: 3px 5px;
-        border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 6px;
-        background: rgba(99, 102, 241, 0.14); color: var(--primary);
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 6px;
+        background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--primary);
         font-size: 10px; font-weight: 700; line-height: 1.1; cursor: pointer; text-align: left;
       }
       .calendar-routine-chip-icon { flex: 0 0 auto; }
@@ -321,8 +321,8 @@ export function CalendarView() {
         color: var(--text-secondary-dark); opacity: 0.6;
       }
       .calendar-right-pane {
-        flex: 0 0 380px; width: 380px; background: rgba(30, 41, 59, 0.4);
-        backdrop-filter: blur(16px); border: 1px solid var(--border-dark); border-radius: 16px;
+        flex: 0 0 380px; width: 380px; background: var(--surface);
+        border: 1px solid var(--border-dark); border-radius: var(--radius);
         padding: 20px; display: flex; flex-direction: column;
         max-height: calc(100vh - 150px); position: sticky; top: 24px;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
@@ -621,9 +621,7 @@ export function CalendarView() {
 
       <div className="calendar-left-pane">
         <div className="calendar-toolbar">
-          <button className="hamburger-btn calendar-menu-btn" onClick={() => setSidebarOpen(true)} title="Open navigation menu" aria-label="Open navigation menu">
-            <Menu size={20} />
-          </button>
+          
           <button
             className="btn btn-secondary"
             style={{ padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -791,8 +789,8 @@ export function CalendarView() {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '6px',
                   fontSize: '12px', fontWeight: 700,
-                  color: 'var(--primary)', backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  color: 'var(--primary)', backgroundColor: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--accent) 25%, transparent)',
                   borderRadius: '999px', padding: '4px 12px',
                 }}
               >

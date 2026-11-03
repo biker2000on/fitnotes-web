@@ -1,7 +1,7 @@
 // AttentionCard.tsx - Keyboard-first triage for workout signals. The feed is
 // available only on today/future workout logs and all detail stays in context.
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { AlertTriangle, TrendingDown, Target, Activity, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { TrendingDown, Target, Activity, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
 import { getLocalDateString } from '../lib/date';
 import { needsAttention, type AttentionItem } from '../lib/attention';
@@ -100,16 +100,16 @@ export function AttentionCard() {
       <section
         className="card attention-card"
         aria-labelledby="needs-attention-title"
-        style={{ gap: '10px', borderLeft: '4px solid var(--accent)', boxShadow: '0 10px 30px rgba(245, 158, 11, 0.08)' }}
+        style={{ gap: '10px' }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <div>
             <div id="needs-attention-title" className="card-title" style={{ margin: 0 }}>
-              <AlertTriangle size={17} color="var(--accent)" /> Needs Attention
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', fontWeight: 700 }}>{visibleItems.length}</span>
+              Coach notes
+              <span className="attention-count">{visibleItems.length}</span>
             </div>
             {!collapsed && (
-              <div style={{ color: 'var(--text-secondary-dark)', fontSize: '10px', marginTop: '4px' }}>
+              <div className="keyboard-hint">
                 Keyboard: ↑/↓ move · Enter open · D dismiss
               </div>
             )}
@@ -145,7 +145,7 @@ export function AttentionCard() {
                     style={{
                       display: 'flex', alignItems: 'flex-start', gap: '10px', textAlign: 'left',
                       background: 'none', border: 'none', cursor: 'pointer', padding: '10px 8px 10px 0',
-                      color: 'inherit', width: '100%', borderRadius: '8px',
+                      color: 'inherit', width: '100%', borderRadius: 'var(--radius)',
                     }}
                   >
                     <Icon size={16} color={KIND_COLORS[item.kind]} style={{ flexShrink: 0, marginTop: '2px' }} />

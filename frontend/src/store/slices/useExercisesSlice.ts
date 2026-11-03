@@ -110,7 +110,7 @@ export function useExercisesSlice(deps: ExercisesSliceDeps) {
     setNewExName('');
     setNewExNotes('');
     await late.refreshData();
-    triggerToast('Custom Exercise successfully added!');
+    triggerToast('Exercise added.');
   };
 
   // Category mutator (Manage custom categories)
@@ -130,7 +130,7 @@ export function useExercisesSlice(deps: ExercisesSliceDeps) {
     setNewCatName('');
     setShowCatModal(false);
     await late.refreshData();
-    triggerToast('Category created successfully!');
+    triggerToast('Category added.');
   };
 
   // Category Updator and Soft-Deletor
@@ -149,7 +149,7 @@ export function useExercisesSlice(deps: ExercisesSliceDeps) {
     setEditingCategory(null);
     setShowManageCatsModal(false);
     await late.refreshData();
-    triggerToast('Category updated successfully!');
+    triggerToast('Category saved.');
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -200,7 +200,7 @@ export function useExercisesSlice(deps: ExercisesSliceDeps) {
       setShowEditExModal(false);
       setEditingExercise(null);
       await late.refreshData();
-      triggerToast('Exercise updated successfully!');
+      triggerToast('Exercise saved.');
     };
 
     // Warn if changing the exercise type while logged sets exist — incompatible

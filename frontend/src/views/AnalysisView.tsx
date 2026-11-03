@@ -43,7 +43,7 @@ export function AnalysisView() {
   const [wBy, setWBy] = useState<WorkoutGroupBy>('week');
   const [wMetric, setWMetric] = useState<'sets' | 'reps' | 'volume' | 'durationMin' | 'workouts'>('volume');
 
-  const COMPARE_COLORS = ['#6366f1', '#10b981', '#ef4444', '#f59e0b'];
+  const COMPARE_COLORS = ['#f0553a', '#f3c23a', '#8dbf6a', '#7fa7d9'];
   const compareData = useMemo(() => {
     if (compareIds.length === 0) return [] as any[];
     const lim = settings.estimated_1rm_max_apply_to_graph ? settings.estimated_1rm_max_reps_to_include : 999;
@@ -122,7 +122,7 @@ export function AnalysisView() {
     });
   }, [allLogs, exercises, categories, bScope, bMetric, bPeriod]);
 
-  const PALETTE = ['#6366f1', '#10b981', '#ef4444', '#f59e0b', '#a855f7', '#0ea5e9', '#ec4899', '#84cc16'];
+  const PALETTE = ['#f0553a', '#f3c23a', '#8dbf6a', '#7fa7d9', '#c58bd9', '#e08a3c', '#5fb8a8', '#d9d0bf'];
   const niceDate = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
   return (
@@ -198,7 +198,7 @@ export function AnalysisView() {
                 Week of {muscleWeekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. {settings.mark_sets_complete ? 'Completed' : 'Logged'} working sets only; secondary muscles count as half a set.
               </div>
             </div>
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', padding: '6px 10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', padding: '6px 10px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)' }}>
               Reference band: 10–20 sets
             </div>
           </div>
@@ -248,32 +248,32 @@ export function AnalysisView() {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
-              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Best adjusted e1RM</div>
                 <div style={{ fontSize: '22px', fontWeight: 800 }}>{Math.round(bestStrength * 10) / 10} <small>{userUnit}</small></div>
               </div>
-              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Latest e1RM</div>
                 <div style={{ fontSize: '22px', fontWeight: 800 }}>{latestStrength?.estimated1RM ?? 0} <small>{userUnit}</small></div>
               </div>
-              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>Latest average RPE</div>
                 <div style={{ fontSize: '22px', fontWeight: 800 }}>{latestStrength?.averageRpe ?? '—'}</div>
               </div>
-              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)' }}>
                 <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)' }}>PR events</div>
                 <div style={{ fontSize: '22px', fontWeight: 800 }}>{strengthData.timeline.length}</div>
               </div>
             </div>
 
             {liftPattern && !bodyweight && (
-              <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
+              <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)', fontSize: '12px', color: 'var(--text-secondary-dark)' }}>
                 <Scale size={13} style={{ verticalAlign: '-2px', marginRight: '6px' }} />
                 Log a body weight to see how this lift grades against bodyweight-relative strength standards.
               </div>
             )}
             {standard && bodyweight && (
-              <div style={{ padding: '14px', borderRadius: '10px', background: 'rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ padding: '14px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <Scale size={16} color="var(--primary)" />
@@ -340,7 +340,7 @@ export function AnalysisView() {
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: '8px' }}>
                   {strengthData.repMaxGrid.map(record => (
-                    <div key={record.reps} style={{ padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', textAlign: 'center' }}>
+                    <div key={record.reps} style={{ padding: '10px', borderRadius: 'var(--radius)', background: 'rgba(255,255,255,0.04)', textAlign: 'center' }}>
                       <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)' }}>{record.reps} rep{record.reps === 1 ? '' : 's'}</div>
                       <div style={{ fontSize: '16px', fontWeight: 800 }}>{displayStrengthWeight(record.weight)}</div>
                       <div style={{ fontSize: '9px', color: 'var(--text-secondary-dark)' }}>{userUnit}</div>

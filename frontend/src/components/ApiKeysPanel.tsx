@@ -143,7 +143,7 @@ export function ApiKeysPanel() {
       </div>
 
       {created && (
-        <div style={{ padding: '12px', borderRadius: '10px', background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.35)' }}>
+        <div style={{ padding: '12px', borderRadius: 'var(--radius)', background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.35)' }}>
           <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--success)', marginBottom: '6px' }}>
             Copy this key now—it will not be shown again.
           </div>

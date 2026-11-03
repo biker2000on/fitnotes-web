@@ -121,7 +121,8 @@ export function getProgressionSuggestion(
     };
   }
 
-  if (stalled >= PLATEAU_SESSIONS) {
+  // Bodyweight work logged at 0 can't be deloaded; it isn't a stall.
+  if (stalled >= PLATEAU_SESSIONS && last.topWeight > 0) {
     const deload = roundToIncrement(last.topWeight * 0.9, increment);
     return {
       ...base,

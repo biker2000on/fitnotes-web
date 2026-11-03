@@ -8,7 +8,6 @@ import {
   Keyboard,
   Palette,
   Plug,
-  Settings as SettingsIcon,
   Timer,
 } from 'lucide-react';
 import { useFitNotesStore } from '../store/FitNotesStore';
@@ -60,7 +59,6 @@ export function SettingsView() {
 
   return (
     <div className="settings-page">
-      <div className="card-title" style={{ margin: 0 }}><SettingsIcon size={18} /> Settings</div>
 
       <SettingsPanel
         title="Appearance & units"

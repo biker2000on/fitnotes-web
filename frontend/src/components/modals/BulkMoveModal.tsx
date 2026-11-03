@@ -15,10 +15,9 @@ export function BulkMoveModal() {
         className="modal-content"
         style={{
           maxWidth: '400px',
-          backgroundColor: 'rgba(30, 41, 59, 0.95)',
-          backdropFilter: 'blur(16px)',
+          backgroundColor: 'var(--surface)',
           border: '1px solid var(--border-dark)',
-          borderRadius: '16px',
+          borderRadius: 'var(--radius)',
           boxShadow: 'var(--shadow-lg)',
           display: 'flex',
           flexDirection: 'column',

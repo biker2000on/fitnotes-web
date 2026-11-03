@@ -13,8 +13,8 @@ export default defineConfig({
         name: 'FitNotes',
         short_name: 'FitNotes',
         description: 'Offline-first workout tracking',
-        theme_color: '#101014',
-        background_color: '#101014',
+        theme_color: '#141210',
+        background_color: '#141210',
         display: 'standalone',
         start_url: '/',
         icons: [

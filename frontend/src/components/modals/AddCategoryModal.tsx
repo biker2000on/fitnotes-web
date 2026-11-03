@@ -1,5 +1,4 @@
 // AddCategoryModal.tsx - Category Creation Modal Drawer.
-import { FolderPlus } from 'lucide-react';
 import { useFitNotesStore } from '../../store/FitNotesStore';
 
 export function AddCategoryModal() {
@@ -13,7 +12,7 @@ export function AddCategoryModal() {
     <div className="modal-overlay" onClick={() => setShowCatModal(false)}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 800 }}><FolderPlus size={20} color="var(--primary)" /> Add Custom Category</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 800 }}>New category</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowCatModal(false)}>Close</button>
         </div>
 

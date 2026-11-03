@@ -84,63 +84,7 @@ export function SyncView() {
   };
 
   return (
-    <div style={{ marginTop: '24px', width: '100%' }}>
-      {/* API Server Endpoint Override Widget */}
-      <div className="card" style={{ gap: '16px', padding: '24px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-            <Globe size={18} />
-          </div>
-          <div style={{ textAlign: 'left' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>API Server Endpoint</h3>
-            <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', margin: '2px 0 0 0' }}>
-              Override default API URL for mobile or network debugging.
-            </p>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <input
-              type="text"
-              placeholder="e.g. http://192.168.1.50:8080"
-              value={apiUrlInput}
-              onChange={(e) => setApiUrlInput(e.target.value)}
-              style={{ flex: 1, height: '38px', fontSize: '13px' }}
-            />
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                updateCustomApiUrl(apiUrlInput);
-              }}
-              style={{ padding: '0 16px', height: '38px', fontSize: '13px' }}
-            >
-              Save
-            </button>
-            {customApiUrl && (
-              <button
-                className="btn btn-secondary"
-                onClick={() => {
-                  updateCustomApiUrl('');
-                  setApiUrlInput('');
-                }}
-                style={{ padding: '0 12px', height: '38px', fontSize: '13px' }}
-              >
-                Reset
-              </button>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-            <span style={{ color: 'var(--text-secondary-dark)' }}>Active Target API:</span>
-            <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{getApiBaseUrl()}</code>
-          </div>
-
-          <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', textAlign: 'left', lineHeight: '1.4', borderLeft: '2px solid var(--primary)', paddingLeft: '8px' }}>
-            <strong>Note for Mobile (Android):</strong> <code>localhost</code> points to the phone. To sync with a local server, use your PC's Wi-Fi IP (e.g. <code>http://192.168.1.XX:8080</code>). Ensure the Go server is bound to <code>0.0.0.0</code>.
-          </div>
-        </div>
-      </div>
+    <div className="sync-page">
       {token ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="card" style={{ gap: '24px', padding: '32px', textAlign: 'center' }}>
@@ -148,7 +92,7 @@ export function SyncView() {
               <RefreshCw size={32} />
             </div>
             <div>
-              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Account Synchronization</h2>
+              <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Sync</h2>
               <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '6px' }}>Logged in as <strong style={{ color: 'var(--text-primary-dark)' }}>{userEmail}</strong></p>
             </div>
 
@@ -256,7 +200,7 @@ export function SyncView() {
               )}
             </div>
 
-            <div style={{ borderLeft: '3px solid var(--warning)', paddingLeft: '12px', textAlign: 'left', marginTop: '10px' }}>
+            <div style={{ border: '1px solid var(--warning)', padding: '10px 12px', textAlign: 'left', marginTop: '10px' }}>
               <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', lineHeight: '1.4' }}>
                 <strong style={{ color: 'var(--warning)' }}>Warning:</strong> This will overwrite your existing online workout history and local cached records with the backup data.
               </p>
@@ -293,12 +237,12 @@ export function SyncView() {
       ) : (
         <div className="card" style={{ gap: '20px', padding: '32px' }}>
           <div>
-            <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Join FitNotes Cloud</h2>
+            <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Create an account</h2>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginTop: '4px' }}>Log in to sync your local data seamlessly across devices.</p>
           </div>
 
           {authError && (
-            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', padding: '12px', borderRadius: '10px', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>
+            <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--danger)', padding: '12px', borderRadius: 'var(--radius)', color: 'var(--danger)', fontSize: '13px', fontWeight: 600 }}>
               {authError}
             </div>
           )}
@@ -346,6 +290,63 @@ export function SyncView() {
           )}
         </div>
       )}
+      {/* Server override is for debugging a self-hosted backend; keep it out of the way. */}
+      <details className="card advanced-panel">
+        <summary>Advanced: server address</summary>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+            <Globe size={18} />
+          </div>
+          <div style={{ textAlign: 'left' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>API Server Endpoint</h3>
+            <p style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', margin: '2px 0 0 0' }}>
+              Override default API URL for mobile or network debugging.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="text"
+              placeholder="e.g. http://192.168.1.50:8080"
+              value={apiUrlInput}
+              onChange={(e) => setApiUrlInput(e.target.value)}
+              style={{ flex: 1, height: '38px', fontSize: '13px' }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                updateCustomApiUrl(apiUrlInput);
+              }}
+              style={{ padding: '0 16px', height: '38px', fontSize: '13px' }}
+            >
+              Save
+            </button>
+            {customApiUrl && (
+              <button
+                className="btn btn-secondary"
+                onClick={() => {
+                  updateCustomApiUrl('');
+                  setApiUrlInput('');
+                }}
+                style={{ padding: '0 12px', height: '38px', fontSize: '13px' }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+            <span style={{ color: 'var(--text-secondary-dark)' }}>Active Target API:</span>
+            <code style={{ color: 'var(--primary)', fontWeight: 600 }}>{getApiBaseUrl()}</code>
+          </div>
+
+          <div style={{ fontSize: '10px', color: 'var(--text-secondary-dark)', textAlign: 'left', lineHeight: '1.4', paddingLeft: '8px' }}>
+            <strong>Note for Mobile (Android):</strong> <code>localhost</code> points to the phone. To sync with a local server, use your PC's Wi-Fi IP (e.g. <code>http://192.168.1.XX:8080</code>). The server must listen on <code>0.0.0.0</code>.
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

@@ -19,7 +19,7 @@ export function useToolsSlice(deps: ToolsSliceDeps) {
   const saveGraphFavourite = async (fav: GraphFavourite) => {
     await db.execute('INSERT INTO graph_favourites', [fav]);
     setGraphFavourites(await db.query<GraphFavourite>('SELECT * FROM graph_favourites'));
-    triggerToast('Graph saved to favourites!');
+    triggerToast('Graph saved to favourites.');
   };
   const deleteGraphFavourite = async (id: string) => {
     const f = graphFavourites.find(x => x.id === id);
@@ -29,7 +29,7 @@ export function useToolsSlice(deps: ToolsSliceDeps) {
   const saveCustomUnit = async (u: CustomUnit) => {
     await db.execute('INSERT INTO custom_units', [u]);
     setCustomUnits(await db.query<CustomUnit>('SELECT * FROM custom_units'));
-    triggerToast('Custom unit saved!');
+    triggerToast('Unit saved.');
   };
   const deleteCustomUnit = async (id: string) => {
     const u = customUnits.find(x => x.id === id);

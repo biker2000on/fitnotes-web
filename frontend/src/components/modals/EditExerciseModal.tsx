@@ -1,5 +1,4 @@
 // EditExerciseModal.tsx - Edit Exercise Modal (name, category, type, guidance, etc.).
-import { Dumbbell } from 'lucide-react';
 import { typeHasWeight } from '../../lib/units';
 import { ALL_MUSCLES, MUSCLE_DISPLAY, exerciseMuscleTargets, type MuscleKey } from '../../lib/muscles';
 import MuscleDiagram from '../MuscleDiagram';
@@ -48,7 +47,7 @@ export function EditExerciseModal() {
     <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowEditExModal(false)}>
       <div className="modal-content mobile-modal-content" style={{ maxWidth: '550px' }} onClick={(e) => e.stopPropagation()}>
         <div className="mobile-modal-header">
-          <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Dumbbell size={20} color="var(--primary)" /> Edit Exercise</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Edit exercise</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowEditExModal(false)}>Close</button>
         </div>
 
@@ -106,7 +105,7 @@ export function EditExerciseModal() {
             <input type="text" placeholder="e.g. Keep shoulder blades retracted" value={editExNotes} onChange={(e) => setEditExNotes(e.target.value)} />
           </div>
 
-          <div style={{ border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '12px' }}>
+          <div style={{ border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', padding: '12px' }}>
             <div style={{ fontWeight: 700, fontSize: '13px', marginBottom: '2px' }}>Muscles Worked</div>
             <div style={{ fontSize: '11px', color: 'var(--text-secondary-dark)', marginBottom: '10px' }}>
               Click a muscle to cycle: red = primary, yellow = secondary, click again to clear.
@@ -124,7 +123,7 @@ export function EditExerciseModal() {
             </div>
           </div>
 
-          <details style={{ border: '1px solid var(--border-dark)', borderRadius: '10px', padding: '10px' }}>
+          <details style={{ border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', padding: '10px' }}>
             <summary style={{ cursor: 'pointer', fontWeight: 700 }}>Guidance, video & alternatives</summary>
             <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
               <input type="text" placeholder="Aliases (comma separated)" value={editExGuidance.aliases} onChange={(e) => setEditExGuidance({ ...editExGuidance, aliases: e.target.value })} />

@@ -105,7 +105,7 @@ export function AttentionDetailModal({ item, onClose, onDismiss }: AttentionDeta
   const tooltipStyle = {
     backgroundColor: 'var(--bg-surface-dark)',
     borderColor: 'var(--border-dark)',
-    borderRadius: '8px',
+    borderRadius: 'var(--radius)',
     color: 'var(--text-primary-dark)',
   };
 

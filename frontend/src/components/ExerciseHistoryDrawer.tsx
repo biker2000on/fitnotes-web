@@ -119,7 +119,7 @@ export function ExerciseHistoryDrawer() {
   };
   const displayMetricVolume = (metricVolume: number) => {
     const converted = userUnit === 'lbs' ? metricVolume * 2.20462 : metricVolume;
-    return `${Math.round(converted)} ${userUnit}`;
+    return `${Math.round(converted)} ${userUnit === 'kg' ? 'kg' : 'lb'}`;
   };
   const displayDistance = (km: number) => {
     if (settings.distance_unit === 2) return `${Math.round((km / 1.60934) * 100) / 100} mi`;
@@ -139,13 +139,14 @@ export function ExerciseHistoryDrawer() {
     const totalDistance = sessionLogs.reduce((sum, log) => sum + (log.distance ?? 0), 0);
     const totalDuration = sessionLogs.reduce((sum, log) => sum + (log.duration_seconds ?? 0), 0);
 
-    if (hasWeight && hasReps) parts.push(`${displayMetricVolume(totalVolume)} vol`);
+    // Weightless sessions (bodyweight logged at 0) report reps, not a 0 volume.
+    if (hasWeight && hasReps && totalVolume > 0) parts.push(`${displayMetricVolume(totalVolume)} volume`);
     else if (hasReps) parts.push(`${totalReps} reps`);
 
     if (hasDistance && totalDistance > 0) parts.push(displayDistance(totalDistance));
     if (hasDuration && totalDuration > 0) parts.push(displayDuration(totalDuration));
 
-    return parts.join(' - ');
+    return parts.join(' · ');
   };
   const maxDistanceLog = logs.reduce<TrainingLog | null>((best, log) => ((log.distance ?? 0) > (best?.distance ?? 0) ? log : best), null);
   const maxDurationLog = logs.reduce<TrainingLog | null>((best, log) => ((log.duration_seconds ?? 0) > (best?.duration_seconds ?? 0) ? log : best), null);
@@ -164,20 +165,16 @@ export function ExerciseHistoryDrawer() {
 
   return (
     <>
-      <div className="sidebar-backdrop open" onClick={close} style={{ zIndex: 100000 }} />
-      <aside style={{
-        position: 'fixed', top: 0, right: 0, height: '100dvh', width: 'min(480px, 100vw)',
-        background: 'var(--bg-surface-dark)', borderLeft: '1px solid var(--border-dark)',
-        zIndex: 100001, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 24px rgba(0,0,0,0.3)',
-      }}>
+      <div className="drawer-scrim" onClick={close} />
+      <aside className="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-drawer-title">
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           padding: '20px', paddingTop: 'calc(20px + env(safe-area-inset-top, 0px))',
           borderBottom: '1px solid var(--border-dark)',
         }}>
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 800 }}>{exercise.name}</h2>
-            <p style={{ fontSize: '12px', color: 'var(--text-secondary-dark)' }}>{logs.length} sets across {summaries.length} sessions</p>
+            <h2 id="history-drawer-title" className="sheet-title">{exercise.name}</h2>
+            <p className="field-hint">{logs.length} sets across {summaries.length} sessions</p>
           </div>
           <button className="icon-btn" onClick={close} aria-label="Close history">
             <X size={20} />
@@ -304,7 +301,7 @@ export function ExerciseHistoryDrawer() {
                         onClick={() => { setGraphRange(r); setZoomDomain(null); }}
                         style={{
                           padding: '4px 10px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
-                          borderRadius: '6px', border: '1px solid var(--border-dark)',
+                          borderRadius: 'var(--radius)', border: '1px solid var(--border-dark)',
                           background: graphRange === r && !zoomDomain ? 'var(--primary)' : 'transparent',
                           color: graphRange === r && !zoomDomain ? '#fff' : 'var(--text-secondary-dark)',
                         }}
@@ -318,7 +315,7 @@ export function ExerciseHistoryDrawer() {
                         title="Reset zoom"
                         style={{
                           padding: '4px 8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer',
-                          borderRadius: '6px', border: '1px solid var(--primary)',
+                          borderRadius: 'var(--radius)', border: '1px solid var(--primary)',
                           background: 'var(--primary)', color: '#fff',
                           display: 'flex', alignItems: 'center', gap: '4px',
                         }}

@@ -34,5 +34,5 @@ export const getApiBaseUrl = () => {
 
 export const getClientType = () => (isTauri() ? 'mobile' : 'web');
 
-export const VALID_TABS = ['log', 'calendar', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'] as const;
+export const VALID_TABS = ['log', 'calendar', 'more', 'exercises', 'routines', 'routine-editor', 'body', 'measurements', 'goals', 'analysis', 'tools', 'history', 'settings', 'sync'] as const;
 export type TabId = typeof VALID_TABS[number];

@@ -41,3 +41,10 @@ reference/
 
 # Local agent runtime files
 .agent/logs/
+
+# Impeccable working files (screenshots, decision sketches, local servers)
+.impeccable/review/
+.impeccable/mocks/
+.impeccable/questions/
+.impeccable/live/
+.impeccable/build/

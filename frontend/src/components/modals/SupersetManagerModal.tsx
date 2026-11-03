@@ -1,5 +1,4 @@
 // SupersetManagerModal.tsx - Superset Link Manager Modal.
-import { Layers } from 'lucide-react';
 import { intColorToHex } from '../../lib/colors';
 import { useFitNotesStore } from '../../store/FitNotesStore';
 
@@ -17,19 +16,19 @@ export function SupersetManagerModal() {
     <div className="modal-overlay" onClick={() => setShowSupersetManagerModal(false)}>
       <div className="modal-content" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Layers size={20} color="var(--primary)" /> Link Superset Group</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 800 }}>Link a superset</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowSupersetManagerModal(false)}>Close</button>
         </div>
 
         <p style={{ fontSize: '13px', color: 'var(--text-secondary-dark)', marginBottom: '16px' }}>Select two or more exercises from today's workout log to group them into a Superset:</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-dark)', borderRadius: '12px', padding: '12px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '250px', overflowY: 'auto', border: '1px solid var(--border-dark)', borderRadius: 'var(--radius)', padding: '12px', marginBottom: '16px' }}>
           {Array.from(new Set(currentLogs.map(l => l.exercise_id))).map(exId => {
             const ex = exercises.find(x => x.id === exId);
             if (!ex) return null;
             const isChecked = selectedExIdsForSuperset.includes(exId);
             return (
-              <label key={exId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', backgroundColor: isChecked ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+              <label key={exId} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px 12px', borderRadius: 'var(--radius)', cursor: 'pointer', backgroundColor: isChecked ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
                 <input
                   type="checkbox"
                   className="set-select-checkbox"
@@ -56,7 +55,7 @@ export function SupersetManagerModal() {
             value={supersetName}
             onChange={(e) => setSupersetName(e.target.value)}
             placeholder="e.g. Superset A, Push Split Superset"
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-dark)', background: 'rgba(255,255,255,0.01)', color: 'var(--text-primary-dark)' }}
+            style={{ padding: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border-dark)', background: 'rgba(255,255,255,0.01)', color: 'var(--text-primary-dark)' }}
           />
         </div>
 
@@ -79,7 +78,7 @@ export function SupersetManagerModal() {
                 setSupersetName('Superset');
               }
             }}
-            style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border-dark)', background: 'var(--card-bg-dark)', color: 'var(--text-primary-dark)' }}
+            style={{ padding: '10px', borderRadius: 'var(--radius)', border: '1px solid var(--border-dark)', background: 'var(--card-bg-dark)', color: 'var(--text-primary-dark)' }}
           >
             <option value="">+ Create New Superset Group</option>
             {workoutGroups.filter(g => g.date === selectedDate && !g.is_deleted).map(g => (

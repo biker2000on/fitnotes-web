@@ -86,7 +86,7 @@ export function useWithingsSlice(deps: WithingsSliceDeps) {
         throw new Error(errData.error || "Failed to sync weight logs");
       }
       const data = await res.json();
-      triggerToast(`Successfully pulled ${data.records_pulled} weight records from Withings!`);
+      triggerToast(`Pulled ${data.records_pulled} weigh-ins from Withings.`);
       await triggerSync();
       await fetchWithingsStatus();
     } catch (e: any) {

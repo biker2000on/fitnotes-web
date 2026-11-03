@@ -1,6 +1,5 @@
 // CreateRoutineModal.tsx - Routine Creator Modal — name + notes only; days and
 // exercises are added in the routine editor afterwards (reference app flow).
-import { Bookmark } from 'lucide-react';
 import { useFitNotesStore } from '../../store/FitNotesStore';
 
 export function CreateRoutineModal() {
@@ -15,7 +14,7 @@ export function CreateRoutineModal() {
     <div className="modal-overlay mobile-modal-overlay" onClick={() => setShowCreateRoutineModal(false)}>
       <div className="modal-content mobile-modal-content" style={{ maxWidth: '480px' }} onClick={(e) => e.stopPropagation()}>
         <div className="mobile-modal-header">
-          <h2 style={{ fontSize: '20px', fontWeight: 800 }}><Bookmark size={20} color="var(--primary)" /> Create Routine</h2>
+          <h2 style={{ fontSize: '20px', fontWeight: 800 }}>New routine</h2>
           <button className="btn btn-secondary" style={{ padding: '6px 12px' }} onClick={() => setShowCreateRoutineModal(false)}>Close</button>
         </div>
 

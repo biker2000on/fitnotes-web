@@ -5,6 +5,16 @@ export const KG_PER_LB = 0.45359237;
 export const kgToLbs = (kg: number): number => kg / KG_PER_LB;
 export const lbsToKg = (lbs: number): number => lbs * KG_PER_LB;
 
+// Stored weights carry their own unit code (1 = kg, 2 = lbs; anything else is
+// FitNotes' kg default). Convert one into the user's display unit.
+export const unitCodeFor = (unit: 'kg' | 'lbs'): 1 | 2 => (unit === 'kg' ? 1 : 2);
+
+export const weightInUnit = (value: number, storedUnit: number | null | undefined, target: 'kg' | 'lbs'): number => {
+  const from = storedUnit === 2 ? 'lbs' : 'kg';
+  const converted = from === target ? value : from === 'kg' ? kgToLbs(value) : lbsToKg(value);
+  return Math.round(converted * 10) / 10;
+};
+
 export const getExerciseTypeLabel = (typeId: number | string): string => {
   const id = Number(typeId);
   switch (id) {
