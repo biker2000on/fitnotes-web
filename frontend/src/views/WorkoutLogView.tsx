@@ -115,7 +115,7 @@ export function WorkoutLogView() {
     editingLog, setEditingLog, handleSelectLogForEdit, handleCancelEdit, handleBulkUpdateExerciseSets,
     setHistoryExerciseId,
     workoutRoutines, routines, handleDeleteWorkoutRoutine,
-    setReplaceTargetExerciseId,
+    setReplaceTargetExerciseId, handleRemoveExerciseFromDay,
   } = useFitNotesStore();
   const showComplete = settings.mark_sets_complete;
   const [showEntryModal, setShowEntryModal] = useState(false);
@@ -364,6 +364,26 @@ export function WorkoutLogView() {
     if (next) handleSelectLogForEdit(next);
   };
 
+  // Size the set editor to the part of the screen the keyboard leaves visible.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!showEntryModal || !vv) return;
+    const root = document.documentElement;
+    const sync = () => {
+      root.style.setProperty('--vv-height', `${Math.round(vv.height)}px`);
+      root.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
+    };
+    sync();
+    vv.addEventListener('resize', sync);
+    vv.addEventListener('scroll', sync);
+    return () => {
+      vv.removeEventListener('resize', sync);
+      vv.removeEventListener('scroll', sync);
+      root.style.removeProperty('--vv-height');
+      root.style.removeProperty('--vv-top');
+    };
+  }, [showEntryModal]);
+
   const handleEntryKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -453,7 +473,9 @@ export function WorkoutLogView() {
           </div>
         )}
 
-        {showEntryModal && selectedExercise && (
+        {/* Portalled: the grid's swipe transform would otherwise trap this
+            fixed panel and make focusing a field scroll the page. */}
+        {showEntryModal && selectedExercise && createPortal(
           <div className="modal-overlay mobile-modal-overlay" onClick={cancelEntry}>
             <div className="modal-content mobile-modal-content workout-entry-modal" onClick={(e) => e.stopPropagation()}>
               <div className="mobile-modal-header">
@@ -700,7 +722,8 @@ export function WorkoutLogView() {
             )}
               </div>
           </div>
-          </div>
+          </div>,
+          document.body,
         )}
 
         {/* Workout comments */}
@@ -876,6 +899,7 @@ export function WorkoutLogView() {
                           ...(hasUncompleted && exLogs.length > 1 ? [{ label: 'Complete all sets', icon: <Check size={16} aria-hidden />, onSelect: () => handleMarkExerciseComplete(ex.id) }] : []),
                           { label: 'History & records', icon: <HistoryIcon size={16} aria-hidden />, onSelect: () => setHistoryExerciseId(ex.id) },
                           { label: 'Swap exercise', icon: <ArrowLeftRight size={16} aria-hidden />, onSelect: () => { setReplaceTargetExerciseId(ex.id); setShowCommandPalette(true); } },
+                          { label: 'Remove from workout', icon: <Trash2 size={16} aria-hidden />, tone: 'danger' as const, onSelect: () => handleRemoveExerciseFromDay(ex.id) },
                         ]}
                       />
                     </header>

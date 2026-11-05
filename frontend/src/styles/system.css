@@ -1477,3 +1477,43 @@ button.exercise-catalog-name:hover { color: var(--accent); }
   .superset-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 36px; align-items: start; }
   .superset-group-head { grid-column: 1 / -1; }
 }
+
+/* Set editor on phones: a full-screen panel sized to what the keyboard leaves
+   visible, header fixed, the logged sets scrolling inside it. */
+@media (max-width: 767px) {
+  .modal-overlay:has(.workout-entry-modal) {
+    top: var(--vv-top, 0px);
+    bottom: auto;
+    height: var(--vv-height, 100dvh);
+    padding: 0;
+    align-items: stretch;
+  }
+  .modal-content.workout-entry-modal {
+    height: 100%;
+    max-height: none;
+    width: 100%;
+    max-width: none !important;
+    border: none;
+    border-radius: 0;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow: hidden;
+    animation-name: fadeIn;
+  }
+  .workout-entry-modal .mobile-modal-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 24px;
+  }
+}
+
+/* Set editor's logged-sets table follows the same done rule as the log. */
+.set-row.completed { background-color: var(--done-band); color: var(--fg-muted); text-decoration: none; }
+.set-complete-toggle { border-color: var(--fg); background: transparent; }
+.set-complete-toggle:hover { border-color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.set-complete-toggle.checked { background: var(--fg); border-color: var(--fg); color: var(--bg); }

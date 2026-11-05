@@ -347,6 +347,28 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     }, { approveLabel: 'Delete', tone: 'danger' });
   };
 
+  // Take an exercise out of this day's workout: its sets and superset links,
+  // all restorable from the Undo toast.
+  const handleRemoveExerciseFromDay = async (exerciseId: string) => {
+    const date = selectedDateRef.current;
+    const logs = currentLogs.filter(l => l.exercise_id === exerciseId && !l.is_deleted);
+    const links = groupExercises.filter(g => g.date === date && g.exercise_id === exerciseId && !g.is_deleted);
+    if (logs.length === 0 && links.length === 0) return;
+    const name = exercises.find(x => x.id === exerciseId)?.name ?? 'Exercise';
+    for (const log of logs) await db.execute('UPDATE training_logs', [{ ...log, is_deleted: true }]);
+    for (const link of links) await db.execute('UPDATE workout_group_exercises', [{ ...link, is_deleted: true }]);
+    if (selectedExercise?.id === exerciseId) setSelectedExercise(null);
+    await late.refreshData();
+    triggerToast(`${name} removed.`, 'info', {
+      label: 'Undo',
+      onAction: async () => {
+        for (const log of logs) await db.execute('UPDATE training_logs', [{ ...log, is_deleted: false }]);
+        for (const link of links) await db.execute('UPDATE workout_group_exercises', [{ ...link, is_deleted: false }]);
+        await late.refreshData();
+      },
+    });
+  };
+
   // Swap every set of an exercise in the current day's workout (and its
   // superset links) over to a different exercise — the reference app's
   // "Replace Exercise" action.
@@ -900,7 +922,7 @@ export function useWorkoutSlice(deps: WorkoutSliceDeps) {
     showCopyWorkoutDrawer, setShowCopyWorkoutDrawer, showBulkMoveModal, setShowBulkMoveModal,
     bulkMoveTargetDate, setBulkMoveTargetDate,
     calculateEstimated1RM, getHighest1RM, isNewPR,
-    handleAddSet, handleSelectLogForEdit, handleCancelEdit, handleCopyPreviousSet, handleClearDay,
+    handleAddSet, handleSelectLogForEdit, handleCancelEdit, handleCopyPreviousSet, handleClearDay, handleRemoveExerciseFromDay,
     handleReplaceExercise, handleStartWorkoutTimer, handleStopWorkoutTimer, handleDeleteWorkoutTime,
     maybeAutoStopWorkoutTimer, saveExerciseComment, handleToggleComplete, handleMarkAllComplete,
     handleMarkExerciseComplete, handleBulkUpdateExerciseSets, handleDeleteSet, handleDeleteWorkoutRoutine, handleCopyWorkoutConfirm,
