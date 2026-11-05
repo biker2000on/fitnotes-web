@@ -15,6 +15,13 @@ export const weightInUnit = (value: number, storedUnit: number | null | undefine
   return Math.round(converted * 10) / 10;
 };
 
+// Snap a weight to the nearest loadable step (e.g. 2.5 lb plates), so
+// computed loads never come out as 12.3 or 2.27.
+export const roundToIncrement = (value: number, increment: number): number => {
+  if (!(increment > 0)) return Math.round(value * 10) / 10;
+  return Math.round(Math.round(value / increment) * increment * 100) / 100;
+};
+
 export const getExerciseTypeLabel = (typeId: number | string): string => {
   const id = Number(typeId);
   switch (id) {

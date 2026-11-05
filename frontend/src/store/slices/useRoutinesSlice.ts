@@ -14,6 +14,7 @@ import type {
   RoutineSectionExerciseSet, WorkoutGroup, WorkoutGroupExercise,
 } from '../../types';
 import { POPULATE_SETS_TYPE } from '../../types';
+import { roundToIncrement, weightInUnit } from '../../lib/units';
 import type { LateDeps, TriggerToast, TriggerConfirm } from './types';
 
 export interface RoutinesSliceDeps {
@@ -723,10 +724,17 @@ export function useRoutinesSlice(deps: RoutinesSliceDeps) {
           for (let i = 0; i < exSets.length; i++) {
             const s = exSets[i];
             const inherit = lastSessionLogs[i] ?? lastSessionLogs[lastSessionLogs.length - 1];
-            const baseWeight = s.metric_weight ?? inherit?.metric_weight ?? null;
+            const unitCode = s.unit ?? defaultUnit;
+            const plateStep = exercises.find(ex => ex.id === se.exercise_id)?.weight_increment || 2.5;
+            // A carried-over weight is stored in its own unit; convert it to the
+            // unit this set is stamped with (e.g. an imported 20.41 kg is 45 lb).
+            const inheritedWeight = inherit?.metric_weight == null ? null
+              : (inherit.unit === 2) === (unitCode === 2) ? inherit.metric_weight
+              : roundToIncrement(weightInUnit(inherit.metric_weight, inherit.unit, unitCode === 2 ? 'lbs' : 'kg'), plateStep);
+            const baseWeight = s.metric_weight ?? inheritedWeight;
             const baseReps = s.reps ?? s.min_reps ?? inherit?.reps ?? null;
             const progressedWeight = shouldProgress && baseWeight != null
-              ? baseWeight + (se.progression_increment ?? exercises.find(ex => ex.id === se.exercise_id)?.weight_increment ?? 2.5)
+              ? roundToIncrement(baseWeight + (se.progression_increment ?? plateStep), plateStep)
               : baseWeight;
             const progressedReps = shouldProgress && baseWeight == null && baseReps != null
               ? Math.min(s.max_reps ?? Number.MAX_SAFE_INTEGER, baseReps + (se.progression_reps_step ?? 1))

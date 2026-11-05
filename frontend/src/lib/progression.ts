@@ -111,7 +111,7 @@ export function getProgressionSuggestion(
   };
 
   if (last.topSets.every(s => s.reps >= REP_TARGET_HIGH)) {
-    const next = round1(last.topWeight + increment);
+    const next = roundToIncrement(last.topWeight + increment, increment);
     return {
       ...base,
       kind: 'increase_weight',
