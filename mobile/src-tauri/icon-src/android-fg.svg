@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="1024" height="1024" fill="none">
+  <!-- Adaptive-icon foreground: the notebook sits inside the 66% safe zone. -->
+  <g transform="translate(50 50) scale(0.8) translate(-51.5 -50)">
+    <rect x="25" y="19" width="53" height="62" rx="4" fill="#f1eadb"/>
+    <rect x="25" y="19" width="14" height="62" rx="2" fill="#f0553a"/>
+    <path d="M49 35H65" stroke="#8a8378" stroke-width="4" stroke-linecap="square"/>
+    <path d="M49 46H61" stroke="#b9b0a1" stroke-width="4" stroke-linecap="square"/>
+    <path d="M45 64L52 71L68 53" stroke="#f0553a" stroke-width="6" stroke-linecap="square" stroke-linejoin="miter"/>
+  </g>
+</svg>
